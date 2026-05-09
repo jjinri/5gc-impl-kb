@@ -146,6 +146,36 @@ else
   echo "    sudo apt install antiword            # 가벼운 대안"
 fi
 
+# 3a' — mermaid-cli (Mermaid 다이어그램을 SVG 로 렌더, 선택)
+if command -v mmdc >/dev/null 2>&1 || [[ -x .npm-tools/node_modules/.bin/mmdc ]]; then
+  ok "mermaid-cli (mmdc) 이미 설치됨"
+else
+  echo
+  if ! command -v npm >/dev/null 2>&1; then
+    echo "  Mermaid 다이어그램 → SVG 렌더링이 필요하면 먼저 Node.js+npm 설치가 필요합니다."
+    echo "    sudo apt install nodejs npm"
+    echo "  설치 후 본 setup.sh 를 다시 실행하면 mmdc 설치 옵션이 나타납니다."
+  else
+    if ask "Mermaid 다이어그램을 SVG 로 렌더하는 mmdc 를 프로젝트 로컬(.npm-tools) 에 설치할까요?"; then
+      echo "  npm install --prefix .npm-tools @mermaid-js/mermaid-cli  ..."
+      if npm install --prefix .npm-tools @mermaid-js/mermaid-cli --no-fund --no-audit; then
+        ok "mmdc 설치 완료 (.npm-tools/node_modules/.bin/mmdc)"
+        echo "  사용법: .venv/bin/python3 scripts/render-mermaid.py [--check] [--clean]"
+        echo "  주의 — puppeteer 가 chromium 을 처음 실행할 때 다음 시스템 라이브러리가 필요할 수 있습니다."
+        echo "    sudo apt install ca-certificates fonts-liberation libasound2 libatk-bridge2.0-0 \\"
+        echo "                     libatk1.0-0 libcups2 libdbus-1-3 libdrm2 libgbm1 libgtk-3-0 \\"
+        echo "                     libnspr4 libnss3 libx11-xcb1 libxcomposite1 libxdamage1 \\"
+        echo "                     libxfixes3 libxkbcommon0 libxrandr2 xdg-utils"
+      else
+        echo "  [warn] mmdc 설치 실패. 수동 설치를 시도하세요."
+        echo "    npm install --prefix .npm-tools @mermaid-js/mermaid-cli"
+      fi
+    else
+      ok "mmdc 설치 skip"
+    fi
+  fi
+fi
+
 # 3b — checklist.md 동기화
 if [[ -f checklist.md ]] && git rev-parse HEAD >/dev/null 2>&1; then
   echo

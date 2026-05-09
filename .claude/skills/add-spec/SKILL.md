@@ -1,0 +1,294 @@
+---
+name: add-spec
+description: 3GPP 5GC spec 한 건을 본 wiki(LLM Wiki — 3GPP 5G Core Systems) 에 등록하는 통합 워크플로우. 인자는 4가지 형태 모두 허용한다 — (a) 비워두면 papers/ 아래 sources 미등록 파일 후보를 보여주고 선택 요청, (b) `29.531` 같은 spec 번호만 주면 해당 폴더에서 미등록 파일 자동 선택 (모호하면 묻기), (c) `j60`·`29531-j60` 같은 부분 파일명, (d) `papers/29.531/29531-j60.docx` 전체 경로. 입력이 정해지면 (1) scripts/extract.py 로 텍스트 추출 (2) sources/3gpp-{ts|tr}-{n}-v{ver}.md 작성 (3) wiki/{nf}/3gpp-{ts|tr}-{n}.md 시리즈 페이지 작성/갱신 (4) index.md 의 NF 섹션 갱신까지 수행한다. 사용자가 papers/ 아래 새 파일을 cp 하고 "wiki 에 등록", "spec 추가", "이 문서 정리해줘", "TS NN.NNN 추가", "add this spec" 등을 말하면 무조건 이 skill 을 사용한다. 단순 텍스트 추출(extract.py 직접 호출) 과는 다르며, sources·wiki·index.md 세 곳을 모두 동기화하는 것이 본 skill 의 책임이다. 한 번에 여러 파일을 sweep 해 등록하고 싶으면 sibling skill `/update-spec` 을 사용한다. 커밋은 사용자 검토 후 별도로 진행한다.
+argument-hint: "(empty) | <spec> | <partial> | papers/{spec}/{filename}"
+allowed-tools: Bash(.venv/bin/python3 scripts/extract.py *) Bash(mkdir -p *) Bash(ls *) Bash(find *) Bash(grep *)
+---
+
+# add-spec — 3GPP spec 문서를 wiki 에 등록
+
+## 입력 형태 (모두 허용)
+
+`$ARGUMENTS` 가 다음 4가지 중 하나로 들어온다. Workflow §1 에서 단일 `papers/{spec}/{file}` 경로로 *해석* 한 뒤 본 절차를 시작한다.
+
+- **(a) 빈 값**. `papers/` 를 sweep 해서 `sources/` 에 매칭이 *없는* 파일 후보 목록을 보여주고 사용자에게 어느 것을 등록할지 묻는다.
+- **(b) spec 번호** — `29.531`, `papers/29.531`, `papers/29.531/`. 해당 폴더의 `.pdf|.docx|.doc` 파일 중 미등록이 정확히 1개면 그것으로, 여러 개면 후보를 보여주고 묻는다.
+- **(c) 부분 파일명** — `j60`, `29531-j60`, `29531-j60.docx`. `papers/**` 에서 substring 매칭. 정확히 1개면 그것으로, 여러 개면 후보를 보여주고 묻는다.
+- **(d) 전체 경로** — `papers/29.531/29531-j60.docx`. 그대로 사용.
+
+여러 파일을 한꺼번에 처리하려면 sibling skill `/update-spec` 을 사용한다. 본 skill 은 항상 *단 한 건* 만 등록한다.
+
+## 프로젝트 환경 (전제)
+- 프로젝트 루트는 `~/AI/llm-wiki`. 모든 경로는 그 기준 상대 경로로 다룬다.
+- 의존성과 디렉터리 골격은 `bash scripts/setup.sh` 가 이미 처리했다. `.venv/bin/python3` 를 사용한다.
+- `CLAUDE.md` 의 "Repository Structure"·"File Naming Convention"·"Categories"·"Adding a New Document" 섹션이 진실의 출처다. 본 skill 은 그 정책을 *집행* 하는 자동화일 뿐이며, 정책 자체를 여기에 다시 적지 않는다.
+
+## 절대 규칙 — CLAUDE.md THE FOUR RULES
+1. WebSearch / WebFetch 금지. 본 skill 은 외부 인터넷에서 정보를 가져오지 않는다.
+2. wiki 본문의 근거는 `papers/<spec>/<file>` 의 추출 텍스트뿐이다. 추출되지 않은 내용을 추측·창작해 채우지 않는다.
+3. 추출 텍스트가 부족해 핵심 섹션이 비면 `--max-chars` 를 늘려 재추출한다. 그래도 부족하면 사용자에게 어느 부분이 더 필요한지 묻는다.
+4. spec type / release / version / NF 중 하나라도 자신 없으면 추측해 진행하지 말고 사용자에게 묻고 정지한다. 한 번 더 묻는 비용이 잘못 만든 페이지를 고치는 비용보다 항상 낮다.
+
+## 언어 정책 (Override 포함)
+- wiki 본문(prose)·`sources/*.md` 본문은 **한국어**.
+- frontmatter 키·값, 섹션 헤더 (`## Summary` 등), 3GPP 약어·메시지명·필드명 (NSSF, AMF, S-NSSAI, SUCI 등) 은 **영어 원문 유지**.
+- 스펙 정의 문구를 옮길 때는 영어 원문 인용 + 한국어 해설을 병기한다.
+- 한국어 문장은 `.`/`?`/`!` 로 끝낸다. 콜론(`:`) 으로 한국어 문장을 끝내지 않는다. 콜론은 코드·key-value·라벨 안에서만.
+
+---
+
+## Workflow
+
+### 1. 입력 해석 — `$ARGUMENTS` 를 단일 `papers/{spec}/{file}` 경로로 정규화
+
+다음 중 하나로 들어온다. 항상 한 번에 하나만 처리한다.
+
+**(a) 빈 값** — sweep 후보 제시 후 정지.
+1. `find papers -type f \( -iname '*.pdf' -o -iname '*.docx' -o -iname '*.doc' \) | sort` 로 모든 원본 수집.
+2. `sources/` 의 frontmatter `source_filename` 을 모아 등록 집합 구성. 예: `grep -hE '^source_filename:' sources/*.md 2>/dev/null | awk '{print $2}'`.
+3. 두 집합의 차집합(미등록) 을 사용자에게 표로 보여주고 *어느 것을 등록할지* 묻고 정지. 후보가 0개면 "모두 등록됨"으로 보고하고 정지.
+
+**(b) spec dir** — `29.531` / `papers/29.531` / `papers/29.531/` 형태.
+1. 정규화: `papers/<번호>`. 점 포함 형식만 허용.
+2. 그 폴더의 `.pdf|.docx|.doc` 중 미등록 파일을 모은다.
+3. 정확히 1개 → 그 경로로 결정. 0개 → "이미 등록됨" 정지. 2개 이상 → 후보를 보여주고 묻기.
+
+**(c) 부분 파일명** — `j60`, `29531-j60`, `29531-j60.docx` 등 substring.
+1. `find papers -type f -iname "*<arg>*"` 로 매칭. 확장자 필터는 .pdf/.docx/.doc.
+2. 정확히 1개 → 그 경로로 결정. 0개 → "no match" 정지. 2개 이상 → 후보를 보여주고 묻기.
+
+**(d) 전체 경로** — `papers/` 로 시작.
+1. `ls -l <path>` 로 실재 확인. 없으면 정지.
+2. 확장자 `.pdf|.docx|.doc` 아니면 정지.
+
+해석 결과는 단일 절대 또는 repo-relative 경로 `papers/{spec}/{filename}`. 이를 §2 입력으로 넘긴다.
+
+> 여러 파일을 한 번에 등록하고 싶으면 본 skill 대신 `/update-spec` 을 사용해야 한다. 본 skill 은 *항상* 한 건만 처리한다.
+
+### 2. 메타데이터 추론
+
+파일명·폴더명에서 다음을 추출한다.
+
+- **Spec series**: 폴더명. 예 `papers/29.531/...` → `29.531`.
+- **3GPP 버전 인코딩** (파일명 끝의 `-{letter}{N}{M}` 패턴).
+  - 자릿수 의미: letter = release, N = minor (=중간 자리), M = patch (=마지막 자리). version 표기는 `<release>.<N>.<M>`.
+  - 예: `j60` → Rel-19, v19.6.0. `i40` → Rel-18, v18.4.0. `h60` → Rel-17, v17.6.0.
+  - letter 매핑: `f`=15, `g`=16, `h`=17, `i`=18, `j`=19, `k`=20.
+- **Spec type (TS|TR)**: 파일 본문 첫 페이지의 표기 ("Technical Specification" / "Technical Report") 로 판정한다. 추출 텍스트에 둘 다 안 보이면 사용자에게 묻는다.
+- **NF category**: 추출된 문서 제목·범위로 판정한다.
+  - 빠른 힌트 (확정은 본문에서 한 번 더 검증). `29.531` → `nssf`, `29.503` → `udm`, `29.502` → `smf`, `29.510` → `nrf`, `29.518` → `amf`, `29.509` → `ausf`, `23.501`/`23.502` → `architecture`, `33.501` → `security`. 본 표는 힌트일 뿐 확정 매핑이 아니다.
+  - 모호하면 사용자에게 확인한다.
+- **Stem (정규형)**:
+  - source 단위: `3gpp-{ts|tr}-{n-no-dot}-v{x.y.z}` (예: `3gpp-ts-29531-v19.6.0`).
+  - wiki 시리즈 단위: `3gpp-{ts|tr}-{n-no-dot}` (예: `3gpp-ts-29531`).
+
+### 3. 텍스트 추출
+
+기본 호출.
+
+```bash
+.venv/bin/python3 scripts/extract.py <path> --max-chars 60000
+```
+
+핵심 섹션(Scope / Definitions / Procedures / References) 이 잘려 보이면 `--max-chars 120000` 으로 재호출한다. 그래도 부족하면 어느 페이지·섹션이 더 필요한지 사용자에게 묻는다.
+
+### 4. `sources/{source-stem}.md` 작성
+
+경로: `sources/3gpp-{ts|tr}-{n}-v{x.y.z}.md`. 같은 경로 파일이 이미 있으면 덮어쓸지 사용자에게 확인한다.
+
+템플릿 (영문 frontmatter, 한국어 prose).
+
+```yaml
+---
+title: "<영문 원제 그대로>"
+authors: 3GPP <WG, 예: CT4, SA3>
+spec: TS 29.531
+release: 19
+version: 19.6.0
+year: <문서 표지·footer 의 발행 연>
+category: <nssf|amf|smf|nrf|...|architecture|security|slicing|interfaces|concepts|other>
+source_path: /home/jjinri/AI/llm-wiki/papers/{spec}/{filename}
+source_filename: {filename}
+source_format: {pdf|docx|doc}
+source_collection: 3gpp
+---
+
+## One-line Summary
+[한국어 한 줄. 콜론 종결 금지.]
+
+## 1. Document Information
+- 발행: 3GPP, <year>
+- 시리즈: TS|TR <NN.NNN>, Release <N>, v<x.y.z>
+- 담당 WG: <CT4 등>
+- 페이지 수: <원본 페이지 수, 추출 가능하면>
+
+## 2. Key Contributions
+[문서가 정의·도입하는 핵심 기능·메시지·절차 3~7개 bullet. 한국어 prose, 약어·메시지명 영어.]
+
+## 3. Methodology and Architecture
+[아키텍처 위치(어떤 NF·인터페이스가 관여하는지), 메시지 흐름의 큰 그림. 길어지면 wiki 페이지로 미루고 여기서는 요약만.]
+
+## 4. Key Procedures and Messages
+[주요 service operation·메시지·status code·필드의 핵심. 표 사용 OK.]
+
+## 5. Limitations and Open Issues
+[문서 자체가 명시한 limitation·FFS·editor's note 만 옮긴다. 추출 범위 밖 내용을 추정해 채우지 않는다.]
+
+## 6. Related Specs
+[Reference 섹션에서 본 핵심 의존 spec. 영어 spec 번호·제목만.]
+
+## 7. Glossary
+[추출 텍스트에서 본 핵심 약어 한·영 병기.]
+```
+
+### 5. `wiki/{nf}/{wiki-stem}.md` 작성/갱신
+
+경로: `wiki/{nf}/3gpp-{ts|tr}-{n}.md`.
+
+- `wiki/{nf}/` 폴더가 없으면 `mkdir -p wiki/{nf}` 로 생성하고, "새 NF 폴더를 만들었다" 사실을 결과 보고에 명시한다 (CLAUDE.md "NF 폴더는 첫 문서가 들어갈 때 생성").
+- 파일이 이미 있으면 *같은 spec 시리즈의 다른 버전 추가* 케이스다. 본문은 그대로 두고, frontmatter 의 `version`·`source` 를 새 버전으로 갱신, `related_versions` 에 이전 버전을 추가, `## Version History` 섹션에 한 줄 추가한다.
+
+신규 파일 템플릿.
+
+```yaml
+---
+title: "<영문 원제>"
+authors: 3GPP <WG>
+spec: TS 29.531
+release: 19
+version: 19.6.0
+year: <year>
+source: 3gpp-ts-29531-v19.6.0.md
+category: <nssf|...>
+source_path: /home/jjinri/AI/llm-wiki/papers/{spec}/{filename}
+source_filename: {filename}
+source_format: {pdf|docx|doc}
+source_collection: 3gpp
+related_versions: []
+tags: [<nf>, sbi, <topic1>, <topic2>]
+---
+
+## Summary
+[한국어 4~10줄. 이 spec 이 5GC 안에서 무슨 역할을 하는지·왜 존재하는지·어떤 문제를 푸는지. 약어·메시지명·필드명은 영어 원문.]
+
+## Key Contributions
+[bullet 3~7개. sources 의 §2 보다 wiki 독자(나중에 검색해 들어오는 자기 자신) 친화적 표현으로.]
+
+## Methodology and Architecture
+[그림 대신 prose. 어느 NF 가 어떤 인터페이스로 호출하는지, 어떤 데이터/모델이 흐르는지. API URI 진입점은 코드블록으로.]
+
+## Service Flows
+[**필수**. Mermaid `sequenceDiagram` 으로 대표 흐름 2~4개. 각 다이어그램 직전에 어느 stage 2 절차에 매핑되는지 한 줄 캡션. 아래 "Service Flows 작성 규칙" 참고.]
+
+## Key Procedures
+[Service Flows 다이어그램에서 다 담지 못하는 운용 정보 — operation 매트릭스 표(input/output 핵심 IE), 트리거되는 stage 2 절차 목록, 응답 코드. 다이어그램과 본 섹션은 보완 관계지 중복이 아니다.]
+
+## Data Model
+[**필수**. 본 spec 의 OpenAPI yaml 을 출발점으로 `$ref` 체인을 끝까지 추적해 자료형 트리를 만든다. 외부 spec 의 yaml 이 `papers/` 안에 있으면 거기까지, 그래도 부재하면 `[TS XX.YYY] (참조 규격 미등록)` leaf 로 종료한다. 자세한 알고리즘과 도구는 아래 "Data Model 작성 규칙" 참고.]
+
+## Version History
+- v<x.y.z> (Rel-<N>, <year>) — <변경점 또는 "초기 등록">
+
+## Related Pages
+- [[architecture/3gpp-ts-23501]] — 5GC 전체 아키텍처 맥락 (이 페이지가 wiki 에 *실제로* 있을 때만 링크)
+- [[slicing/...]] — 관련 cross-cutting (실재할 때만)
+```
+
+#### Service Flows 작성 규칙
+
+- 표기 형식은 Mermaid `sequenceDiagram`. Markdown 코드블록 `` ```mermaid `` 안에 둔다. Obsidian·GitHub 가 native 로 렌더하고, 정적 SVG 가 필요하면 `scripts/render-mermaid.py` 가 sibling `_diagrams/<page-stem>-<n>.svg` 로 생성한다 (호출은 사용자 수동, 또는 본 skill 의 §7 결과 보고에서 안내만 한다 — 자동 호출 금지).
+- `autonumber` 를 켠다. participant 이름은 NF 약어 그대로 (`AMF`, `NSSF`, `V-NSSF`, `H-NSSF` 등).
+- 메시지 라벨은 `HTTP method · 경로 · 본문 자료형` 순. 한 줄에 다 안 들어가면 `<br/>` 로 줄바꿈한다. mmdc v11 기준 별도 quoting 없이 `<br/>` 줄바꿈이 정상 SVG `<tspan>` 으로 변환됨이 확인됨.
+- 입력 query/IE 가 많으면 `Note over X,Y` 또는 `Note right of NSSF` 로 펼친다. 한국어 prose 도 가능하다.
+- 분기 (성공·실패·redirect) 는 `alt`/`else` 로 나누고 응답 코드와 자료형을 함께 적는다.
+- 콜론(`:`) 은 Mermaid 의 메시지 구분자로 한 번 쓰이는 것이 자연스럽다. 라벨 내부에 또 콜론이 필요하면 `=` 또는 `·` 로 대체해 파서 충돌을 줄인다.
+- 다이어그램 안에서 추측 금지. 화살표·자료형은 본 spec 본문이나 OpenAPI 에 *실제로* 적힌 것만.
+- 다이어그램 직전에 출처 절 한 줄 캡션을 단다 (예: "Get during Registration (TS 23.502 §4.2.2.2.2)").
+- 어떤 흐름을 고를지 — 본 spec 이 정의한 service operation 별로 가장 자주 쓰일 시나리오 1개씩 + roaming/cross-NF 체이닝이 있다면 따로 1개. 보통 2~4개로 충분.
+- 같은 페이지를 다시 작성·갱신할 때는 결과 보고에 "SVG 갱신이 필요하면 `.venv/bin/python3 scripts/render-mermaid.py [--clean]` 실행" 한 줄 안내. `--clean` 은 블록 수가 줄었을 때 옛 SVG 를 정리한다.
+
+#### Data Model 작성 규칙
+
+본 wiki 의 가장 중요한 정보 자산이다. 본 spec 의 OpenAPI yaml 을 출발점으로 *체인 끝까지* 끌고 가야 한다.
+
+**도구**: `scripts/resolve-yaml-refs.py` 가 OpenAPI yaml 의 schema 를 입력받아 `$ref` 체인을 자동 추적해 ` ```text ` 트리를 만든다.
+
+```bash
+.venv/bin/python3 scripts/resolve-yaml-refs.py \
+  papers/{spec}/{TSnnnnn_xxx.yaml} \
+  <SchemaName1> <SchemaName2> ... \
+  --depth 8 --external-depth 1
+```
+
+본문에는 stdout 출력을 그대로 ` ```text ... ``` ` 코드블록으로 옮기고, 절대 손으로 다시 그리지 않는다 (사람이 그리면 빠짐·오타가 생긴다). 도구가 적용한 표기 약속을 페이지 상단에 한 번 설명해 둔다 — `*required`, `[TS NN.NNN]`, `[…]`, `(allOf)`, `(extensible)`, `map<key, T>` 등.
+
+**`$ref` 해결 우선순위** (도구도 이 순서를 따른다):
+
+1. 같은 yaml 파일 안의 `#/components/schemas/X` (local).
+2. 같은 spec 폴더 안의 다른 yaml — 같은 spec 에 여러 service yaml 이 함께 들어있는 경우 (예 `TS29531_Nnssf_NSSelection.yaml` 과 `TS29531_Nnssf_NSSAIAvailability.yaml`).
+3. 다른 spec 폴더의 yaml — 파일명 패턴 `TSNNNNN_*.yaml` → `papers/NN.NNN/...` 로 매핑.
+4. yaml 부재 시 같은 spec 폴더의 `*.docx` Annex A 텍스트에서 schema 정의 발췌 (도구의 `--no-docx-fallback` 으로 비활성화 가능).
+5. 모두 부재 → `[TS XX.YYY] (참조 규격 미등록)` leaf 로 chain 종료. 추측해서 펼치지 않는다.
+
+**진입 자료형** 으로 어느 schema 를 트리화할지 — 각 service 의 *최상위 요청·응답 자료형* 만 root 로. 예 Nnssf_NSSelection → `AuthorizedNetworkSliceInfo`(응답) + `SliceInfoForXxx`(요청). Nnssf_NSSAIAvailability → `NssaiAvailabilityInfo`, `AuthorizedNssaiAvailabilityInfo`, `NssfEventSubscriptionCreateData`, `NssfEventSubscriptionCreatedData`, `NssfEventNotification`. 하위 자료형은 root 트리 안에 자연히 펼쳐지므로 별도 root 로 또 그릴 필요 없다.
+
+**Data Model 섹션 끝**에 두 가지 짧은 목록을 둔다.
+- *미등록 reference* — 체인이 종료된 지점. 어느 외부 spec / 자료형이 `papers/` 에 추가되면 트리가 더 풀릴지 명시.
+- *체인이 끝까지 풀린 외부 spec* — 트리 안에서 `[TS XX.YYY]` 로 등장한 spec 들의 정리 목록.
+
+**도구를 우회해 손으로 트리를 적지 않는다.** 정확성이 의심되거나 도구가 못 푸는 부분 (예 `additionalProperties` 의 복잡한 조합) 이 있으면 도구를 고치는 쪽이 항상 옳다 — 한 페이지에서만 정확하게 만드는 것보다, 다음 호출에서도 같은 품질이 나오도록 도구를 발전시키는 편이 누적 가치가 크다.
+
+**docx 만 있는 spec** (예 TS 23.501 같은 stage 2 spec) 은 OpenAPI 정의가 없거나 prose 위주라 본 도구의 자동 추적 대상이 아니다. 그런 spec 에 대해 wiki 페이지를 만들 때는 Data Model 섹션을 비우거나, 산문으로 핵심 정보 모델 (예 stage 2 의 reference point ID·attribute) 만 요약한다.
+
+**Related Pages 의 wikilink 는 wiki 에 실재하는 파일만** 적는다. 존재하지 않는 페이지를 가짜로 링크하지 않는다 (THE FOUR RULES #4). 후보 wikilink 는 `ls wiki/{architecture,slicing,interfaces,security,concepts,overviews}/` 로 실재 여부를 확인한 뒤 적는다.
+
+### 6. `index.md` 갱신
+
+- 해당 NF 섹션의 "_(아직 페이지 없음 ...)_" placeholder 가 있으면 한 줄 항목으로 *교체* 한다.
+- 이미 항목이 있으면 spec-number 오름차순으로 한 줄 *추가* 한다.
+- 형식: `- [[{nf}/{wiki-stem}]] — <한국어 한 줄 설명>`.
+- `wiki/{nf}/` 가 *새로* 만들어진 NF 라면 `## 다른 NF (예정)` 섹션의 안내에서 그 NF 를 빼고, 기존 NSSF 섹션처럼 별도 섹션을 만들어 항목을 넣는다.
+
+### 7. 결과 보고 (커밋 X)
+
+사용자에게 한 화면에 묶어 보고한다.
+
+- 새로 만들어진/수정된 파일 목록 (`sources/...`, `wiki/{nf}/...`, `index.md`).
+- 각 파일의 핵심 변경점 1~3줄 요약.
+- 알려진 한계 (truncate 된 섹션, 추론한 NF/release, 본문에서 끝까지 확인 못 한 항목 등).
+- 제안 commit 메시지 한 줄 (`feat({nf}): TS NN.NNN wiki 페이지 추가`).
+
+**커밋은 절대 자동으로 하지 않는다.** 사용자가 검토 후 명시적으로 "커밋해" 라고 지시할 때만 진행한다.
+
+---
+
+## 자주 틀리는 지점 — 사전 점검
+
+마무리 직전 다음을 한 번 훑어 본다.
+
+- 한국어 문장을 콜론으로 끝내고 있지 않은가. (불릿 다음 문장도 마침표.)
+- frontmatter 의 `source_path` 가 절대 경로 (`/home/jjinri/AI/llm-wiki/...`) 인가. 상대 경로 금지.
+- `papers/` 안의 파일이 cp 가 아니라 symlink 가 아닌가 (`ls -l` 로 확인 가능).
+- `## Related Pages` 의 wikilink 가 모두 wiki 에 실재하는 파일을 가리키는가.
+- 추출 텍스트에 없는 사실을 wiki 본문에 옮기지 않았는가.
+- spec type / release / version / NF 추론을 한 번 사용자에게 확인받았는가 (자신 있을 때는 보고만으로 OK).
+- `## Service Flows` 에 Mermaid `sequenceDiagram` 이 적어도 1개 이상 있는가. 이름뿐인 placeholder 금지.
+- `## Data Model` 의 트리가 `scripts/resolve-yaml-refs.py` 산출 그대로인가. 손으로 가공하지 않았는가.
+- `papers/` 안에 yaml 이 있는 외부 spec 자료형은 자동 펼침되었는가, 미등록 ref 는 `[TS XX.YYY] (참조 규격 미등록)` leaf 로 명시되었는가.
+
+## 실패·모호 처리
+
+- spec type / release / version / NF 중 하나라도 자신 없으면 사용자에게 묻고 정지한다.
+- 추출 텍스트가 너무 짧거나 (<500 chars) 핵심 섹션이 안 보이면 `--max-chars` 를 키워 재추출한다.
+- `papers/{spec}/` 폴더가 비어있거나 인자 파일이 없으면 정지한다.
+- 같은 stem 의 sources / wiki 파일이 이미 있으면 덮어쓰기 전에 사용자에게 묻는다.
+
+## 참고 — 본 skill 안에 다시 적지 말 것 (중복 금지)
+
+다음은 `CLAUDE.md` 또는 helper 스크립트 가 이미 정의했다. 본 skill 은 거기에 따르고, 같은 내용을 복제하지 않는다.
+
+- 디렉터리 매핑·파일명 규칙: `CLAUDE.md` 의 "Repository Structure"·"File Naming Convention"·"Categories".
+- 추출 도구의 옵션·폴백: `scripts/extract.py --help` 와 그 docstring.
+- Data Model 체인 추적 알고리즘: `scripts/resolve-yaml-refs.py` 의 docstring 과 `--help`.
+- Mermaid → SVG 렌더링 동작: `scripts/render-mermaid.py` 의 docstring.
+- 환경 부트스트랩: `scripts/setup.sh`.
