@@ -253,7 +253,7 @@ def main() -> None:
     all_refs = (yaml_refs | docx_refs) - {primary}
 
     # 기존 manifest 의 manual_overrides 를 읽어 보존·적용
-    out_dir = REPO / "wiki" / nf
+    out_dir = REPO / "kb" / nf
     manifest_path = out_dir / "_manifest.yaml"
     overrides = load_existing_overrides(manifest_path)
     exclude_map = {
@@ -329,7 +329,7 @@ def main() -> None:
 
     yaml_text = render_yaml(manifest)
     if args.write:
-        out_dir = REPO / "wiki" / nf
+        out_dir = REPO / "kb" / nf
         out_dir.mkdir(parents=True, exist_ok=True)
         out_path = out_dir / "_manifest.yaml"
         out_path.write_text(yaml_text, encoding="utf-8")

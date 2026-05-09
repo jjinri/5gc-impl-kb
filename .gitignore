@@ -25,3 +25,6 @@ Thumbs.db
 
 # Temp extraction artifacts
 /tmp_*.docx
+
+# WSL/Windows Explorer metadata
+*:Zone.Identifier

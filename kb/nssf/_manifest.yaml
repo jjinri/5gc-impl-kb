@@ -18,17 +18,17 @@ deps:
   procedures:
     - { spec: "23.502", present: true, from: [docx_clause_2], role: "stage 2 procedures (호출 컨텍스트)" }
   sba_common:
-    - { spec: "29.500", present: false, from: [docx_clause_2], role: "SBA HTTP/2 운반·공통 에러" }
-    - { spec: "29.501", present: false, from: [docx_clause_2], role: "SBI service 정의 원칙" }
+    - { spec: "29.500", present: true, from: [docx_clause_2], role: "SBA HTTP/2 운반·공통 에러" }
+    - { spec: "29.501", present: true, from: [docx_clause_2], role: "SBI service 정의 원칙" }
   data_types:
-    - { spec: "29.503", present: false, from: [yaml_ref, docx_clause_2], role: "UDM SDM (chain target — RecurTime 등)" }
+    - { spec: "29.503", present: true, from: [yaml_ref, docx_clause_2], role: "UDM SDM (chain target — RecurTime 등)" }
     - { spec: "29.571", present: true, from: [yaml_ref, docx_clause_2], role: "공통 자료형 chain target" }
   discovery:
     - { spec: "29.510", present: true, from: [yaml_ref, docx_clause_2], role: "NRF discovery + NFType enum" }
   security:
     - { spec: "33.501", present: false, from: [docx_clause_2], role: "5GC 보안 (TLS·OAuth·키 계층)" }
   ids:
-    - { spec: "23.003", present: false, from: [docx_clause_2], role: "NF instance ID·FQDN·numbering" }
+    - { spec: "23.003", present: true, from: [docx_clause_2], role: "NF instance ID·FQDN·numbering" }
   cross-nf:
     - { spec: "23.288", present: true, from: [docx_clause_2], excluded: "NWDAF analytics — IOT 단계에서 다시 검토", role: "NWDAF analytics" }
     - { spec: "38.413", present: false, from: [docx_clause_2], excluded: "NG-RAN out of scope (SBI 구현)", role: "NG-RAN NGAP (cross-NF context)" }
@@ -39,14 +39,10 @@ deps:
 
 # /nf-init 산출 status
 status:
-  manifest_completeness: "4/9"
+  manifest_completeness: "8/9"
   ready_for_build: false
   missing_priority:
-    - "29.500"
-    - "29.501"
     - "33.501"
-    - "29.503"
-    - "23.003"
 
 # 사용자가 수정한 항목은 여기에 — 자동 재생성이 덮어쓰지 않는다.
 # exclude — 본 spec 을 in-scope 에서 제외 (ready_for_build 계산에서 빠짐).

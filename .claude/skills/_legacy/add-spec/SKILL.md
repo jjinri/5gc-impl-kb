@@ -103,7 +103,7 @@ release: 19
 version: 19.6.0
 year: <문서 표지·footer 의 발행 연>
 category: <nssf|amf|smf|nrf|...|architecture|security|slicing|interfaces|concepts|other>
-source_path: /home/jjinri/AI/llm-kb/specs/{spec}/{filename}
+source_path: specs/{spec}/{filename}
 source_filename: {filename}
 source_format: {pdf|docx|doc}
 source_collection: 3gpp
@@ -156,7 +156,7 @@ version: 19.6.0
 year: <year>
 source: 3gpp-ts-29531-v19.6.0.md
 category: <nssf|...>
-source_path: /home/jjinri/AI/llm-kb/specs/{spec}/{filename}
+source_path: specs/{spec}/{filename}
 source_filename: {filename}
 source_format: {pdf|docx|doc}
 source_collection: 3gpp
@@ -266,7 +266,7 @@ tags: [<nf>, sbi, <topic1>, <topic2>]
 마무리 직전 다음을 한 번 훑어 본다.
 
 - 한국어 문장을 콜론으로 끝내고 있지 않은가. (불릿 다음 문장도 마침표.)
-- frontmatter 의 `source_path` 가 절대 경로 (`/home/jjinri/AI/llm-kb/...`) 인가. 상대 경로 금지.
+- frontmatter 의 `source_path` 가 절대 경로 (`...`) 인가. 상대 경로 금지.
 - `specs/` 안의 파일이 cp 가 아니라 symlink 가 아닌가 (`ls -l` 로 확인 가능).
 - `## Related Pages` 의 wikilink 가 모두 wiki 에 실재하는 파일을 가리키는가.
 - 추출 텍스트에 없는 사실을 wiki 본문에 옮기지 않았는가.
