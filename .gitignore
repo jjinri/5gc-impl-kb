@@ -4,6 +4,13 @@ __pycache__/
 *.pyc
 *.pyo
 
+# Auto-generated KB artifacts (재생성 가능 — scripts/nf-manifest.py, scripts/nf-status.py)
+kb/*/_manifest.yaml
+kb/*/_status.yaml
+
+# Reset archive (git history 가 이미 진실 출처)
+kb/*/_archive/
+
 # Obsidian (per-user state, plugin cache)
 .obsidian/workspace
 .obsidian/workspace.json
