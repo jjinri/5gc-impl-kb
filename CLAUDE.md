@@ -5,7 +5,7 @@
 > **Inheritance.** 전역 `~/.claude/CLAUDE.md` 의 모든 행동 규칙 (가정 금지·단순성·외과적 변경·테스트 우선·시맨틱 커밋·에러는 추측 말고 읽기 등) 을 그대로 따른다. 이 파일은 그 위에 본 프로젝트 고유 규칙만 추가한다.
 
 > **Language policy.**
-> - **kb 본문(prose)·`digests/*.md`·`index.md` 설명문은 한국어**로 작성한다.
+> - **kb 본문(prose)·`index.md` 설명문은 한국어**로 작성한다.
 > - YAML frontmatter, 섹션 헤더(`## Interface` 등), 3GPP 용어·약어(NSSF, AMF, SUCI, S-NSSAI 등) 는 영어 원문 유지.
 > - 스펙 정의 문구는 영어 원문 인용 + 한국어 해설 병기.
 > - 대화·커밋 메시지는 한국어 그대로.
@@ -23,7 +23,7 @@
 매 응답에 적용. 본 KB 의 implementation 정의에 맞춰 강화됨.
 
 1. **No web search.** `WebSearch`/`WebFetch` 로 빈틈을 메우지 않는다. 모든 답은 `specs/` 와 `kb/` 에 근거한다.
-2. **Answer from kb first.** `kb/`·`digests/` 의 7 카테고리 페이지가 진실의 출처. spec 본문은 그 출처의 정당성을 뒷받침할 때 재추출한다.
+2. **Answer from kb first.** `kb/` 의 7 카테고리 페이지가 진실의 출처. spec 본문은 그 출처의 정당성을 뒷받침할 때 재추출한다.
 3. **If kb is insufficient, re-read the source.** `specs/{spec}/{file}` 를 `scripts/extract.py`·`scripts/resolve-yaml-refs.py` 로 다시 추출하고, 그 결과로 kb 를 *재빌드* 한다 (`/nf-build <nf>` 호출).
 4. **If chain ends incomplete, say so explicitly.** `(참조 규격 미등록)` leaf, 누락 mermaid, 비어있는 카테고리는 *침묵하지 않는다* — `/nf-status` 가 FAIL 로 잡고 `to_pass` 로 다음 액션을 알린다. 임의 추정으로 leaf 를 메우지 않는다.
 
@@ -56,8 +56,6 @@
 ├── index.md                     # 페이지 카탈로그
 ├── specs/                       # 3GPP 원본 (.pdf / .doc / .docx / .yaml, cp only — symlink 금지)
 │   └── {spec-number-with-dot}/
-├── digests/                     # LLM 1차 한국어 발췌 (버전 단위)
-│   └── {stem}.md
 ├── kb/                          # implementation-grade 페이지 (시리즈 단위)
 │   ├── {nf}/                    # NF 단위 폴더 (nssf, nrf, amf, smf, ...)
 │   │   ├── 3gpp-{ts|tr}-{n}.md
@@ -94,23 +92,21 @@ specs/{spec-number-with-dot}/{original-3gpp-filename}.{ext}
 - 같은 spec 의 다른 release/version 은 **같은 폴더** 에 공존. 같은 버전의 다른 포맷 (`.docx` + `.pdf`) 도 공존 가능.
 - 같이 들어있는 OpenAPI yaml (예 `TS29531_Nnssf_NSSelection.yaml`) 도 같은 폴더.
 
-### Normalized stem (`digests/`, `kb/`)
+### Normalized stem (`kb/`)
 
 ```
-{stem} = 3gpp-{ts|tr}-{number-no-dot}-v{version}        # digests — 버전마다 1개
 {stem} = 3gpp-{ts|tr}-{number-no-dot}                   # kb 시리즈 페이지
 ```
 
-예시 — `digests/3gpp-ts-29531-v19.6.0.md`, `kb/nssf/3gpp-ts-29531.md`.
+예시 — `kb/nssf/3gpp-ts-29531.md`.
 
 ---
 
-## 매핑 — 3-tier (Karpathy 1:1:1 에서의 의도적 분기)
+## 매핑 — 2-tier (Karpathy 1:1 에서의 의도적 분기)
 
 | 계층 | 단위 | 명명 |
 |---|---|---|
 | `specs/` | spec **버전·포맷마다** 1파일 (멀티 포맷·멀티 릴리즈 공존) | 3GPP 원본 파일명 |
-| `digests/` | 실제로 추출·요약한 **버전마다** 1개 | `3gpp-ts-{n}-v{ver}.md` |
 | `kb/{nf}/` | spec **시리즈마다** 1개 (canonical) | `3gpp-ts-{n}.md`. 본문 `## Version History` 에 변경점 |
 
 이유. 3GPP 시리즈는 같은 NF 의 여러 release 가 공존한다. kb 페이지를 시리즈 단위로 두면 사용자가 "TS 29.503 가 뭐냐" 라는 자연스러운 질문에 한 페이지로 답할 수 있고, Cross-NF 표·Data Model chain 의 cross-spec 추적이 자연스럽다.
