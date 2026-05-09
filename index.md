@@ -10,7 +10,7 @@
 
 > 시작점. TS 29.531 등 NSSF 관련 spec 시리즈를 정리.
 
-- [[nssf/3gpp-ts-29531]] — TS 29.531 v19.6.0, Nnssf SBI 의 stage 3 (NSSelection / NSSAIAvailability)
+_(아직 페이지 없음)_
 
 ---
 
