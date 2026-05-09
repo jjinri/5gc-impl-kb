@@ -7,7 +7,7 @@ Usage:
 옵션:
     --no-write   _status.yaml 저장 없이 stdout 만 보고
 
-평가 framework — ADR 0001 D7. 무가중치, 항목별 criterion + to_pass 의무,
+평가 framework. 무가중치, 항목별 criterion + to_pass 의무,
 applies_to 별 NOT_APPLICABLE 처리, acceptance gate 는 check id 의 AND.
 
 Tier 1 (Validation, binary)

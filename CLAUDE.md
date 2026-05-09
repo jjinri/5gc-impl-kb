@@ -35,7 +35,7 @@ specs/{spec}/{file}.{pdf,docx,doc,yaml}
 >
 > **Note — 전역 §6 (Korean header comments).** 마크다운/YAML 비대상. `scripts/*.py` 등 코드 파일에는 적용.
 
-> **CLAUDE.md 유지 정책.** 본 파일은 *정책* 만 — 절차는 `SKILL.md`, 사실관계·결정 이력은 `docs/decisions/` ADR 이 진실 출처. 새 항목 추가 전에 *기존 위치에 흡수 가능한지·다른 곳에 더 어울리는지* 검토. 중복·stale 발견 시 즉시 제거. 본 파일이 증식하면 검색·요약·리뷰 비용이 모두 늘어 정책 문서로서의 가치가 떨어진다. 본 파일을 수정할 때는 *순 변화량* 을 의식한다 — 추가만큼 정리.
+> **CLAUDE.md 유지 정책.** 본 파일은 *정책* 만 — 절차는 `SKILL.md`, 결정의 *역사적 맥락* 이 필요하면 `git log` 가 진실 출처다. 새 항목 추가 전에 *기존 위치에 흡수 가능한지·다른 곳에 더 어울리는지* 검토. 중복·stale 발견 시 즉시 제거. 본 파일이 증식하면 검색·요약·리뷰 비용이 모두 늘어 정책 문서로서의 가치가 떨어진다. 본 파일을 수정할 때는 *순 변화량* 을 의식한다 — 추가만큼 정리.
 
 ---
 
@@ -61,7 +61,7 @@ specs/{spec}/{file}.{pdf,docx,doc,yaml}
 | 3. 완성도 검사 | `/nf-status <nf>` | acceptance gate 평가, FAIL 마다 `to_pass` 액션 보고 |
 | (선택) 백업·재시작 | `/nf-reset <nf> [--full]` | 현 산출을 `kb/<nf>/_archive/<ts>/` 로 mv 후 `/nf-build` 로 fresh 빌드 |
 
-각 SKILL 의 절차 *세부* 는 해당 `SKILL.md` 가 진실의 출처. CLAUDE.md 는 *정책* 만 정의하고 절차는 SKILL 로 위임한다 (ADR 0001 D5).
+각 SKILL 의 절차 *세부* 는 해당 `SKILL.md` 가 진실의 출처. CLAUDE.md 는 *정책* 만 정의하고 절차는 SKILL 로 위임한다.
 
 > 신규 머신 onboarding — `bash scripts/setup.sh` 한 번 후 `/nf-init <nf> --primary <spec>` 으로 시작. `docs/checklist.md` 의 부트스트랩 체크리스트 참고.
 
@@ -167,7 +167,7 @@ kb/
 
 ---
 
-## NF Profile (D7)
+## NF Profile
 
 매니페스트 `profile` 필드. 검사·빌드 동작이 profile 별로 다르다.
 
@@ -182,7 +182,7 @@ NF profile 별 적용 check 는 `scripts/nf-status.py` 의 `applies_to` 가 진�
 
 ---
 
-## Acceptance Gates (D7 무가중 framework)
+## Acceptance Gates (무가중 framework)
 
 각 페이지의 완성도는 4 단계 gate 로 평가된다. Gate 는 *check id 의 AND* — 가중치 없음.
 
@@ -204,17 +204,6 @@ NF profile 별 적용 check 는 `scripts/nf-status.py` 의 `applies_to` 가 진�
 - `source_filename` 은 `basename(source_path)` 와 정확히 일치.
 - `source_format` 은 확장자와 일치 (`pdf` | `doc` | `docx`).
 - 같은 spec 시리즈의 다른 버전·포맷은 **같은 spec-number 폴더** 에 공존.
-
----
-
-## Decision records (ADR)
-
-본 프로젝트의 결정 기록은 `docs/decisions/` 의 ADR 들이 진실의 출처.
-
-- [`0000-bootstrap-decisions.md`](docs/decisions/0000-bootstrap-decisions.md) — 부트스트랩 시점의 12개 결정 (일부 supersede 됨).
-- [`0001-implementation-grade-redesign.md`](docs/decisions/0001-implementation-grade-redesign.md) — 본 KB 를 implementation-grade 정의로 재정의 + 7 결정 (D1~D8) + open issues.
-
-새 결정은 `0002-*.md` 부터 ADR 형식으로 추가. 기존 ADR 은 *immutable*, 변경 시 새 ADR 로 supersede.
 
 ---
 

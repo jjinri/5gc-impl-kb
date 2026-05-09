@@ -11,8 +11,7 @@
 - [x] `CLAUDE.md` 작성 (Karpathy 패턴 → 3GPP 5GC 적응)
 - [x] `index.md` placeholder 작성
 - [x] `scripts/extract.py` 작성 (.pdf/.doc/.docx 통합 추출)
-- [x] `docs/checklist.md` (이 파일, sprint 0a cleanup 시 root → docs/ 이동)
-- [x] `docs/decisions/0000-bootstrap-decisions.md` (구 `context-notes.md` 의 ADR 형식 변환)
+- [x] `docs/checklist.md` (이 파일)
 - [x] `git init` + 첫 커밋
 - [ ] `sudo apt install python3-venv python3-pip` (사용자 직접 실행 필요)
 - [x] `python3 -m venv .venv && .venv/bin/pip install pypdf python-docx`

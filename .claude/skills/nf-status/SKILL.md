@@ -1,6 +1,6 @@
 ---
 name: nf-status
-description: 본 5gc-impl-kb 의 NF 페이지가 implementation-grade 완성도를 만족하는지 검사해 `_status.yaml` 산출하는 워크플로우. 사용자가 "/nf-status nssf", "NSSF 검증", "NRF 페이지 점수 알려줘", "이 NF 빌드 가능?", "implementation 가능 검사", "wiki check" 등을 말하거나 NF 이름을 지정하면 무조건 이 skill 을 사용한다. 동작 — `scripts/nf-status.py <nf>` 호출 → `kb/<nf>/_status.yaml` 갱신 + 콘솔에 acceptance gate 보고. 평가 framework 는 ADR 0001 D7 — 가중치 없음·항목별 criterion + to_pass 의무·NF profile 별 NOT_APPLICABLE 처리. Tier 1 (validation, binary), Tier 2 (coverage, threshold), Tier 3 (yaml-to-c viability, NOT_RUN 도구 미존재), Tier 4 (subjective, SKIPPED). 매니페스트 생성은 `/nf-init`, 페이지 빌드는 `/nf-build` 의 책임이며 본 skill 은 *완성도 측정* 에 집중한다.
+description: 본 5gc-impl-kb 의 NF 페이지가 implementation-grade 완성도를 만족하는지 검사해 `_status.yaml` 산출하는 워크플로우. 사용자가 "/nf-status nssf", "NSSF 검증", "NRF 페이지 점수 알려줘", "이 NF 빌드 가능?", "implementation 가능 검사", "wiki check" 등을 말하거나 NF 이름을 지정하면 무조건 이 skill 을 사용한다. 동작 — `scripts/nf-status.py <nf>` 호출 → `kb/<nf>/_status.yaml` 갱신 + 콘솔에 acceptance gate 보고. 평가 framework — 가중치 없음·항목별 criterion + to_pass 의무·NF profile 별 NOT_APPLICABLE 처리. Tier 1 (validation, binary), Tier 2 (coverage, threshold), Tier 3 (yaml-to-c viability, NOT_RUN 도구 미존재), Tier 4 (subjective, SKIPPED). 매니페스트 생성은 `/nf-init`, 페이지 빌드는 `/nf-build` 의 책임이며 본 skill 은 *완성도 측정* 에 집중한다.
 argument-hint: "<nf> [--no-write]"
 allowed-tools: Bash(.venv/bin/python3 scripts/nf-status.py *) Bash(cat *) Bash(ls *)
 ---
@@ -107,4 +107,4 @@ gate 상태에 따라.
 
 - 검사 항목·criterion·to_pass 형식: `scripts/nf-status.py` docstring + 같은 파일의 함수.
 - acceptance gate 정의: `scripts/nf-status.py` 의 `GATE_DEFS`.
-- NF profile 매트릭스: ADR 0001 D7 + `scripts/nf-status.py` 의 `applies_to`.
+- NF profile 매트릭스: `scripts/nf-status.py` 의 `applies_to` + CLAUDE.md "NF Profile" 표.
