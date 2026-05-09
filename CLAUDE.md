@@ -251,26 +251,31 @@ tags: [nssf, sbi, slice-selection]
 
 ## Setup
 
-### 의존성 설치 (최초 1회)
+### 자동 셋업 (권장)
 
-WSL2 Ubuntu 환경에 pip/venv 가 빠져있다면:
+```bash
+git clone <repo> && cd llm-wiki
+sudo apt install python3-venv python3-pip   # 사용자 권한 필요 — 한 번만
+bash scripts/setup.sh                         # 나머지 자동 + 선택 항목 대화형 가이드
+```
+
+`scripts/setup.sh` 가 venv 생성, `pypdf`/`python-docx` 설치, `extract.py` 동작 검증(.docx smoke test) 까지 자동 처리한다. 그 후 `.doc` 지원·Obsidian·`checklist.md` 동기화 같은 선택 항목을 질문으로 가이드한다. 비대화형 재실행은 `bash scripts/setup.sh --yes` 또는 `--no-prompts`.
+
+### 수동 폴백
+
+setup.sh 가 동작하지 않는 환경이면 직접 실행한다.
 
 ```bash
 sudo apt install python3-venv python3-pip
-```
-
-프로젝트 venv:
-
-```bash
-cd ~/AI/llm-wiki
 python3 -m venv .venv
 .venv/bin/pip install pypdf python-docx
 ```
 
-`.doc` (legacy MS Word) 지원을 추가하려면:
+`.doc` (legacy MS Word) 지원이 필요하면 다음 중 하나를 추가로 설치한다.
 
 ```bash
-sudo apt install libreoffice-core   # 또는 가벼운 antiword: sudo apt install antiword
+sudo apt install libreoffice-core   # 권장 (포맷 정확도 높음)
+sudo apt install antiword            # 가벼운 대안
 ```
 
 `scripts/extract.py` 가 자동으로 `soffice` 또는 `antiword` 를 찾아 사용한다.

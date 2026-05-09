@@ -13,11 +13,12 @@
 - [x] `scripts/extract.py` 작성 (.pdf/.doc/.docx 통합 추출)
 - [x] `checklist.md` (이 파일)
 - [x] `context-notes.md` (결정 기록)
-- [ ] `git init` + 첫 커밋
+- [x] `git init` + 첫 커밋
 - [ ] `sudo apt install python3-venv python3-pip` (사용자 직접 실행 필요)
-- [ ] `python3 -m venv .venv && .venv/bin/pip install pypdf python-docx`
+- [x] `python3 -m venv .venv && .venv/bin/pip install pypdf python-docx`
 - [ ] (선택) `.doc` 지원: `sudo apt install libreoffice-core` 또는 `sudo apt install antiword`
 - [ ] Obsidian 설치 후 본 폴더를 Vault 로 열기 (시각적 탐색용)
+- [x] (신규 머신) `bash scripts/setup.sh` 실행 — venv·pip·extract.py 검증 자동화
 
 ## B. NSSF 첫 페이지 등록 (다음 단계)
 
