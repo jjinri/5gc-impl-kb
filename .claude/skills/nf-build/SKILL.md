@@ -48,6 +48,16 @@ allowed-tools: Bash(.venv/bin/python3 scripts/extract.py *) Bash(.venv/bin/pytho
 - 신규 모드 — 7 카테고리 H2 헤더 모두 + frontmatter 만 우선 골격으로 생성.
 - 갱신 모드 — 사용자 산문 보존, 기계 산출 영역만 교체.
 
+**frontmatter 4키 (강제).** `nf-status` 의 `frontmatter_valid` check 가 다음 4키만 요구한다 — 그 외는 manifest·docx·폴더명이 진실 출처라 *중복*. 더 늘리지 마라.
+```yaml
+---
+nf: <nf>           # 폴더명과 일치 (예 nssf)
+spec: TS NN.NNN    # 본 페이지가 다루는 spec (예 TS 29.531)
+version: <ver>     # docx version 또는 yaml info.version (둘이 다르면 둘 다 표기 가능)
+status: draft|ready_for_review|implementation_ready  # 사람이 갱신
+---
+```
+
 ### 3. 카테고리별 빌드 (full 또는 부분)
 
 각 카테고리는 *어디에서 끌어와* 어떤 형식으로 채울지 명확히 정해진 책임이 있다.
@@ -75,9 +85,16 @@ allowed-tools: Bash(.venv/bin/python3 scripts/extract.py *) Bash(.venv/bin/pytho
 - 다이어그램의 화살표·자료형은 본 spec 또는 OpenAPI 에 *실제로* 적힌 것만 — 추측한 흐름이 wiki 에 박히면 구현자를 오도하기 때문.
 
 #### 3e. Cross-NF Dependencies
-- 자료원 — 모든 specs/*/.docx grep — 본 NF 호출하는 곳 / 본 NF 가 호출하는 곳.
-- 출력 — 양방향 표 (consumer NF · 호출 operation · 트리거 절차 / producer NF · 호출 operation · 사유).
-- 자동 추출 도구가 아직 없을 수 있음 — 그러면 `--cross-nf` 빌드 시 placeholder 안내문 + sprint 후반 도구 신규 후 재빌드.
+- **본 섹션의 책임 = 본 NF docx 명시 분 단편 표.** 자급자족 — 다른 NF 빌드 의존 없음. 본 NF docx 의 §5 (Services), §6.x (operation 별 호출 흐름) 에 적힌 cross-NF 호출만 표로.
+- 자료원 — 본 NF 의 docx + manifest 의 cross-nf 카테고리 + yaml 의 oAuth scope (호출자 추정 보조).
+- 출력 — 표. 열 — `상대 NF | 방향 | 트리거 | 출처 (docx 절·yaml)`.
+- 자동 추출 도구는 부재 (sprint 후반). 그러나 본 NF docx 만으로 표가 채워지는 경우가 대부분 — *본 섹션은 placeholder 가 아니라 단편 표로 완성*.
+- **여러 NF 합성 (cross-NF 호출 그래프 mermaid + 절차 매핑) 은 본 섹션 책임 아님.** 그건 `kb/overviews/cross-nf-graph.md` 같은 합성 페이지에서. NSSF·AMF·SMF 등 여러 NF 의 본 섹션이 모인 *후* 별도 산출물로 작성.
+
+| 산출 | 어디 | 무엇 | 의존 |
+|---|---|---|---|
+| 본 NF Cross-NF 단편 | `kb/<nf>/3gpp-*.md` §Cross-NF | 본 NF docx 의 호출 표 | 본 NF docx 만 |
+| 합성 호출 그래프 | `kb/overviews/cross-nf-graph.md` (가칭) | 여러 NF 합성 + mermaid | 여러 NF 페이지 |
 
 #### 3f. Configuration
 - 자료원 — primary yaml 의 `info.x-gateway-rate-limit-policy`(있다면) + supportedFeatures 표 (docx §6.x.8) + default·timeout (docx 본문).
