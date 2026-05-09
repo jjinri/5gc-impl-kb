@@ -53,5 +53,4 @@ NF 한 개를 KB 에 등록·완성·재시작하는 흐름은 다음 4 SKILL �
 ## 더 보기
 
 - [`CLAUDE.md`](./CLAUDE.md) — 디렉터리 규칙·언어 정책·THE FOUR RULES·acceptance gate 등 *정책* 의 진실 출처.
-- [`docs/checklist.md`](./docs/checklist.md) — 부트스트랩·신규 페이지 추가·운영 점검 체크리스트.
 - [`index.md`](./index.md) — KB 페이지 카탈로그 (NF 별 인덱스).
