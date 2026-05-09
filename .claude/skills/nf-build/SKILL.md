@@ -2,7 +2,7 @@
 name: nf-build
 description: 매니페스트가 준비된 NF 에 대해 7 카테고리 implementation-grade wiki 페이지를 생성·갱신하는 워크플로우. 사용자가 "/nf-build nssf", "NSSF 페이지 만들어", "NRF 빌드", "data-model 만 다시 뽑아", "build nf page" 등을 말하거나 NF 이름을 지정하면 무조건 이 skill 을 사용한다. 동작 — `kb/<nf>/_manifest.yaml` 의 ready_for_build 가 true 인지 확인하고, 7 카테고리 (Interface / API / Data Model / Service Scenarios / Cross-NF Dependencies / Configuration / Error Handling) 를 일괄 또는 부분 빌드한다. 카테고리 인자 (`--data-model`, `--api`, `--interface` 등) 로 부분 빌드 가능 — 가장 자주 쓰이는 시나리오는 "papers/ 에 새 ref 추가 후 Data Model 트리만 재추출". Data Model 은 `scripts/resolve-yaml-refs.py` 가 chain 추적, Service Scenarios 의 mermaid 는 사람이 작성 (도구가 자동 작성하지 않음 — figure 추출은 sprint 후반). 매니페스트 생성·갱신은 sibling `/nf-init`, 완성도 검사는 `/nf-status` 의 책임이며 본 skill 은 페이지 *내용 생성* 에 집중한다. 커밋은 자동 수행 금지.
 argument-hint: "<nf> [--<category>]"
-allowed-tools: Bash(.venv/bin/python3 scripts/extract.py *) Bash(.venv/bin/python3 scripts/resolve-yaml-refs.py *) Bash(.venv/bin/python3 scripts/render-mermaid.py *) Bash(.venv/bin/python3 scripts/nf-manifest.py *) Bash(mkdir -p *) Bash(ls *) Bash(grep *) Bash(awk *) Bash(find *)
+allowed-tools: Bash(.venv/bin/python3 scripts/extract.py *) Bash(.venv/bin/python3 scripts/resolve-yaml-refs.py *) Bash(.venv/bin/python3 scripts/nf-manifest.py *) Bash(mkdir -p *) Bash(ls *) Bash(grep *) Bash(awk *) Bash(find *)
 ---
 
 # nf-build — 7 카테고리 implementation-grade 페이지 생성·갱신
@@ -32,7 +32,7 @@ allowed-tools: Bash(.venv/bin/python3 scripts/extract.py *) Bash(.venv/bin/pytho
 
 - **CLAUDE.md THE FOUR RULES 가 우선.** 추출 텍스트에 없는 사실을 본문에 끼워넣지 않는다 — wiki 의 신뢰성이 그것에 달려있다. yaml chain 이 끝까지 안 풀리면 `[TS XX.YYY] (참조 규격 미등록)` leaf 로 표시해 사용자에게 무엇을 cp 하면 풀릴지 보여준다.
 - **`ready_for_build = false` 면 기본 거절, `--force` 시 시도.** 거절이 default 인 이유 — missing dependency 로 빌드하면 Data Model 트리가 leaf 투성이라 다음 단계 (코드 생성·검토) 가 의미 없어진다. `--force` 는 사용자가 알면서 일부 결과만 원할 때의 escape hatch.
-- **사용자 산문 보존, 기계 산출만 교체.** Summary·Methodology 같은 prose 는 사용자가 손으로 다듬은 자산. 본 skill 이 매번 새로 쓰면 그 노력이 매 빌드마다 사라진다. 기계 산출 영역 — Data Model 트리, mermaid SVG, API 매트릭스, Cross-NF 표 — 은 도구가 진실 출처라 안전하게 교체.
+- **사용자 산문 보존, 기계 산출만 교체.** Summary·Methodology 같은 prose 는 사용자가 손으로 다듬은 자산. 본 skill 이 매번 새로 쓰면 그 노력이 매 빌드마다 사라진다. 기계 산출 영역 — Data Model 트리, API 매트릭스, Cross-NF 표 — 은 도구가 진실 출처라 안전하게 교체.
 - **카테고리 부분 빌드 시 다른 카테고리 불간섭.** `--data-model` 호출은 *Data Model 만* 손댄다. Service Scenarios 의 mermaid 를 함께 갱신하지 않는다. 부분 빌드의 가치가 *예측 가능한 변경 범위* 에 있기 때문.
 - **mermaid 화살표·자료형은 추출 텍스트에 적힌 것만.** 다이어그램에서 추측하면 잘못된 시퀀스가 wiki 에 박혀 구현자를 오도한다. spec 본문이나 OpenAPI 에 없는 흐름은 *적지 않는다* 가 안전.
 - **커밋은 자동 수행 안 함.** wiki 변경은 사용자가 검토 + 의미 있는 단위로 묶고 싶어하는 영역. 자동 커밋이 그 흐름을 방해한다.
@@ -71,7 +71,7 @@ allowed-tools: Bash(.venv/bin/python3 scripts/extract.py *) Bash(.venv/bin/pytho
 #### 3d. Service Scenarios
 - 자료원 — primary docx 의 §5 (Services offered) + 트리거 절차의 stage 2 spec (예 23.502 §4.x).
 - 출력 — Mermaid `sequenceDiagram` 다이어그램 2~4개. autonumber, NF 약어 participant, 메시지 라벨은 HTTP method · 경로 · 자료형. 분기는 alt/else.
-- 도구 — `scripts/render-mermaid.py [--clean]` 으로 sibling `_diagrams/<page>-<n>.svg` 산출 (사용자가 검토 후 수동 호출 권장).
+- mermaid 블록은 .md 안에 그대로 둔다 — Obsidian·GitHub·VS Code 가 네이티브 렌더한다. 별도 SVG 산출은 하지 않는다.
 - 다이어그램의 화살표·자료형은 본 spec 또는 OpenAPI 에 *실제로* 적힌 것만 — 추측한 흐름이 wiki 에 박히면 구현자를 오도하기 때문.
 
 #### 3e. Cross-NF Dependencies
@@ -87,16 +87,13 @@ allowed-tools: Bash(.venv/bin/python3 scripts/extract.py *) Bash(.venv/bin/pytho
 - 자료원 — primary yaml 의 `responses` + docx §6.x.7 ProblemDetails cause 표.
 - 출력 — markdown table. 열 = (HTTP code, ProblemDetails cause, 의미, 권장 복구 동작).
 
-### 4. mermaid SVG 렌더 안내
-- mermaid 블록을 새로 추가했으면 결과 보고에 `python3 scripts/render-mermaid.py [--clean]` 실행 권장 한 줄. *자동 호출은 하지 않는다* — 사용자 확인 후 명시 실행.
-
-### 5. `index.md` 갱신
+### 4. `index.md` 갱신
 - root `index.md` 의 해당 NF 섹션을 본 페이지 항목으로 갱신.
 - 신규 페이지 — `_(아직 페이지 없음)_` placeholder 또는 `## 다른 NF (예정)` 안내문에서 본 NF 를 빼내고 한 줄 항목으로 *교체*. NF 섹션 자체가 없으면 새로 추가 (Karpathy 트리 순서 유지).
 - 갱신 페이지 — 항목이 이미 있으면 *내용 줄* 만 갱신 (예 version, 한 줄 설명).
 - 형식 — `- [[{nf}/{wiki-stem}]] — TS NN.NNN v<x.y.z>, <한국어 한 줄 설명>`.
 
-### 6. 결과 보고 (커밋 X)
+### 5. 결과 보고 (커밋 X)
 - 갱신·신규 파일 목록 (`kb/<nf>/3gpp-*.md`, 매니페스트는 변경 없음).
 - 카테고리별 빌드 상태 — *완료 / placeholder / not-built (도구 부재)*.
 - 미해결 leaf 목록 (Data Model 의 chain leaf, Cross-NF 의 자동 추출 미가용 등).
@@ -114,7 +111,6 @@ allowed-tools: Bash(.venv/bin/python3 scripts/extract.py *) Bash(.venv/bin/pytho
 조건:   kb/nrf/_manifest.yaml.status.ready_for_build == true
 산출:
   - kb/nrf/3gpp-ts-29510.md (7 카테고리 골격 + 채움)
-  - kb/nrf/_diagrams/3gpp-ts-29510-{1..N}.svg (mermaid 별 SVG)
   - index.md 의 "## NRF" 섹션에 한 줄 항목 추가
 보고: "Interface ✓, API ✓ 표 작성, Data Model ✓ chain leaf 0건,
        Service Scenarios — mermaid 3개 (다이어그램 4 권장 — 사용자가 추가),
@@ -137,12 +133,10 @@ allowed-tools: Bash(.venv/bin/python3 scripts/extract.py *) Bash(.venv/bin/pytho
 - 매니페스트 ready 가 아닌데 빌드 강행했는가 (`--force` 명시 없이).
 - Data Model 트리를 손으로 가공해 도구 산출에서 벗어났는가 (acceptance check `data_model_chain_complete` 가 detect 함).
 - 카테고리 부분 빌드 시 *다른 카테고리* 본문을 건드렸는가.
-- mermaid 추가 후 SVG 미렌더 — `mermaid_renders` check 가 detect.
 - 사용자 산문이 새 빌드로 사라졌는가.
 
 ## 참고 — 본 skill 안에 다시 적지 말 것
 
 - 매니페스트 schema: `scripts/nf-manifest.py` docstring.
 - Data Model chain 알고리즘: `scripts/resolve-yaml-refs.py` docstring.
-- mermaid 렌더링: `scripts/render-mermaid.py` docstring.
 - 디렉터리·파일명·언어 정책: `CLAUDE.md`.

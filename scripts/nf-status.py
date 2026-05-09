@@ -15,7 +15,6 @@ Tier 1 (Validation, binary)
   - sections_complete (7 카테고리 H2 + 비어있지 않음)
   - wikilinks_resolve (kb 내부 [[...]] 모두 실재)
   - no_korean_colon_end
-  - mermaid_renders (mermaid 블록 수 = SVG 수)
   - manifest_ready (_manifest.yaml.status.ready_for_build)
 
 Tier 2 (Coverage, threshold)

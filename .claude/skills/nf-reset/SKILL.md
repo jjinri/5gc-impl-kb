@@ -1,6 +1,6 @@
 ---
 name: nf-reset
-description: 본 5gc-impl-kb 의 특정 NF 페이지를 *백업 후 처음부터 다시 빌드* 하기 위해 현 산출을 archive 폴더로 옮기고 kb/<nf>/ 를 비워주는 워크플로우. 사용자가 "/nf-reset nssf", "NSSF 백업하고 다시 빌드", "NRF 페이지 리셋", "기존 wiki 백업하고 새로 시작", "reset nf page", "NSSF 페이지 다시 만들어" 등을 말하거나 NF 이름을 지정하면 무조건 이 skill 을 사용한다. 동작 — kb/<nf>/ 의 페이지·_status.yaml·_diagrams/ 를 kb/<nf>/_archive/<timestamp>/ 로 mv 하고, 기본 모드는 _manifest.yaml 보존 (재빌드 시 의존성 재발견 비용 절감), `--full` 옵션이면 매니페스트도 함께 archive. archive 후 사용자는 즉시 `/nf-build <nf>` 또는 `/nf-init <nf> --primary <spec>` 으로 fresh 시작 가능. 본 skill 은 *파괴적 행동* 이므로 실행 전 archive 위치를 사용자에게 알리고 확인을 묻는다 — 사일런트 wipe 금지.
+description: 본 5gc-impl-kb 의 특정 NF 페이지를 *백업 후 처음부터 다시 빌드* 하기 위해 현 산출을 archive 폴더로 옮기고 kb/<nf>/ 를 비워주는 워크플로우. 사용자가 "/nf-reset nssf", "NSSF 백업하고 다시 빌드", "NRF 페이지 리셋", "기존 wiki 백업하고 새로 시작", "reset nf page", "NSSF 페이지 다시 만들어" 등을 말하거나 NF 이름을 지정하면 무조건 이 skill 을 사용한다. 동작 — kb/<nf>/ 의 페이지·_status.yaml 을 kb/<nf>/_archive/<timestamp>/ 로 mv 하고, 기본 모드는 _manifest.yaml 보존 (재빌드 시 의존성 재발견 비용 절감), `--full` 옵션이면 매니페스트도 함께 archive. archive 후 사용자는 즉시 `/nf-build <nf>` 또는 `/nf-init <nf> --primary <spec>` 으로 fresh 시작 가능. 본 skill 은 *파괴적 행동* 이므로 실행 전 archive 위치를 사용자에게 알리고 확인을 묻는다 — 사일런트 wipe 금지.
 argument-hint: "<nf> [--full]"
 allowed-tools: Bash(mkdir -p *) Bash(mv *) Bash(ls *)
 ---
@@ -34,7 +34,7 @@ allowed-tools: Bash(mkdir -p *) Bash(mv *) Bash(ls *)
 
 ### 1. 입력 검증
 - `<nf>` 가 비어있거나 `kb/<nf>/` 가 부재하면 정지.
-- 옮길 파일 목록 수집 — `kb/<nf>/3gpp-*.md`, `kb/<nf>/_status.yaml`, `kb/<nf>/_diagrams/`. `--full` 면 `_manifest.yaml` 추가.
+- 옮길 파일 목록 수집 — `kb/<nf>/3gpp-*.md`, `kb/<nf>/_status.yaml`. `--full` 면 `_manifest.yaml` 추가.
 - 옮길 파일이 0개면 "이미 비어있음" 보고 후 정지 (archive 폴더 만들지 않음).
 
 ### 2. 사용자 확인
@@ -45,7 +45,7 @@ allowed-tools: Bash(mkdir -p *) Bash(mv *) Bash(ls *)
 ### 3. archive 실행
 - timestamp = `date '+%Y%m%d-%H%M%S'`.
 - `mkdir -p kb/<nf>/_archive/<timestamp>/`.
-- 옮길 파일들을 `git mv` (가능하면) 로 이동. _diagrams/ 폴더는 통째로 이동.
+- 옮길 파일들을 `git mv` (가능하면) 로 이동.
 - 결과 표시 — archive 위치, mv 된 파일 수.
 
 ### 4. 결과 보고
@@ -68,7 +68,6 @@ allowed-tools: Bash(mkdir -p *) Bash(mv *) Bash(ls *)
   옮길 파일 —
     kb/nssf/3gpp-ts-29531.md (38 KB)
     kb/nssf/_status.yaml (7 KB)
-    kb/nssf/_diagrams/ (3 SVG, 83 KB)
   보존 — kb/nssf/_manifest.yaml
   진행할까요? [Y/n]:
 사용자: Y
@@ -83,7 +82,7 @@ allowed-tools: Bash(mkdir -p *) Bash(mv *) Bash(ls *)
 도구:
   archive 위치 — kb/nssf/_archive/20260509-220500/
   옮길 파일 —
-    kb/nssf/3gpp-ts-29531.md, _status.yaml, _diagrams/, _manifest.yaml
+    kb/nssf/3gpp-ts-29531.md, _status.yaml, _manifest.yaml
   보존 — (없음)
   진행할까요? [Y/n]: Y
 도구:   git mv ...

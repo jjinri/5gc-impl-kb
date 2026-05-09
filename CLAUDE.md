@@ -51,12 +51,9 @@
 ```
 5gc-impl-kb/
 ├── CLAUDE.md                    # 본 파일 — 정책
+├── README.md                    # 프로젝트 소개·setup·browsing
+├── requirements.txt             # python 의존성
 ├── index.md                     # 페이지 카탈로그
-├── docs/
-│   ├── checklist.md             # 사용자용 워크플로우 체크리스트
-│   └── decisions/               # ADR — 결정 기록
-│       ├── 0000-bootstrap-decisions.md
-│       └── 0001-implementation-grade-redesign.md
 ├── specs/                       # 3GPP 원본 (.pdf / .doc / .docx / .yaml, cp only — symlink 금지)
 │   └── {spec-number-with-dot}/
 ├── digests/                     # LLM 1차 한국어 발췌 (버전 단위)
@@ -65,24 +62,21 @@
 │   ├── {nf}/                    # NF 단위 폴더 (nssf, nrf, amf, smf, ...)
 │   │   ├── 3gpp-{ts|tr}-{n}.md
 │   │   ├── _manifest.yaml       # /nf-init 산출 — 의존성 + ready_for_build
-│   │   ├── _status.yaml         # /nf-status 산출 — acceptance gate
-│   │   └── _diagrams/           # mermaid → SVG 산출
+│   │   └── _status.yaml         # /nf-status 산출 — acceptance gate
 │   ├── architecture/            # 5GC 전체 아키텍처 (TS 23.501 등)
 │   ├── interfaces/, security/, slicing/, concepts/, overviews/, other/
 ├── scripts/
 │   ├── extract.py               # .pdf/.doc/.docx → text
 │   ├── nf-manifest.py           # NF 의존성 자동 검출 → _manifest.yaml
 │   ├── resolve-yaml-refs.py     # OpenAPI yaml $ref chain 추적
-│   ├── render-mermaid.py        # mermaid → SVG
-│   ├── nf-status.py             # _status.yaml 산출
-│   └── setup.sh                 # 자동 셋업
+│   └── nf-status.py             # _status.yaml 산출
 ├── .claude/
 │   └── skills/
 │       ├── nf-init/SKILL.md     # /nf-init
 │       ├── nf-build/SKILL.md    # /nf-build
 │       ├── nf-status/SKILL.md   # /nf-status
 │       └── nf-reset/SKILL.md    # /nf-reset (백업 + 재빌드 준비)
-└── .venv/, .npm-tools/          # gitignored
+└── .venv/                       # gitignored
 ```
 
 ---

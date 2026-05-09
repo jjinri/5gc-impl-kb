@@ -28,10 +28,11 @@ specs/{spec}/{file}.{pdf,docx,doc,yaml}
 ```bash
 git clone <repo> && cd 5gc-impl-kb
 sudo apt install python3-venv python3-pip   # 사용자 권한 필요 — 한 번만
-bash scripts/setup.sh                         # 나머지 자동 + 선택 항목 대화형 가이드
+python3 -m venv .venv
+.venv/bin/pip install -r requirements.txt
 ```
 
-`scripts/setup.sh` 가 venv 생성, 의존성 (`pypdf`·`python-docx`·`pyyaml`) 설치, `extract.py` smoke test, mermaid-cli 선택 설치를 처리한다. `.doc` 지원·Obsidian·`docs/checklist.md` 동기화 같은 선택 항목은 질문으로 가이드. 비대화형은 `--yes` / `--no-prompts`. 옵션·수동 폴백 절차는 `bash scripts/setup.sh --help` 또는 스크립트 docstring 이 진실 출처.
+의존성은 `requirements.txt` 가 진실 출처 (`pypdf`·`python-docx`·`pyyaml`). 본 repo 의 모든 도구는 `.venv/bin/python3 scripts/<name>.py` 형태로 호출하므로 venv 활성화는 불필요. `.doc` (legacy MS Word) 처리가 필요하면 별도로 `sudo apt install libreoffice-core` 또는 `antiword`.
 
 ## 작업 사이클 — 4 SKILL
 
