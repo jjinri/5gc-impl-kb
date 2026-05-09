@@ -54,9 +54,10 @@ specs/{spec}/{file}.{pdf,docx,doc,yaml}
 
 | 단계 | SKILL | 책임 |
 |---|---|---|
-| 1. 매니페스트 보강 | `/nf-init <nf> --primary <spec>` | papers/ 의존성 자동 검출. `ready_for_build` 까지 반복 호출 |
-| 2. 페이지 빌드 | `/nf-build <nf> [--<category>]` | 7 카테고리 implementation-grade 페이지 생성·갱신 |
+| 1. 매니페스트 보강 | `/nf-init <nf> --primary <spec>` | specs/ 의존성 자동 검출. `ready_for_build` 까지 반복 호출 |
+| 2. 페이지 빌드 | `/nf-build <nf> [--<category>]` | 7 카테고리 페이지 생성·갱신 + `index.md` 항목 갱신 |
 | 3. 완성도 검사 | `/nf-status <nf>` | acceptance gate 평가, FAIL 마다 `to_pass` 액션 보고 |
+| (선택) 백업·재시작 | `/nf-reset <nf> [--full]` | 현 산출을 `kb/<nf>/_archive/<ts>/` 로 mv 후 `/nf-build` 로 fresh 빌드 |
 
 각 SKILL 의 절차 *세부* 는 해당 `SKILL.md` 가 진실의 출처. CLAUDE.md 는 *정책* 만 정의하고 절차는 SKILL 로 위임한다 (ADR 0001 D5).
 
@@ -99,7 +100,7 @@ specs/{spec}/{file}.{pdf,docx,doc,yaml}
 │       ├── nf-init/SKILL.md     # /nf-init
 │       ├── nf-build/SKILL.md    # /nf-build
 │       ├── nf-status/SKILL.md   # /nf-status
-│       └── _legacy/             # 구 add-spec, update-spec (sprint 1 끝까지 보존)
+│       └── nf-reset/SKILL.md    # /nf-reset (백업 + 재빌드 준비)
 └── .venv/, .npm-tools/          # gitignored
 ```
 

@@ -88,7 +88,13 @@ allowed-tools: Bash(.venv/bin/python3 scripts/extract.py *) Bash(.venv/bin/pytho
 ### 4. mermaid SVG 렌더 안내
 - mermaid 블록을 새로 추가했으면 결과 보고에 `python3 scripts/render-mermaid.py [--clean]` 실행 권장 한 줄. *자동 호출은 하지 않는다* — 사용자 확인 후 명시 실행.
 
-### 5. 결과 보고 (커밋 X)
+### 5. `index.md` 갱신
+- root `index.md` 의 해당 NF 섹션을 본 페이지 항목으로 갱신.
+- 신규 페이지 — `_(아직 페이지 없음)_` placeholder 또는 `## 다른 NF (예정)` 안내문에서 본 NF 를 빼내고 한 줄 항목으로 *교체*. NF 섹션 자체가 없으면 새로 추가 (Karpathy 트리 순서 유지).
+- 갱신 페이지 — 항목이 이미 있으면 *내용 줄* 만 갱신 (예 version, 한 줄 설명).
+- 형식 — `- [[{nf}/{wiki-stem}]] — TS NN.NNN v<x.y.z>, <한국어 한 줄 설명>`.
+
+### 6. 결과 보고 (커밋 X)
 - 갱신·신규 파일 목록 (`kb/<nf>/3gpp-*.md`, 매니페스트는 변경 없음).
 - 카테고리별 빌드 상태 — *완료 / placeholder / not-built (도구 부재)*.
 - 미해결 leaf 목록 (Data Model 의 chain leaf, Cross-NF 의 자동 추출 미가용 등).

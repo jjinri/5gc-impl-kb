@@ -1,8 +1,8 @@
-# LLM Wiki — 3GPP 5G Core Systems
+# 5gc-impl-kb — 페이지 카탈로그
 
-이 wiki 의 페이지 카탈로그. 새 wiki 페이지를 만들 때마다 해당 카테고리에 한 줄로 추가한다.
+본 KB 의 페이지 카탈로그. `/nf-build <nf>` 가 페이지를 생성·갱신할 때 본 파일도 함께 갱신한다 (해당 NF 섹션의 한 줄 항목).
 
-명명 규칙·매핑 정책·언어 정책 등 자세한 내용은 [CLAUDE.md](./CLAUDE.md) 참고.
+새 정의·디렉터리 규칙·언어 정책은 [`CLAUDE.md`](./CLAUDE.md), 결정 기록은 [`docs/decisions/`](./docs/decisions/) 참고.
 
 ---
 
