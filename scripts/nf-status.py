@@ -40,10 +40,7 @@ import yaml
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 
-REQUIRED_FRONTMATTER_KEYS = {
-    "title", "spec", "release", "version", "year", "category",
-    "source_path", "source_filename", "source_format",
-}
+REQUIRED_FRONTMATTER_KEYS = {"nf", "spec", "version", "status"}
 
 REQUIRED_SECTIONS = [
     "Interface", "API", "Data Model", "Service Scenarios",
@@ -226,7 +223,7 @@ def check_manifest_ready(manifest: dict, profile: str) -> dict:
                     to_pass=["scripts/nf-manifest.py <nf> --primary <spec> --write"])
         return base
     status = manifest.get("status", {})
-    ready = status.get("ready", False)
+    ready = status.get("ready_for_build", False)
     completeness = status.get("manifest_completeness", "?/?")
     missing = status.get("missing_priority", [])
     if ready:
@@ -262,11 +259,13 @@ def check_data_model_chain(page: pathlib.Path | None, profile: str) -> dict:
         base.update(status="FAIL", current="페이지 없음", to_pass=["/nf-build 으로 페이지 생성"])
         return base
     text = page.read_text(encoding="utf-8")
-    leaves = re.findall(r"\(참조 규격 미등록\)", text)
+    # ## Data Model H2 섹션의 ```text 코드블록 안에서만 leaf 매칭 — 본문 산문의 백틱 인용은 제외
+    dm_match = re.search(r"^## Data Model\s*$([\s\S]*?)(?=^## )", text, re.M)
+    section = dm_match.group(1) if dm_match else ""
+    trees = "\n".join(re.findall(r"```text\s*\n([\s\S]*?)```", section))
+    leaves = re.findall(r"\(참조 규격 미등록\)", trees)
     if leaves:
-        # 각 leaf 가 가리키는 spec 추출
-        leaf_specs = re.findall(r"\[TS (\d{2}\.\d{3})\]\s+\(참조 규격 미등록\)", text)
-        leaf_specs = sorted(set(leaf_specs))
+        leaf_specs = sorted(set(re.findall(r"\[TS (\d{2}\.\d{3})\]\s+\(참조 규격 미등록\)", trees)))
         base.update(status="FAIL",
                     current=f"{len(leaves)}건 leaf — TS {leaf_specs}",
                     to_pass=[
