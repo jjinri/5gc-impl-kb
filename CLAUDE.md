@@ -37,8 +37,11 @@ Original spec doc → sources/*.md (LLM 요약, 한국어) → wiki/{nf}/*.md (�
 llm-wiki/
 ├── CLAUDE.md
 ├── index.md                # 페이지 카탈로그
-├── checklist.md            # 사용자용 워크플로우 체크리스트
-├── context-notes.md        # 결정 기록
+├── docs/
+│   ├── checklist.md        # 사용자용 워크플로우 체크리스트
+│   └── decisions/          # ADR — 결정 기록
+│       ├── 0000-bootstrap-decisions.md
+│       └── 0001-implementation-grade-redesign.md
 ├── papers/                 # 원본 문서 (.pdf / .doc / .docx, cp only — symlink 금지)
 │   └── {spec-number-with-dot}/
 │       └── {original-3gpp-filename}.{ext}
@@ -259,7 +262,7 @@ sudo apt install python3-venv python3-pip   # 사용자 권한 필요 — 한 �
 bash scripts/setup.sh                         # 나머지 자동 + 선택 항목 대화형 가이드
 ```
 
-`scripts/setup.sh` 가 venv 생성, `pypdf`/`python-docx` 설치, `extract.py` 동작 검증(.docx smoke test) 까지 자동 처리한다. 그 후 `.doc` 지원·Obsidian·`checklist.md` 동기화 같은 선택 항목을 질문으로 가이드한다. 비대화형 재실행은 `bash scripts/setup.sh --yes` 또는 `--no-prompts`.
+`scripts/setup.sh` 가 venv 생성, `pypdf`/`python-docx` 설치, `extract.py` 동작 검증(.docx smoke test) 까지 자동 처리한다. 그 후 `.doc` 지원·Obsidian·`docs/checklist.md` 동기화 같은 선택 항목을 질문으로 가이드한다. 비대화형 재실행은 `bash scripts/setup.sh --yes` 또는 `--no-prompts`.
 
 ### 수동 폴백
 

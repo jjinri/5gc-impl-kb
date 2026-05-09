@@ -176,19 +176,22 @@ else
   fi
 fi
 
-# 3b — checklist.md 동기화
-if [[ -f checklist.md ]] && git rev-parse HEAD >/dev/null 2>&1; then
+# 3b — checklist.md 동기화 (현 위치 docs/checklist.md, 옛 위치 root checklist.md 도 호환)
+CHECKLIST_PATH=""
+[[ -f docs/checklist.md ]] && CHECKLIST_PATH="docs/checklist.md"
+[[ -z "$CHECKLIST_PATH" && -f checklist.md ]] && CHECKLIST_PATH="checklist.md"
+if [[ -n "$CHECKLIST_PATH" ]] && git rev-parse HEAD >/dev/null 2>&1; then
   echo
-  if ask "checklist.md 의 부트스트랩 항목을 자동으로 [x] 로 동기화할까요?"; then
+  if ask "$CHECKLIST_PATH 의 부트스트랩 항목을 자동으로 [x] 로 동기화할까요?"; then
     # 주의: sed 치환부의 `&` 는 매치 전체로 확장되므로 `\&` 로 이스케이프해야 한다.
     sed -i \
       -e 's|^- \[ \] `git init` + 첫 커밋$|- [x] `git init` + 첫 커밋|' \
       -e 's|^- \[ \] `python3 -m venv .venv && .venv/bin/pip install pypdf python-docx`$|- [x] `python3 -m venv .venv \&\& .venv/bin/pip install pypdf python-docx`|' \
       -e 's|^- \[ \] (신규 머신) `bash scripts/setup.sh` 실행 — venv·pip·extract.py 검증 자동화$|- [x] (신규 머신) `bash scripts/setup.sh` 실행 — venv·pip·extract.py 검증 자동화|' \
-      checklist.md
-    ok "checklist.md 갱신 (git/venv/pip/setup.sh 항목)"
+      "$CHECKLIST_PATH"
+    ok "$CHECKLIST_PATH 갱신 (git/venv/pip/setup.sh 항목)"
   else
-    ok "checklist.md 갱신 skip"
+    ok "$CHECKLIST_PATH 갱신 skip"
   fi
 fi
 
