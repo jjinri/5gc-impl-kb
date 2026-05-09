@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# wiki/**/*.md 의 ```mermaid 블록을 SVG 로 렌더해 sibling _diagrams/ 폴더에 저장
+# kb/**/*.md 의 ```mermaid 블록을 SVG 로 렌더해 sibling _diagrams/ 폴더에 저장
 """
 Usage:
     .venv/bin/python3 scripts/render-mermaid.py [--check] [--clean]
@@ -9,8 +9,8 @@ Usage:
     --clean    더 이상 매칭 블록이 없는 옛 _diagrams/<stem>-<n>.svg 까지 함께 삭제
 
 산출물:
-    wiki/{nf}/_diagrams/<stem>-<idx>.svg
-    여기서 <stem> = wiki/{nf}/<stem>.md 의 베이스이름, <idx> = 페이지 안 mermaid 블록 1-based 순번.
+    kb/{nf}/_diagrams/<stem>-<idx>.svg
+    여기서 <stem> = kb/{nf}/<stem>.md 의 베이스이름, <idx> = 페이지 안 mermaid 블록 1-based 순번.
 
 의존성:
     `mmdc` (npm @mermaid-js/mermaid-cli) 가 PATH 또는 .npm-tools/node_modules/.bin/ 에 있어야 한다.
@@ -80,7 +80,7 @@ def render_block(mmdc: str, block: str, out_svg: pathlib.Path) -> tuple[bool, st
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="wiki/**/*.md 의 mermaid 블록을 sibling _diagrams/*.svg 로 렌더"
+        description="kb/**/*.md 의 mermaid 블록을 sibling _diagrams/*.svg 로 렌더"
     )
     parser.add_argument(
         "--check", action="store_true",
@@ -93,9 +93,9 @@ def main() -> None:
     args = parser.parse_args()
 
     repo_root = pathlib.Path(__file__).resolve().parent.parent
-    wiki_root = repo_root / "wiki"
-    if not wiki_root.is_dir():
-        print(f"[render-mermaid] wiki/ 폴더 없음: {wiki_root}", file=sys.stderr)
+    kb_root = repo_root / "kb"
+    if not kb_root.is_dir():
+        print(f"[render-mermaid] kb/ 폴더 없음: {kb_root}", file=sys.stderr)
         sys.exit(1)
 
     mmdc = find_mmdc(repo_root)
@@ -108,7 +108,7 @@ def main() -> None:
     failed = 0
     cleaned = 0
 
-    for md in sorted(wiki_root.rglob("*.md")):
+    for md in sorted(kb_root.rglob("*.md")):
         text = md.read_text(encoding="utf-8")
         blocks = [m.group(1) for m in MERMAID_RE.finditer(text)]
         out_dir = md.parent / "_diagrams"
@@ -146,7 +146,7 @@ def main() -> None:
     if args.check:
         total = sum(
             len(MERMAID_RE.findall(p.read_text(encoding="utf-8")))
-            for p in wiki_root.rglob("*.md")
+            for p in kb_root.rglob("*.md")
         )
         print(f"\n[render-mermaid] {pages_with_blocks} 페이지 · {total} 블록 (--check, 렌더 없음)")
     else:

@@ -6,7 +6,7 @@
 
 ## A. 부트스트랩 (1회성)
 
-- [x] `~/AI/llm-wiki` 디렉터리 구조 생성 (`papers/29.531`, `sources`, `wiki/nssf`, `scripts`)
+- [x] `~/AI/llm-wiki` 디렉터리 구조 생성 (`specs/29.531`, `digests`, `kb/nssf`, `scripts`)
 - [x] `.gitignore` 작성 (.venv, .obsidian/workspace*, __pycache__ 등 제외)
 - [x] `CLAUDE.md` 작성 (Karpathy 패턴 → 3GPP 5GC 적응)
 - [x] `index.md` placeholder 작성
@@ -23,22 +23,22 @@
 ## B. NSSF 첫 페이지 등록 (다음 단계)
 
 - [ ] NSSF 관련 3GPP 스펙 PDF/DOC/DOCX 확보 (예: TS 29.531)
-- [ ] `papers/29.531/` 에 cp (절대 symlink 금지)
-- [ ] `python3 scripts/extract.py papers/29.531/{file}` 로 텍스트 추출 확인
-- [ ] `sources/3gpp-ts-29531-v{version}.md` 작성 (한국어 요약, 영문 frontmatter)
-- [ ] `wiki/nssf/3gpp-ts-29531.md` 작성 (시리즈 페이지, `## Version History` 포함)
+- [ ] `specs/29.531/` 에 cp (절대 symlink 금지)
+- [ ] `python3 scripts/extract.py specs/29.531/{file}` 로 텍스트 추출 확인
+- [ ] `digests/3gpp-ts-29531-v{version}.md` 작성 (한국어 요약, 영문 frontmatter)
+- [ ] `kb/nssf/3gpp-ts-29531.md` 작성 (시리즈 페이지, `## Version History` 포함)
 - [ ] `index.md` 의 NSSF 섹션에 한 줄 항목 추가
 - [ ] semantic 커밋: `feat(nssf): TS 29.531 wiki 페이지 추가`
 
 ## C. 새 NF 추가 시 (반복)
 
-- [ ] `wiki/{nf}/` 폴더 생성 (소문자 NF 명)
+- [ ] `kb/{nf}/` 폴더 생성 (소문자 NF 명)
 - [ ] `index.md` 에 해당 NF 섹션 추가
 - [ ] 위 B 절차를 그 NF 의 첫 spec 에 대해 반복
 
 ## D. Cross-cutting 페이지 추가 시 (architecture/interfaces/security/slicing/concepts/overviews/other)
 
-- [ ] 해당 폴더 생성 (`mkdir wiki/{category}`)
+- [ ] 해당 폴더 생성 (`mkdir kb/{category}`)
 - [ ] `index.md` 의 해당 카테고리 placeholder 를 페이지 항목으로 갱신
 - [ ] 페이지 작성 후 wiki 다른 페이지에서 `[[category/page]]` 로 링크
 
@@ -46,11 +46,11 @@
 
 - [ ] CLAUDE.md THE FOUR RULES 위반 없는지 — wiki 외부 추측·web search 인용 금지
 - [ ] 한 카테고리 폴더가 ~500 파일을 넘으면 분할 검토
-- [ ] `wiki/overviews/` 가 정기적으로 늘고 있는가 — knowledge compounding 지표
+- [ ] `kb/overviews/` 가 정기적으로 늘고 있는가 — knowledge compounding 지표
 
 ---
 
 ## 미해결 / 보류
 
 - [ ] WSL2 에서 LibreOffice headless 변환 속도 측정 — 느리면 antiword 폴백을 기본으로 쓸지 재검토
-- [ ] 3GPP 다운로드 ZIP 자동 풀어서 papers/{spec}/ 로 옮기는 import 스크립트 — NSSF 첫 등록 후 필요성 판단
+- [ ] 3GPP 다운로드 ZIP 자동 풀어서 specs/{spec}/ 로 옮기는 import 스크립트 — NSSF 첫 등록 후 필요성 판단

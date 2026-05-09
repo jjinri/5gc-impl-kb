@@ -204,8 +204,8 @@ echo "    https://obsidian.md/"
 echo
 log "셋업 완료. 다음 단계 (예: NSSF TS 29.531 첫 문서 등록)"
 cat <<'NEXT'
-  1. mkdir -p papers/29.531
-  2. cp <원본>.docx papers/29.531/                    # 절대 symlink 금지
-  3. .venv/bin/python3 scripts/extract.py papers/29.531/<원본>.docx
-  4. sources/3gpp-ts-29531-v{ver}.md 와 wiki/nssf/3gpp-ts-29531.md 작성, index.md 갱신
+  1. mkdir -p specs/29.531
+  2. cp <원본>.docx specs/29.531/                    # 절대 symlink 금지
+  3. .venv/bin/python3 scripts/extract.py specs/29.531/<원본>.docx
+  4. digests/3gpp-ts-29531-v{ver}.md 와 kb/nssf/3gpp-ts-29531.md 작성, index.md 갱신
 NEXT

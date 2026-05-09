@@ -27,20 +27,20 @@
 - 현재 상태: Active. ADR 0001 의 D5 (진실 출처 분담) 와 합쳐서 더 강화 — CLAUDE.md = 정책, SKILL = 절차.
 
 ### D4 — 언어 정책
-- 결정: wiki 본문 prose·sources/*.md·index.md 설명문은 한국어. YAML frontmatter, 섹션 헤더, 3GPP 약어, 스펙 정의 인용은 영어 유지.
+- 결정: wiki 본문 prose·digests/*.md·index.md 설명문은 한국어. YAML frontmatter, 섹션 헤더, 3GPP 약어, 스펙 정의 인용은 영어 유지.
 - Override 명시: 전역 §5 (한국어 마침표, 콜론 종결 금지) 는 wiki 본문에도 적용. 전역 §6 (한국어 헤더 주석) 은 마크다운/YAML 비대상, `scripts/*.py` 에는 적용.
 - 현재 상태: Active. 변경 없음.
 
-### D5 — Repository 조직 — papers/ 의 spec-number 폴더
-- 결정: `papers/{spec-number-with-dot}/{original-3gpp-filename}` 구조. 폴더명 점 포함 (`29.531`), 파일명은 3GPP 원본.
+### D5 — Repository 조직 — specs/ 의 spec-number 폴더
+- 결정: `specs/{spec-number-with-dot}/{original-3gpp-filename}` 구조. 폴더명 점 포함 (`29.531`), 파일명은 3GPP 원본.
 - 이유: 3GPP 다운로드는 spec 시리즈 단위로 묶임 + 같은 시리즈에 여러 release/version 공존. nested 가 자연스러움.
-- 현재 상태: Active. 단 ADR 0001 의 O1 에서 *디렉터리 이름 자체* (`papers/`, `sources/`, `wiki/`) 가 새 정의에 부정확하다는 이슈가 열림 — sprint 0c 에서 `specs/`, `digests/`, `kb/` 로 rename 예정.
+- 현재 상태: Active. 단 ADR 0001 의 O1 에서 *디렉터리 이름 자체* (당시 `papers/`, `sources/`, `wiki/`) 가 새 정의에 부정확하다는 이슈가 열림 — sprint 0c 에서 `specs/`, `digests/`, `kb/` 로 rename 적용됨.
 
 ### D6 — Karpathy 1:1:1 매핑 분기
 - 결정:
   - papers — spec 버전마다 1파일 (멀티 포맷·멀티 릴리즈 공존)
-  - sources — 실제 요약한 버전마다 1개 (`sources/3gpp-ts-{n}-v{ver}.md`)
-  - wiki — spec 시리즈마다 1개 (`wiki/{nf}/3gpp-ts-{n}.md`), 본문에 `## Version History`
+  - sources — 실제 요약한 버전마다 1개 (`digests/3gpp-ts-{n}-v{ver}.md`)
+  - wiki — spec 시리즈마다 1개 (`kb/{nf}/3gpp-ts-{n}.md`), 본문에 `## Version History`
 - 이유: "TS 29.503 가 뭐냐" 자연스러운 질문에 한 페이지로 답할 수 있어야 함.
 - 현재 상태: Active. 7 카테고리 schema (ADR 0001 D2) 도입 후에도 *시리즈 단위 한 페이지* 원칙은 유지.
 
@@ -51,7 +51,7 @@
 - 현재 상태: Active.
 
 ### D8 — NF 폴더 — 사전 생성 안 함
-- 결정: `wiki/nssf/` 만 만들고, 다른 NF 폴더는 첫 문서 추가 시점에 생성.
+- 결정: `kb/nssf/` 만 만들고, 다른 NF 폴더는 첫 문서 추가 시점에 생성.
 - 이유: 전역 §2 (단순성, 사변적 셋업 금지).
 - 현재 상태: Active. NF-centric skill 도입 후에도 동일.
 
@@ -79,10 +79,10 @@
 
 본 ADR 의 결정으로부터 직접 도출된 산출.
 
-- 디렉터리 — `papers/{spec-number-with-dot}/`, `sources/`, `wiki/{nf}/`, `scripts/`, `.venv/` (gitignored).
+- 디렉터리 — `specs/{spec-number-with-dot}/`, `digests/`, `kb/{nf}/`, `scripts/`, `.venv/` (gitignored).
 - 도구 — `scripts/extract.py` (.pdf/.docx/.doc 통합 추출).
 - 정책 — frontmatter 에 `source_path`/`source_filename`/`source_format` (포맷 일반화).
-- 첫 페이지 — `wiki/nssf/3gpp-ts-29531.md` (ADR 0000 부트스트랩 직후 등록 + ADR 0001 시점에 7 카테고리 재구성 예정).
+- 첫 페이지 — `kb/nssf/3gpp-ts-29531.md` (ADR 0000 부트스트랩 직후 등록 + ADR 0001 시점에 7 카테고리 재구성 예정).
 
 ## Supersession trail
 

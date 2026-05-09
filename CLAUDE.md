@@ -3,13 +3,13 @@
 3GPP 5G Core 시스템 스펙·관련 paper 의 개인 지식 베이스. [Karpathy 의 LLM Wiki 패턴](https://gist.github.com/karpathy/1dd0294ef9567971c1e4348a90d69285) 을 기반으로, [joonan30 의 fork](https://gist.github.com/joonan30/cbce305684d079dbe9a3fbaefe4e3959) 를 본 프로젝트 도메인(3GPP)에 맞게 적응.
 
 ```
-Original spec doc → sources/*.md (LLM 요약, 한국어) → wiki/{nf}/*.md (정리된 페이지, 한국어)
+Original spec doc → digests/*.md (LLM 요약, 한국어) → kb/{nf}/*.md (정리된 페이지, 한국어)
 ```
 
 > **Inheritance.** 전역 `~/.claude/CLAUDE.md` 의 모든 행동 규칙(가정 금지·단순성·외과적 변경·테스트 우선·시맨틱 커밋·에러는 추측 말고 읽기 등)을 그대로 따른다. 이 파일은 그 위에 본 프로젝트 고유 규칙만 추가한다.
 
 > **Language policy.**
-> - **wiki 본문(prose)·`sources/*.md`·`index.md` 설명문은 한국어**로 작성한다.
+> - **wiki 본문(prose)·`digests/*.md`·`index.md` 설명문은 한국어**로 작성한다.
 > - YAML frontmatter, 섹션 헤더(`## Summary` 등), 3GPP 용어·약어(NSSF, AMF, SUCI, S-NSSAI 등)는 영어 원문 유지.
 > - 스펙 정의 문구는 영어 원문 인용 + 한국어 해설 병기.
 > - 대화·커밋 메시지는 한국어 그대로.
@@ -25,8 +25,8 @@ Original spec doc → sources/*.md (LLM 요약, 한국어) → wiki/{nf}/*.md (�
 매 응답에 적용. overview 페이지에서도 wiki 에 실제 존재하는 spec/paper 만 인용한다.
 
 1. **No web search.** `WebSearch`/`WebFetch` 로 빈틈을 메우지 않는다. 모든 답은 우리가 가진 문서에 근거한다.
-2. **Answer from the wiki first.** `sources/` 와 `wiki/` 만이 진실의 출처다.
-3. **If the wiki is insufficient, re-read the source document.** `papers/{spec}/{file}` 를 `scripts/extract.py` 로 다시 추출하고 wiki 를 갱신한다.
+2. **Answer from the wiki first.** `digests/` 와 `kb/` 만이 진실의 출처다.
+3. **If the wiki is insufficient, re-read the source document.** `specs/{spec}/{file}` 를 `scripts/extract.py` 로 다시 추출하고 wiki 를 갱신한다.
 4. **If the wiki has no document on the topic, say so.** *"해당 주제의 문서가 wiki 에 없습니다 — PDF/DOC 를 주세요."* 임의 추정 금지.
 
 ---
@@ -34,7 +34,7 @@ Original spec doc → sources/*.md (LLM 요약, 한국어) → wiki/{nf}/*.md (�
 ## Repository Structure
 
 ```
-llm-wiki/
+llm-kb/
 ├── CLAUDE.md
 ├── index.md                # 페이지 카탈로그
 ├── docs/
@@ -42,12 +42,12 @@ llm-wiki/
 │   └── decisions/          # ADR — 결정 기록
 │       ├── 0000-bootstrap-decisions.md
 │       └── 0001-implementation-grade-redesign.md
-├── papers/                 # 원본 문서 (.pdf / .doc / .docx, cp only — symlink 금지)
+├── specs/                 # 원본 문서 (.pdf / .doc / .docx, cp only — symlink 금지)
 │   └── {spec-number-with-dot}/
 │       └── {original-3gpp-filename}.{ext}
-├── sources/                # LLM 1차 요약 (한국어)
+├── digests/                # LLM 1차 요약 (한국어)
 │   └── {stem}.md
-├── wiki/                   # 정리된 wiki 페이지 (한국어)
+├── kb/                   # 정리된 wiki 페이지 (한국어)
 │   ├── {nf}/               # NF 단위 폴더 (nssf, amf, smf, ...)
 │   ├── architecture/
 │   ├── interfaces/
@@ -65,10 +65,10 @@ llm-wiki/
 
 ## File Naming Convention
 
-### Original (`papers/`) — 3GPP 원본 보존
+### Original (`specs/`) — 3GPP 원본 보존
 
 ```
-papers/{spec-number-with-dot}/{original-3gpp-filename}.{ext}
+specs/{spec-number-with-dot}/{original-3gpp-filename}.{ext}
 ```
 
 - spec-number 폴더는 점 포함 정식 표기 (`29.531`, `23.501`, `29.503`)
@@ -76,7 +76,7 @@ papers/{spec-number-with-dot}/{original-3gpp-filename}.{ext}
 - 같은 spec 의 다른 release/version 은 **같은 폴더**에 공존 (`29531-h60.docx` + `29531-i40.docx`)
 - 같은 버전의 다른 포맷도 공존 가능 (`29531-i40.docx` + `29531-i40.pdf`)
 
-### Normalized stem (`sources/`, `wiki/`)
+### Normalized stem (`digests/`, `kb/`)
 
 ```
 {stem} = 3gpp-{ts|tr}-{number-no-dot}-v{version}        # source 1개당 1버전
@@ -84,8 +84,8 @@ papers/{spec-number-with-dot}/{original-3gpp-filename}.{ext}
 ```
 
 예시:
-- `sources/3gpp-ts-29531-v18.4.0.md` (특정 버전 요약)
-- `wiki/nssf/3gpp-ts-29531.md` (시리즈 정리 페이지, 본문에 버전 이력 노트)
+- `digests/3gpp-ts-29531-v18.4.0.md` (특정 버전 요약)
+- `kb/nssf/3gpp-ts-29531.md` (시리즈 정리 페이지, 본문에 버전 이력 노트)
 
 비-3GPP paper 는 Karpathy 원안 그대로:
 ```
@@ -98,9 +98,9 @@ papers/{spec-number-with-dot}/{original-3gpp-filename}.{ext}
 
 | 계층 | 단위 | 명명 |
 |---|---|---|
-| `papers/` | spec **버전마다** 1파일 (멀티 포맷·멀티 릴리즈 공존) | 3GPP 원본 파일명 |
-| `sources/` | 실제로 요약한 **버전마다** 1개 | `3gpp-ts-{n}-v{ver}.md` |
-| `wiki/{nf}/` | spec **시리즈마다** 1개 (canonical/현재 버전 중심) | `3gpp-ts-{n}.md`. 본문 `## Version History` 섹션에 변경점 |
+| `specs/` | spec **버전마다** 1파일 (멀티 포맷·멀티 릴리즈 공존) | 3GPP 원본 파일명 |
+| `digests/` | 실제로 요약한 **버전마다** 1개 | `3gpp-ts-{n}-v{ver}.md` |
+| `kb/{nf}/` | spec **시리즈마다** 1개 (canonical/현재 버전 중심) | `3gpp-ts-{n}.md`. 본문 `## Version History` 섹션에 변경점 |
 
 이유: 3GPP 스펙은 같은 시리즈의 여러 release/version 이 공존한다. wiki 페이지를 시리즈 단위로 두면 사용자가 "TS 29.503 가 뭐냐" 라는 자연스러운 질문에 한 페이지로 답할 수 있다.
 
@@ -109,7 +109,7 @@ papers/{spec-number-with-dot}/{original-3gpp-filename}.{ext}
 ## Categories
 
 ```
-wiki/
+kb/
 ├── nssf/         # ★ 시작점 — Network Slice Selection Function (TS 29.531 등)
 ├── {nf}/         # NF 추가 시 폴더 생성. 소문자 그대로:
 │                 #   amf, smf, upf, nrf, ausf, udm, udr,
@@ -133,26 +133,26 @@ wiki/
 
 ```bash
 SPEC=29.503    # 점 포함 정식 표기
-mkdir -p ~/AI/llm-wiki/papers/$SPEC
+mkdir -p ~/AI/llm-kb/specs/$SPEC
 ```
 
 ### Step 1 — 원본 파일 cp (절대 symlink 금지)
 
 ```bash
-cp ~/Downloads/29503-i40.docx ~/AI/llm-wiki/papers/29.503/
+cp ~/Downloads/29503-i40.docx ~/AI/llm-kb/specs/29.503/
 ```
 
 ### Step 2 — 텍스트 추출
 
 ```bash
 cd ~/AI/llm-wiki
-python3 scripts/extract.py papers/29.503/29503-i40.docx
+python3 scripts/extract.py specs/29.503/29503-i40.docx
 # stdout 으로 처음 ~12,000 chars 출력. 긴 문서는 페이지/문단 단위로 잘라서 호출.
 ```
 
 지원 포맷: `.pdf` (pypdf), `.docx` (python-docx), `.doc` (soffice 또는 antiword 필요).
 
-### Step 3 — `sources/{stem}.md` 작성 (한국어 본문)
+### Step 3 — `digests/{stem}.md` 작성 (한국어 본문)
 
 ```yaml
 ---
@@ -163,7 +163,7 @@ release: 18
 version: 18.4.0
 year: 2024
 category: nssf
-source_path: /home/jjinri/AI/llm-wiki/papers/29.531/29531-i40.docx
+source_path: /home/jjinri/AI/llm-kb/specs/29.531/29531-i40.docx
 source_filename: 29531-i40.docx
 source_format: docx
 source_collection: 3gpp
@@ -181,7 +181,7 @@ source_collection: 3gpp
 ## 7. Glossary
 ```
 
-### Step 4 — `wiki/{nf}/{stem}.md` 작성 (시리즈 페이지, 한국어)
+### Step 4 — `kb/{nf}/{stem}.md` 작성 (시리즈 페이지, 한국어)
 
 ```yaml
 ---
@@ -193,7 +193,7 @@ version: 18.4.0    # 현재 wiki 가 정리한 기준 버전
 year: 2024
 source: 3gpp-ts-29531-v18.4.0.md
 category: nssf
-source_path: /home/jjinri/AI/llm-wiki/papers/29.531/29531-i40.docx
+source_path: /home/jjinri/AI/llm-kb/specs/29.531/29531-i40.docx
 source_filename: 29531-i40.docx
 source_format: docx
 source_collection: 3gpp
@@ -225,8 +225,8 @@ tags: [nssf, sbi, slice-selection]
 
 ## Source Document Management Rules
 
-- **항상 cp, 절대 symlink 금지.** 외부 경로(`~/Downloads/` 등)에서 `papers/` 안으로 복사한다.
-- `source_path` 는 항상 `papers/` 내부의 nested 경로 (`papers/{spec}/{file}`).
+- **항상 cp, 절대 symlink 금지.** 외부 경로(`~/Downloads/` 등)에서 `specs/` 안으로 복사한다.
+- `source_path` 는 항상 `specs/` 내부의 nested 경로 (`specs/{spec}/{file}`).
 - `source_filename` 은 `basename(source_path)` 와 정확히 일치.
 - `source_format` 은 확장자와 일치 (`pdf` | `doc` | `docx`).
 - 같은 spec 시리즈의 다른 버전·포맷은 **같은 spec-number 폴더**에 공존.
@@ -236,9 +236,9 @@ tags: [nssf, sbi, slice-selection]
 
 ## Knowledge Compounding
 
-가장 가치 있는 페이지는 개별 spec 요약이 아니라 `wiki/overviews/` 의 합성 페이지다. 좋은 답이 나오면 사용자에게:
+가장 가치 있는 페이지는 개별 spec 요약이 아니라 `kb/overviews/` 의 합성 페이지다. 좋은 답이 나오면 사용자에게:
 
-> "Save this as an overview page in `wiki/overviews/`"
+> "Save this as an overview page in `kb/overviews/`"
 
 대화 1회당 5–15개의 wiki 페이지 신규/갱신을 목표로 한다.
 

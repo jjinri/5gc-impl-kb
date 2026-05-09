@@ -11,8 +11,8 @@
 
 - 도구 — `scripts/extract.py`, `scripts/setup.sh`, `scripts/render-mermaid.py`, `scripts/resolve-yaml-refs.py`, `scripts/nf-manifest.py`
 - skill — `.claude/skills/add-spec/`, `.claude/skills/update-spec/`, plugin `skill-creator`
-- 첫 페이지 — `wiki/nssf/3gpp-ts-29531.md` (657 줄, Service Flows mermaid 3개 + Data Model chain 트리 9개)
-- 첫 매니페스트 — `wiki/nssf/_manifest.yaml` (manual_overrides 동작 검증 완료)
+- 첫 페이지 — `kb/nssf/3gpp-ts-29531.md` (657 줄, Service Flows mermaid 3개 + Data Model chain 트리 9개)
+- 첫 매니페스트 — `kb/nssf/_manifest.yaml` (manual_overrides 동작 검증 완료)
 
 같은 날 사용자가 wiki 의 *목적* 을 재정의했다.
 
@@ -94,9 +94,9 @@ Gate 단계 — `draft → ready_for_review → implementation_ready → product
 | 0a | 정의·결정 합의 | 본 ADR (이 문서) |
 | 0b | CLAUDE.md 재작성 | 새 정의·새 파이프라인·THE FOUR RULES 갱신 |
 | 0c | 3 신규 SKILL + `scripts/nf-status.py` + 구 skill decommission | `.claude/skills/{nf-init, nf-build, nf-status}/` |
-| 1 | NSSF 페이지 새 7-카테고리 schema 로 재구성 | `wiki/nssf/3gpp-ts-29531.md` 갱신 + `_status.yaml` |
+| 1 | NSSF 페이지 새 7-카테고리 schema 로 재구성 | `kb/nssf/3gpp-ts-29531.md` 갱신 + `_status.yaml` |
 | 2 | sprint 1 에서 발견된 도구 갭 1개 신규 | `extract-tables.py` 또는 `extract-figures.py` 또는 `yaml-to-c.py` 중 하나 |
-| 3 | 두 번째 NF (NWDAF mixed profile 또는 NRF stage_3_only) 로 generic 검증 | `wiki/{nf}/` |
+| 3 | 두 번째 NF (NWDAF mixed profile 또는 NRF stage_3_only) 로 generic 검증 | `kb/{nf}/` |
 | 4+ | 추가 NF / IOT / cross-cutting | 누적 |
 
 ## Consequences
@@ -105,7 +105,7 @@ Gate 단계 — `draft → ready_for_review → implementation_ready → product
 
 - 도구 5종 모두 그대로 유효 — `extract.py`, `resolve-yaml-refs.py`, `render-mermaid.py`, `nf-manifest.py`, `setup.sh`.
 - 현 NSSF 페이지의 *Data Model 트리* 와 *Service Flows mermaid* — 새 schema 의 일부로 재배치.
-- File naming convention (`papers/{spec}/{file}`, stem `3gpp-{ts|tr}-{n}-v{ver}` / `3gpp-{ts|tr}-{n}`).
+- File naming convention (`specs/{spec}/{file}`, stem `3gpp-{ts|tr}-{n}-v{ver}` / `3gpp-{ts|tr}-{n}`).
 - Categories 디렉터리 트리 (`{nf}/`, `architecture/`, `interfaces/`, `security/`, `slicing/`, `concepts/`, `overviews/`, `other/`).
 - Language policy (한국어 prose, 영문 frontmatter, 콜론 종결 금지).
 - Source document management rules (cp only, symlink 금지, source_path 절대 경로).
@@ -128,9 +128,9 @@ Gate 단계 — `draft → ready_for_review → implementation_ready → product
 | 현 이름 | 새 정의에서 어색한 이유 | 더 정확한 후보 |
 |---|---|---|
 | `llm-wiki` (프로젝트) | "LLM wiki" 는 paper 합성 위주 Karpathy 패턴. 새 정의는 *구현 KB* | `5gc-impl-kb`, `nf-impl-kb`, `5gc-kb` |
-| `papers/` | "paper" 는 academic 어감. 우리는 3GPP spec | `specs/`, `originals/`, `3gpp/` |
-| `sources/` | "sources" 는 source code 어감. 여기선 *spec 의 1차 한국어 요약* | `digests/`, `summaries/`, `notes/` |
-| `wiki/` | 읽기용 백과사전 어감. 새 정의는 *구현용 페이지 모음* | `kb/`, `nfs/`, `pages/` |
+| `specs/` | "paper" 는 academic 어감. 우리는 3GPP spec | `specs/`, `originals/`, `3gpp/` |
+| `digests/` | "sources" 는 source code 어감. 여기선 *spec 의 1차 한국어 요약* | `digests/`, `summaries/`, `notes/` |
+| `kb/` | 읽기용 백과사전 어감. 새 정의는 *구현용 페이지 모음* | `kb/`, `nfs/`, `pages/` |
 
 본 ADR 종료 직후 별도 결정. 본 문서 자체의 위치 (`decisions/`) 도 결정 영향권.
 
@@ -180,5 +180,5 @@ NWDAF (23.288 + 29.520), AMF (29.518 + 29.508 + ...) 같이 *복수 primary spec
 - 회의록 — 본 파일 (`decisions/0001-implementation-grade-redesign.md`)
 - 도구 — `scripts/extract.py`, `setup.sh`, `render-mermaid.py`, `resolve-yaml-refs.py`, `nf-manifest.py`
 - skill — `add-spec/`, `update-spec/` (둘 다 sprint 0c 에서 `_legacy/` 이동 예정)
-- 산출 — `wiki/nssf/3gpp-ts-29531.md`, `wiki/nssf/_manifest.yaml`, `wiki/nssf/_diagrams/*.svg`
+- 산출 — `kb/nssf/3gpp-ts-29531.md`, `kb/nssf/_manifest.yaml`, `kb/nssf/_diagrams/*.svg`
 - 직전 커밋 — `502fdf6 feat(tools): nf-manifest manual_overrides 적용`

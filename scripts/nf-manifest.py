@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
-# NF 의 papers/ 의존성을 yaml $ref chain + docx clause 2 References 로 자동 검출해 _manifest.yaml 초안을 만든다
+# NF 의 specs/ 의존성을 yaml $ref chain + docx clause 2 References 로 자동 검출해 _manifest.yaml 초안을 만든다
 """
 Usage:
     .venv/bin/python3 scripts/nf-manifest.py <nf> --primary <spec> [--write]
 
 옵션:
     --primary <spec>    NF 의 주 spec 번호 (예 29.531). 필수.
-    --write             산출 매니페스트를 wiki/<nf>/_manifest.yaml 로 저장. 미지정 시 stdout 만.
+    --write             산출 매니페스트를 kb/<nf>/_manifest.yaml 로 저장. 미지정 시 stdout 만.
     --max-chars N       docx 추출 한도 (기본 80,000)
 
 동작:
-    1) papers/<primary-spec>/ 의 docx + yaml 들 식별.
+    1) specs/<primary-spec>/ 의 docx + yaml 들 식별.
     2) 모든 yaml 의 cross-spec $ref 수집.
     3) docx clause 2 References 섹션을 추출해 모든 3GPP TS/TR 인용 수집 (NBSP-tolerant).
     4) 카테고리 분류 (architecture / procedures / cross-nf / data_types / discovery / sba_common / security / ids / zzz_skip).
-    5) papers/ 실재 여부 표시.
+    5) specs/ 실재 여부 표시.
     6) status 보고 — manifest_completeness 비율, 부재 spec 우선순위 목록, /nf-build 가능 여부.
 
-본 도구는 *제안* 만 한다. 사용자가 결과를 보고 wiki/<nf>/_manifest.yaml 을 직접 수정/추가/제외할 수 있다.
+본 도구는 *제안* 만 한다. 사용자가 결과를 보고 kb/<nf>/_manifest.yaml 을 직접 수정/추가/제외할 수 있다.
 """
 
 from __future__ import annotations
@@ -235,14 +235,14 @@ def main() -> None:
     parser.add_argument("nf", help="NF 폴더명 (소문자, 예 nssf)")
     parser.add_argument("--primary", required=True, help="주 spec 번호 (점 포함, 예 29.531)")
     parser.add_argument("--max-chars", type=int, default=80_000)
-    parser.add_argument("--write", action="store_true", help="wiki/<nf>/_manifest.yaml 로 저장")
+    parser.add_argument("--write", action="store_true", help="kb/<nf>/_manifest.yaml 로 저장")
     args = parser.parse_args()
 
     nf = args.nf.lower()
     primary = args.primary
-    spec_dir = REPO / "papers" / primary
+    spec_dir = REPO / "specs" / primary
     if not spec_dir.is_dir():
-        sys.exit(f"[nf-manifest] {spec_dir} 부재. 먼저 papers/{primary}/ 에 원본 cp.")
+        sys.exit(f"[nf-manifest] {spec_dir} 부재. 먼저 specs/{primary}/ 에 원본 cp.")
 
     docx, yamls = find_primary_files(spec_dir)
     if docx is None:
@@ -262,7 +262,7 @@ def main() -> None:
         if isinstance(e, dict) and e.get("spec")
     }
 
-    papers_dirs = {p.name for p in (REPO/"papers").iterdir() if p.is_dir()}
+    papers_dirs = {p.name for p in (REPO/"specs").iterdir() if p.is_dir()}
     deps = []
     for spec in sorted(all_refs):
         cat, role = classify(spec)

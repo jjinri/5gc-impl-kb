@@ -13,11 +13,11 @@ Usage:
     1) input yaml 안의 schema 를 시작점으로 트리 구성.
     2) 각 $ref 해결 우선순위 — 동일 파일 → 동일 spec 폴더의 다른 yaml → 다른 spec 폴더의 yaml → 그 spec 의 docx Annex A → 미등록 leaf.
     3) 깊이/visited set 으로 cycle 방지.
-    4) wiki/{nf}/*.md 의 Data Model 섹션에 그대로 붙일 수 있는 ```text 트리를 stdout 에 출력.
+    4) kb/{nf}/*.md 의 Data Model 섹션에 그대로 붙일 수 있는 ```text 트리를 stdout 에 출력.
 
 예:
     .venv/bin/python3 scripts/resolve-yaml-refs.py \\
-      papers/29.531/TS29531_Nnssf_NSSelection.yaml AuthorizedNetworkSliceInfo
+      specs/29.531/TS29531_Nnssf_NSSelection.yaml AuthorizedNetworkSliceInfo
 """
 
 from __future__ import annotations
@@ -51,12 +51,12 @@ class ResolvedRef:
 
 
 def spec_dir_for_yaml(filename: str) -> tuple[str, pathlib.Path] | None:
-    """TS29571_CommonData.yaml → ('29.571', papers/29.571/TS29571_CommonData.yaml)."""
+    """TS29571_CommonData.yaml → ('29.571', specs/29.571/TS29571_CommonData.yaml)."""
     m = TS_FILENAME_RE.match(filename)
     if not m:
         return None
     spec = f"{m.group(1)}.{m.group(2)}"
-    return spec, REPO_ROOT / "papers" / spec / filename
+    return spec, REPO_ROOT / "specs" / spec / filename
 
 
 def load_yaml(path: pathlib.Path) -> dict:
