@@ -2,7 +2,7 @@
 name: nf-build
 description: 매니페스트가 준비된 NF 에 대해 7 카테고리 implementation-grade wiki 페이지를 생성·갱신하는 워크플로우. 사용자가 "/nf-build nssf", "NSSF 페이지 만들어", "NRF 빌드", "data-model 만 다시 뽑아", "build nf page" 등을 말하거나 NF 이름을 지정하면 무조건 이 skill 을 사용한다. 동작 — `kb/<nf>/_manifest.yaml` 의 ready_for_build 가 true 인지 확인하고, 7 카테고리 (Interface / API / Data Model / Service Scenarios / Cross-NF Dependencies / Configuration / Error Handling) 를 일괄 또는 부분 빌드한다. 카테고리 인자 (`--data-model`, `--api`, `--interface` 등) 로 부분 빌드 가능 — 가장 자주 쓰이는 시나리오는 "papers/ 에 새 ref 추가 후 Data Model 트리만 재추출". Data Model 은 `scripts/resolve-yaml-refs.py` 가 chain 추적, Service Scenarios 의 mermaid 는 사람이 작성 (도구가 자동 작성하지 않음 — figure 추출은 sprint 후반). 매니페스트 생성·갱신은 sibling `/nf-init`, 완성도 검사는 `/nf-status` 의 책임이며 본 skill 은 페이지 *내용 생성* 에 집중한다. 커밋은 자동 수행 금지.
 argument-hint: "<nf> [--<category>]"
-allowed-tools: Bash(.venv/bin/python3 scripts/extract.py *) Bash(.venv/bin/python3 scripts/resolve-yaml-refs.py *) Bash(.venv/bin/python3 scripts/nf-manifest.py *) Bash(mkdir -p *) Bash(ls *) Bash(grep *) Bash(awk *) Bash(find *)
+allowed-tools: Bash(.venv/bin/python3 scripts/extract.py *) Bash(.venv/bin/python3 scripts/spec-split.py *) Bash(.venv/bin/python3 scripts/resolve-yaml-refs.py *) Bash(.venv/bin/python3 scripts/nf-manifest.py *) Bash(mkdir -p *) Bash(ls *) Bash(grep *) Bash(awk *) Bash(find *)
 ---
 
 # nf-build — 7 카테고리 implementation-grade 페이지 생성·갱신
@@ -59,6 +59,26 @@ status: draft|ready_for_review|implementation_ready  # 사람이 갱신
 ```
 
 ### 3. 카테고리별 빌드 (full 또는 부분)
+
+**docx 자료원은 `_extracted/` 캐시를 우선 사용.** 매 빌드마다 600KB docx 를 재추출 + grep 하지 말고 미리 split 된 § 단위 파일을 Read 한다.
+
+```bash
+# specs/<spec>/_extracted/ 가 부재하거나 docx mtime > cache 면 재생성
+.venv/bin/python3 scripts/spec-split.py <spec>
+```
+
+산출 — `specs/<spec>/_extracted/<NN-slug>.md` + `_index.md` 인벤토리. cache fresh 면 즉시 종료, stale 또는 부재면 자동 재생성. **빌드 전에 한 번 호출** 후 카테고리별 작업은 _extracted/ 안의 § 파일을 Read.
+
+| 카테고리 | _extracted 안 자료 | yaml 자료 |
+|---|---|---|
+| Summary | `04-overview.md` | — |
+| Interface | `06-X-<service>.md` (§6.x.1 URI · §6.x.2 HTTP · §6.x.9 Security) | yaml `info`/`servers`/`security` |
+| API | `06-X-<service>.md` (§6.x.3·§6.x.4) | **primary** — yaml `paths` |
+| Data Model | `annex-a-...md` (보조) | **primary** — yaml + `resolve-yaml-refs.py` |
+| Service Scenarios | `05-services-...md` (§5) | — |
+| Cross-NF | `05-services-...md` + `06-X-...md` (호출 흐름) | yaml oAuth scope (보조) |
+| Configuration | `06-X-<service>.md` (§6.x.8 supportedFeatures) | — |
+| Error Handling | `06-X-<service>.md` (§6.x.7 ProblemDetails) | yaml `responses` |
 
 각 카테고리는 *어디에서 끌어와* 어떤 형식으로 채울지 명확히 정해진 책임이 있다.
 

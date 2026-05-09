@@ -56,6 +56,7 @@
 ├── index.md                     # 페이지 카탈로그
 ├── specs/                       # 3GPP 원본 (.pdf / .doc / .docx / .yaml, cp only — symlink 금지)
 │   └── {spec-number-with-dot}/
+│       └── _extracted/          # spec-split.py 산출 — § 단위 .md (캐시, commit)
 ├── kb/                          # implementation-grade 페이지 (시리즈 단위)
 │   ├── {nf}/                    # NF 단위 폴더 (nssf, nrf, amf, smf, ...)
 │   │   ├── 3gpp-{ts|tr}-{n}.md
@@ -65,6 +66,7 @@
 │   ├── interfaces/, security/, slicing/, concepts/, overviews/, other/
 ├── scripts/
 │   ├── extract.py               # .pdf/.doc/.docx → text
+│   ├── spec-split.py            # docx → specs/<spec>/_extracted/ 안 § 단위 .md (캐시)
 │   ├── nf-manifest.py           # NF 의존성 자동 검출 → _manifest.yaml
 │   ├── resolve-yaml-refs.py     # OpenAPI yaml $ref chain 추적
 │   └── nf-status.py             # _status.yaml 산출
