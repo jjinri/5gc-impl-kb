@@ -40,7 +40,20 @@ allowed-tools: Bash(.venv/bin/python3 scripts/nf-status.py *) Bash(cat *) Bash(l
 .venv/bin/python3 scripts/nf-status.py <nf> [--no-write]
 ```
 - 도구가 `kb/<nf>/_status.yaml` 갱신 + stdout/stderr 로 보고.
-- 검사 항목 (도구 docstring 진실 출처) — Tier 1 6건, Tier 2 3건, Tier 3·4 placeholder.
+- 검사 항목 (도구 docstring 진실 출처) — Tier 1·2 자동, Tier 3 (`yaml_to_c_compiles`) 도 도구가 `scripts/yaml-to-c.py` 자동 호출, Tier 4 (`implementation_guidance_quality`) 는 본 SKILL 의 §2.5 가 처리.
+
+### 2.5 Tier 4 — sub-agent judge (선택)
+`implementation_guidance_quality` 가 NOT_RUN 이고 사용자가 production gate 까지 진행을 원하면, main agent 가 sub-agent (general-purpose) 에 페이지 채점을 위임한다.
+
+- 입력 — `kb/<nf>/3gpp-*.md` 본문 + `_manifest.yaml`.
+- 채점 기준 — implementation 가이던스 품질 (1-5 점). 5 = 본 페이지만으로 구현 시작 가능, 4 = 약간의 spec 참고로 구현 가능, 3 = 페이지 보강 필요, 2 이하 = 빌드 재진행 필요.
+- sub-agent 산출 — `score`, `judged_by` (예 "sub-agent"), `rationale` (한 문단).
+- main agent 가 결과를 `kb/<nf>/_manifest.yaml` 의 `manual_overrides.judge_result` 에 등록.
+- `/nf-status <nf>` 재실행 → `nf-status.py` 가 그 field 를 보고 PASS/FAIL 판정 (`score >= 4` PASS).
+
+**언제 호출하는가.** 본 단계는 *명시적*. 매 nf-status 호출마다 자동 트리거하지 않는다 — sub-agent 채점은 비용·시간이 들고 페이지가 크게 변하지 않은 이상 결과가 안정적이기 때문. 사용자가 "production 까지 가자" 또는 페이지 큰 갱신 후일 때만 호출.
+
+**대안 — 사람 리뷰.** Claude Code 외 환경에서는 `manual_overrides.judge_result` 에 사람이 직접 등록 (`judged_by: <reviewer>`).
 
 ### 3. 결과 보고
 사용자에게 다음을 한 화면에 묶어 전달.

@@ -22,10 +22,12 @@ Tier 2 (Coverage, threshold)
   - api_operation_coverage (yaml paths operation 수 = 매트릭스 row 수, stage_3+mixed)
   - service_flow_coverage (mermaid 블록 수 ≥ manifest 명시 procedure 수)
 
-Tier 3 (Implementation viability) — 도구 미존재 시 NOT_RUN
-  - yaml_to_c_compiles
+Tier 3 (Implementation viability)
+  - yaml_to_c_compiles  (scripts/yaml-to-c.py + gcc -fsyntax-only)
 
-Tier 4 (Subjective) — SKIPPED (LLM-as-judge 자동화 미구축)
+Tier 4 (Subjective)
+  - implementation_guidance_quality (manifest.manual_overrides.judge_result.score >= 4 면 PASS,
+    부재면 NOT_RUN — /nf-status SKILL 의 judge 단계가 sub-agent 위임 후 manifest 에 등록)
 """
 
 from __future__ import annotations
@@ -33,6 +35,7 @@ from __future__ import annotations
 import argparse
 import pathlib
 import re
+import subprocess
 import sys
 from typing import Any
 
@@ -372,28 +375,72 @@ def check_service_flow_coverage(page: pathlib.Path | None, profile: str) -> dict
 
 # ─── Tier 3 / 4 — NOT_RUN placeholder ────────────────────────────────
 
-def check_yaml_to_c() -> dict:
-    return {
+def check_yaml_to_c(nf: str, profile: str) -> dict:
+    base = {
         "id": "yaml_to_c_compiles", "tier": 3,
         "name": "Data Model 의 모든 자료형이 C struct 로 컴파일 통과",
         "criterion": "scripts/yaml-to-c.py 산출이 gcc -fsyntax-only 통과.",
         "applies_to": ["stage_3_only", "mixed"],
-        "status": "NOT_RUN",
-        "current": "도구 미존재 — sprint 후반 도입 예정",
-        "to_pass": ["scripts/yaml-to-c.py 신규", "재실행"],
     }
+    if not applies(base, profile):
+        base.update(status="NOT_APPLICABLE", current=f"profile={profile}", to_pass=[])
+        return base
+    tool = REPO / "scripts" / "yaml-to-c.py"
+    if not tool.is_file():
+        base.update(status="NOT_RUN", current="도구 미존재",
+                    to_pass=["scripts/yaml-to-c.py 신규"])
+        return base
+    try:
+        result = subprocess.run(
+            [sys.executable, str(tool), nf],
+            capture_output=True, text=True, timeout=60,
+        )
+    except subprocess.TimeoutExpired:
+        base.update(status="FAIL", current="yaml-to-c.py timeout (60s)",
+                    to_pass=["yaml-to-c.py 가 무한 루프 또는 너무 큰 chain 인지 점검"])
+        return base
+    if result.returncode == 0:
+        base.update(status="PASS", current="gcc -fsyntax-only 통과", to_pass=[])
+    else:
+        err_first = "\n".join(result.stderr.strip().splitlines()[:3]) or "(stderr 비어있음)"
+        base.update(status="FAIL", current="gcc 또는 도구 실패",
+                    to_pass=[f"yaml schema 수정 또는 도구 보완 — {err_first}"])
+    return base
 
 
-def check_subjective_review() -> dict:
-    return {
+def check_subjective_review(manifest: dict) -> dict:
+    base = {
         "id": "implementation_guidance_quality", "tier": 4,
         "name": "구현자 가이던스 품질 (LLM-as-judge ≥ 4/5)",
-        "criterion": "LLM-as-judge 1~5 점. ≥ 4 가 PASS.",
+        "criterion": (
+            "manifest.manual_overrides.judge_result.score >= 4 면 PASS. "
+            "judge_result 부재면 NOT_RUN — /nf-status SKILL 의 judge 단계가 "
+            "sub-agent 위임 후 manifest 에 등록한다."
+        ),
         "applies_to": ["stage_3_only", "stage_2_only", "mixed"],
-        "status": "NOT_RUN",
-        "current": "자동화 미구축 — 사용자 수동 review 우선",
-        "to_pass": ["LLM-as-judge 호출 자동화 또는 동료 리뷰"],
     }
+    overrides = (manifest or {}).get("manual_overrides", {}) or {}
+    judge = overrides.get("judge_result")
+    if judge is None:
+        base.update(status="NOT_RUN",
+                    current="judge_result 미등록",
+                    to_pass=[
+                        "/nf-status <nf> --judge 로 sub-agent 채점 (또는 사람 리뷰)",
+                        "결과를 _manifest.yaml 의 manual_overrides.judge_result 에 등록",
+                    ])
+        return base
+    score = judge.get("score", 0)
+    judged_by = judge.get("judged_by", "?")
+    rationale = judge.get("rationale", "")
+    if score >= 4:
+        base.update(status="PASS",
+                    current=f"score {score}/5 (judged_by={judged_by})",
+                    to_pass=[])
+    else:
+        base.update(status="FAIL",
+                    current=f"score {score}/5 (< 4) — {rationale[:120]}",
+                    to_pass=["페이지 본문 보강 후 sub-agent 재채점"])
+    return base
 
 
 # ─── Acceptance gates ───────────────────────────────────────────────
@@ -516,8 +563,8 @@ def main() -> None:
         check_data_model_chain(page, profile),
         check_api_coverage(page, manifest, profile),
         check_service_flow_coverage(page, profile),
-        check_yaml_to_c(),
-        check_subjective_review(),
+        check_yaml_to_c(nf, profile),
+        check_subjective_review(manifest),
     ]
 
     gates = compute_gates(checks)
