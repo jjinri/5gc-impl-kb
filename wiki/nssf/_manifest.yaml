@@ -10,6 +10,8 @@ primary_files:
     - TS29531_Nnssf_NSSelection.yaml
 
 # 카테고리별 의존 spec — yaml chain + docx clause 2 References 자동 검출
+# manual_overrides.exclude 의 spec 은 zzz_skip 과 동격으로 취급 (in-scope 카운트 제외).
+# manual_overrides.add 로 추가된 spec 은 from: [manual] 로 표시.
 deps:
   architecture:
     - { spec: "23.501", present: true, from: [docx_clause_2], role: "stage 2 architecture (5GC 전체)" }
@@ -28,8 +30,8 @@ deps:
   ids:
     - { spec: "23.003", present: false, from: [docx_clause_2], role: "NF instance ID·FQDN·numbering" }
   cross-nf:
-    - { spec: "23.288", present: true, from: [docx_clause_2], role: "NWDAF analytics" }
-    - { spec: "38.413", present: false, from: [docx_clause_2], role: "NG-RAN NGAP (cross-NF context)" }
+    - { spec: "23.288", present: true, from: [docx_clause_2], excluded: "NWDAF analytics — IOT 단계에서 다시 검토", role: "NWDAF analytics" }
+    - { spec: "38.413", present: false, from: [docx_clause_2], excluded: "NG-RAN out of scope (SBI 구현)", role: "NG-RAN NGAP (cross-NF context)" }
   zzz_skip:
     - { spec: "21.900", present: false, from: [docx_clause_2], role: "TSG methodology — out of scope" }
     - { spec: "21.905", present: false, from: [docx_clause_2], role: "vocabulary — out of scope" }
@@ -37,7 +39,7 @@ deps:
 
 # /nf-init 산출 status
 status:
-  manifest_completeness: "5/11"
+  manifest_completeness: "4/9"
   ready_for_build: false
   missing_priority:
     - "29.500"
@@ -45,9 +47,12 @@ status:
     - "33.501"
     - "29.503"
     - "23.003"
-    - "38.413"
 
-# 사용자가 수정한 항목은 여기에 — 자동 재생성이 덮어쓰지 않는다
+# 사용자가 수정한 항목은 여기에 — 자동 재생성이 덮어쓰지 않는다.
+# exclude — 본 spec 을 in-scope 에서 제외 (ready_for_build 계산에서 빠짐).
+# add     — 자동 검출되지 않은 spec 을 deps 에 추가.
 manual_overrides:
-  exclude: []   # 예: [{spec: 38.413, reason: "NG-RAN out of scope"}]
+  exclude:
+    - { spec: "23.288", reason: "NWDAF analytics — IOT 단계에서 다시 검토" }
+    - { spec: "38.413", reason: "NG-RAN out of scope (SBI 구현)" }
   add: []       # 자동 검출되지 않은 추가 spec

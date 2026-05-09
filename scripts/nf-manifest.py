@@ -29,6 +29,8 @@ import re
 import subprocess
 import sys
 
+import yaml
+
 REPO = pathlib.Path(__file__).resolve().parent.parent
 EXTRACT = REPO / "scripts" / "extract.py"
 
@@ -139,6 +141,22 @@ def extract_docx_refs(docx: pathlib.Path, max_chars: int) -> list[str]:
     return sorted(set(found))
 
 
+def load_existing_overrides(manifest_path: pathlib.Path) -> dict:
+    """기존 _manifest.yaml 이 있으면 manual_overrides 블록만 보존해 돌려준다."""
+    default = {"exclude": [], "add": []}
+    if not manifest_path.is_file():
+        return default
+    try:
+        data = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError:
+        return default
+    ov = data.get("manual_overrides") or {}
+    return {
+        "exclude": ov.get("exclude") or [],
+        "add": ov.get("add") or [],
+    }
+
+
 def render_yaml(manifest: dict) -> str:
     """수동 의존성 없이 안정적인 YAML 문자열을 직접 생성."""
     out = []
@@ -154,6 +172,8 @@ def render_yaml(manifest: dict) -> str:
         out.append(f"    - {y}")
     out.append("")
     out.append(f"# 카테고리별 의존 spec — yaml chain + docx clause 2 References 자동 검출")
+    out.append(f"# manual_overrides.exclude 의 spec 은 zzz_skip 과 동격으로 취급 (in-scope 카운트 제외).")
+    out.append(f"# manual_overrides.add 로 추가된 spec 은 from: [manual] 로 표시.")
     out.append(f"deps:")
     by_cat: dict[str, list[dict]] = {}
     for d in manifest["deps"]:
@@ -168,6 +188,8 @@ def render_yaml(manifest: dict) -> str:
             line = f"    - {{ spec: \"{d['spec']}\", present: {str(d['present']).lower()}"
             if d.get("from"):
                 line += f", from: [{', '.join(d['from'])}]"
+            if d.get("excluded"):
+                line += f", excluded: \"{d['excluded']}\""
             line += f", role: \"{d['role']}\" }}"
             out.append(line)
     out.append("")
@@ -179,10 +201,32 @@ def render_yaml(manifest: dict) -> str:
     for n in manifest["status"]["missing_priority"]:
         out.append(f"    - \"{n}\"")
     out.append("")
-    out.append(f"# 사용자가 수정한 항목은 여기에 — 자동 재생성이 덮어쓰지 않는다")
+    out.append(f"# 사용자가 수정한 항목은 여기에 — 자동 재생성이 덮어쓰지 않는다.")
+    out.append(f"# exclude — 본 spec 을 in-scope 에서 제외 (ready_for_build 계산에서 빠짐).")
+    out.append(f"# add     — 자동 검출되지 않은 spec 을 deps 에 추가.")
     out.append(f"manual_overrides:")
-    out.append(f"  exclude: []   # 예: [{{spec: 38.413, reason: \"NG-RAN out of scope\"}}]")
-    out.append(f"  add: []       # 자동 검출되지 않은 추가 spec")
+    overrides = manifest.get("overrides") or {"exclude": [], "add": []}
+    excludes = overrides.get("exclude") or []
+    adds = overrides.get("add") or []
+    if excludes:
+        out.append(f"  exclude:")
+        for e in excludes:
+            if isinstance(e, dict):
+                spec = e.get("spec", "?")
+                reason = e.get("reason", "")
+                out.append(f"    - {{ spec: \"{spec}\", reason: \"{reason}\" }}")
+    else:
+        out.append(f"  exclude: []   # 예: [{{ spec: \"38.413\", reason: \"NG-RAN out of scope\" }}]")
+    if adds:
+        out.append(f"  add:")
+        for a in adds:
+            if isinstance(a, dict):
+                spec = a.get("spec", "?")
+                cat = a.get("category", "other")
+                role = a.get("role", "")
+                out.append(f"    - {{ spec: \"{spec}\", category: \"{cat}\", role: \"{role}\" }}")
+    else:
+        out.append(f"  add: []       # 자동 검출되지 않은 추가 spec")
     return "\n".join(out) + "\n"
 
 
@@ -208,6 +252,16 @@ def main() -> None:
     docx_refs = set(extract_docx_refs(docx, args.max_chars))
     all_refs = (yaml_refs | docx_refs) - {primary}
 
+    # 기존 manifest 의 manual_overrides 를 읽어 보존·적용
+    out_dir = REPO / "wiki" / nf
+    manifest_path = out_dir / "_manifest.yaml"
+    overrides = load_existing_overrides(manifest_path)
+    exclude_map = {
+        e.get("spec"): (e.get("reason") or "manual exclude")
+        for e in overrides.get("exclude", [])
+        if isinstance(e, dict) and e.get("spec")
+    }
+
     papers_dirs = {p.name for p in (REPO/"papers").iterdir() if p.is_dir()}
     deps = []
     for spec in sorted(all_refs):
@@ -217,15 +271,35 @@ def main() -> None:
             sources.append("yaml_ref")
         if spec in docx_refs:
             sources.append("docx_clause_2")
-        deps.append({
+        entry = {
             "spec": spec,
             "category": cat,
             "role": role,
             "present": spec in papers_dirs,
             "from": sources,
+        }
+        if spec in exclude_map:
+            entry["excluded"] = exclude_map[spec]
+        deps.append(entry)
+
+    # manual_overrides.add — 자동 검출되지 않은 spec 추가
+    existing_specs = {d["spec"] for d in deps}
+    for a in overrides.get("add", []):
+        if not isinstance(a, dict):
+            continue
+        spec = a.get("spec")
+        if not spec or spec in existing_specs:
+            continue
+        deps.append({
+            "spec": spec,
+            "category": a.get("category", "other"),
+            "role": a.get("role", "manual addition"),
+            "present": spec in papers_dirs,
+            "from": ["manual"],
         })
 
-    in_scope = [d for d in deps if d["category"] != "zzz_skip"]
+    # in-scope = zzz_skip 도 아니고 excluded 도 아닌 것
+    in_scope = [d for d in deps if d["category"] != "zzz_skip" and "excluded" not in d]
     in_scope_present = [d for d in in_scope if d["present"]]
     in_scope_missing = [d for d in in_scope if not d["present"]]
     ready = len(in_scope_missing) == 0
@@ -250,6 +324,7 @@ def main() -> None:
             "ready": ready,
             "missing_priority": missing_priority,
         },
+        "overrides": overrides,
     }
 
     yaml_text = render_yaml(manifest)
