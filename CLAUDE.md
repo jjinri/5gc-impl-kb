@@ -35,6 +35,8 @@ specs/{spec}/{file}.{pdf,docx,doc,yaml}
 >
 > **Note — 전역 §6 (Korean header comments).** 마크다운/YAML 비대상. `scripts/*.py` 등 코드 파일에는 적용.
 
+> **CLAUDE.md 유지 정책.** 본 파일은 *정책* 만 — 절차는 `SKILL.md`, 사실관계·결정 이력은 `docs/decisions/` ADR 이 진실 출처. 새 항목 추가 전에 *기존 위치에 흡수 가능한지·다른 곳에 더 어울리는지* 검토. 중복·stale 발견 시 즉시 제거. 본 파일이 증식하면 검색·요약·리뷰 비용이 모두 늘어 정책 문서로서의 가치가 떨어진다. 본 파일을 수정할 때는 *순 변화량* 을 의식한다 — 추가만큼 정리.
+
 ---
 
 ## THE FOUR RULES (do not violate)
@@ -62,6 +64,8 @@ specs/{spec}/{file}.{pdf,docx,doc,yaml}
 각 SKILL 의 절차 *세부* 는 해당 `SKILL.md` 가 진실의 출처. CLAUDE.md 는 *정책* 만 정의하고 절차는 SKILL 로 위임한다 (ADR 0001 D5).
 
 > 신규 머신 onboarding — `bash scripts/setup.sh` 한 번 후 `/nf-init <nf> --primary <spec>` 으로 시작. `docs/checklist.md` 의 부트스트랩 체크리스트 참고.
+
+> 새 SKILL 작성·개선 — Anthropic Skill Creator 가이드 (<https://claude.ai/customize/skills>) 또는 설치된 plugin `/skill-creator:skill-creator` 참고. 본 프로젝트의 4 SKILL (nf-init/build/status/reset) 이 *원칙 + 이유 + 예시* 패턴의 모범 — 새 SKILL 도 같은 골격을 따른다.
 
 ---
 
@@ -238,19 +242,7 @@ sudo apt install python3-venv python3-pip   # 사용자 권한 필요 — 한 �
 bash scripts/setup.sh                         # 나머지 자동 + 선택 항목 대화형 가이드
 ```
 
-`scripts/setup.sh` 가 venv 생성, `pypdf`/`python-docx`/`pyyaml` 설치, `extract.py` 동작 검증(.docx smoke test), mermaid-cli 선택 설치까지 처리한다. 그 후 `.doc` 지원·Obsidian·`docs/checklist.md` 동기화 같은 선택 항목을 질문으로 가이드한다. 비대화형 재실행은 `bash scripts/setup.sh --yes` 또는 `--no-prompts`.
-
-### 수동 폴백
-
-setup.sh 가 동작하지 않는 환경이면 직접 실행한다.
-
-```bash
-sudo apt install python3-venv python3-pip
-python3 -m venv .venv
-.venv/bin/pip install pypdf python-docx pyyaml
-```
-
-`.doc` (legacy MS Word) 지원이 필요하면 `sudo apt install libreoffice-core` 또는 `antiword` 추가.
+`scripts/setup.sh` 가 venv 생성, 의존성 (`pypdf`·`python-docx`·`pyyaml`) 설치, `extract.py` smoke test, mermaid-cli 선택 설치를 처리한다. `.doc` 지원·Obsidian·`docs/checklist.md` 동기화 같은 선택 항목은 질문으로 가이드. 비대화형은 `--yes` / `--no-prompts`. 옵션·수동 폴백 절차는 `bash scripts/setup.sh --help` 또는 스크립트 docstring 이 진실 출처.
 
 ---
 
