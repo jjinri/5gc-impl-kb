@@ -33,18 +33,16 @@ bash scripts/setup.sh                         # 나머지 자동 + 선택 항목
 
 `scripts/setup.sh` 가 venv 생성, 의존성 (`pypdf`·`python-docx`·`pyyaml`) 설치, `extract.py` smoke test, mermaid-cli 선택 설치를 처리한다. `.doc` 지원·Obsidian·`docs/checklist.md` 동기화 같은 선택 항목은 질문으로 가이드. 비대화형은 `--yes` / `--no-prompts`. 옵션·수동 폴백 절차는 `bash scripts/setup.sh --help` 또는 스크립트 docstring 이 진실 출처.
 
-## 작업 사이클
+## 작업 사이클 — 4 SKILL
 
-NF 한 개를 KB 에 등록·완성하는 흐름은 4 SKILL 의 사이클로 표현.
+NF 한 개를 KB 에 등록·완성·재시작하는 흐름은 다음 4 SKILL 의 사이클.
 
-| 단계 | SKILL | 책임 |
-|---|---|---|
-| 매니페스트 보강 | `/nf-init <nf> --primary <spec>` | specs/ 의존성 자동 검출. ready 까지 반복 호출 |
-| 페이지 빌드 | `/nf-build <nf> [--<category>]` | 7 카테고리 페이지 생성·갱신 + `index.md` 항목 갱신 |
-| 완성도 검사 | `/nf-status <nf>` | acceptance gate 평가, FAIL 마다 `to_pass` 액션 보고 |
-| 백업·재시작 | `/nf-reset <nf> [--full]` | 현 산출을 archive 폴더로 mv 후 fresh 빌드 |
+- `/nf-init <nf> --primary <spec>` — 매니페스트 보강 (반복).
+- `/nf-build <nf> [--<category>]` — 7 카테고리 페이지 생성·갱신.
+- `/nf-status <nf>` — acceptance gate 평가, FAIL 마다 다음 액션 보고.
+- `/nf-reset <nf> [--full]` — 백업 후 재시작.
 
-각 SKILL 절차의 진실 출처는 `.claude/skills/<name>/SKILL.md`.
+책임 매트릭스 + 정책의 진실 출처는 [`CLAUDE.md`](./CLAUDE.md) "작업 흐름" 섹션, 절차 세부는 `.claude/skills/<name>/SKILL.md`.
 
 ## Browsing with Obsidian
 

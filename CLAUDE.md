@@ -40,9 +40,7 @@
 | 3. 완성도 검사 | `/nf-status <nf>` | acceptance gate 평가, FAIL 마다 `to_pass` 액션 보고 |
 | (선택) 백업·재시작 | `/nf-reset <nf> [--full]` | 현 산출을 `kb/<nf>/_archive/<ts>/` 로 mv 후 `/nf-build` 로 fresh 빌드 |
 
-각 SKILL 의 절차 *세부* 는 해당 `SKILL.md` 가 진실의 출처. CLAUDE.md 는 *정책* 만 정의하고 절차는 SKILL 로 위임한다.
-
-> 신규 머신 onboarding — `bash scripts/setup.sh` 한 번 후 `/nf-init <nf> --primary <spec>` 으로 시작. `docs/checklist.md` 의 부트스트랩 체크리스트 참고.
+각 SKILL 의 절차 *세부* 는 해당 `SKILL.md` 가 진실의 출처. CLAUDE.md 는 *정책* 만 정의하고 절차는 SKILL 로 위임한다. onboarding (Quick start, Obsidian) 은 README 에.
 
 > 새 SKILL 작성·개선 — Anthropic Skill Creator 가이드 (<https://claude.ai/customize/skills>) 또는 설치된 plugin `/skill-creator:skill-creator` 참고. 본 프로젝트의 4 SKILL (nf-init/build/status/reset) 이 *원칙 + 이유 + 예시* 패턴의 모범 — 새 SKILL 도 같은 골격을 따른다.
 
