@@ -21,12 +21,13 @@ allowed-tools: Bash(.venv/bin/python3 scripts/nf-status.py *) Bash(cat *) Bash(l
 | 페이지 빌드·갱신 | `/nf-build` |
 | 페이지 완성도 검사 | `/nf-status` (본 skill) |
 
-## 절대 규칙
-1. CLAUDE.md THE FOUR RULES 를 따른다.
-2. `_status.yaml` 의 모든 check 는 *항목별 criterion + to_pass* 보유. 본 skill 은 그 결과를 그대로 사용자에게 전달.
-3. FAIL check 의 `to_pass` 는 *구체 액션 리스트* — silent FAIL 금지.
-4. 가중치·총점 산출하지 않는다. acceptance gate 는 check id 의 AND.
-5. NOT_APPLICABLE 은 자동 만족 (gate 계산에서 PASS 와 동격).
+## 동작 원칙 (이유 포함)
+
+- **CLAUDE.md THE FOUR RULES 가 우선.**
+- **모든 check 는 `criterion` (PASS 정의) + `to_pass` (FAIL 시 다음 액션) 의무.** 이유 — FAIL 만 보고하면 사용자가 "그래서 뭘 해야 하지?" 를 매번 추측해야 한다. `to_pass` 가 즉시 다음 backlog 항목이 되도록.
+- **가중치·총점 산출 안 함, acceptance gate 는 check id 의 AND.** 이유 — 가중치는 사람마다 다르고 시간이 지나면 번복된다. *어떤 check 의 집합이 통과해야 어떤 단계인가* 만 설계하면 의견 다툼이 줄고 추적이 명확.
+- **NOT_APPLICABLE 은 PASS 와 동격으로 gate 계산.** 이유 — stage 2 NF 는 yaml 이 없어 `data_model_chain_complete` 자체가 부적용이다. NOT_APPLICABLE 을 FAIL 로 두면 영구 blocker 가 되어 framework 가 정확하지 않게 된다.
+- **본 skill 은 *측정만*, 페이지를 수정하지 않는다.** 이유 — 측정과 수정이 같은 skill 에 있으면 측정 결과가 수정에 의해 흔들린다. 다른 skill (`/nf-build`) 의 책임 분리.
 
 ## Workflow
 
@@ -55,6 +56,46 @@ gate 상태에 따라.
 - 모든 gate FAIL → blocked_by 의 첫 항목부터 손대도록 안내.
 - ready_for_review PASS 만 → "draft 통과. implementation_ready 까지 5건 남음" 같이 진행도 표시.
 - implementation_ready PASS → "구현 가능 수준 달성. production 은 Tier 3·4 도구 갖춰지면 자동 평가".
+
+## 출력 형식 — 콘솔 보고 템플릿
+
+`_status.yaml` 자체는 도구가 만든다. 본 skill 이 *콘솔* 에 사용자에게 보여줄 형식.
+
+```text
+[nf-status] {nf}: PASS {n}, FAIL {m}, NOT_APPLICABLE/NOT_RUN {k}
+
+  gate draft:                {PASS|FAIL [— blocked by ...]}
+  gate ready_for_review:     {PASS|FAIL [— blocked by ...]}
+  gate implementation_ready: {PASS|FAIL [— blocked by ...]}
+  gate production:           {PASS|FAIL [— blocked by ...]}
+
+  상위 FAIL — 다음에 손대야 할 항목 (각 to_pass 첫 줄):
+    1. {check_id}: {to_pass[0]}
+    2. {check_id}: {to_pass[0]}
+    3. {check_id}: {to_pass[0]}
+
+  상세 — kb/{nf}/_status.yaml
+```
+
+## 예시
+
+```
+사용자: /nf-status nssf
+도구:   scripts/nf-status.py nssf
+산출:   kb/nssf/_status.yaml
+보고:   "[nf-status] nssf: PASS 4, FAIL 5, NOT_APPLICABLE/NOT_RUN 2
+         gate draft: PASS
+         gate ready_for_review: FAIL — blocked by [sections_complete, manifest_ready]
+         gate implementation_ready: FAIL — blocked by [..., data_model_chain_complete, ...]
+         gate production: FAIL — ...
+
+         상위 FAIL —
+           1. sections_complete: 누락된 H2 추가 — [Interface, API, Cross-NF, Configuration, Error Handling]
+           2. manifest_ready: specs/<spec>/ 에 cp 또는 manual_overrides.exclude 등록
+           3. data_model_chain_complete: papers/29.503 cp 후 /nf-build nssf --data-model
+
+         상세 — kb/nssf/_status.yaml"
+```
 
 ## 자주 틀리는 지점
 

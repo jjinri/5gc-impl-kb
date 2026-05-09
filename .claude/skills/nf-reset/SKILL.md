@@ -22,12 +22,13 @@ allowed-tools: Bash(mkdir -p *) Bash(mv *) Bash(ls *)
 | spec 시리즈 자체를 다른 것으로 바꿔 새로 시작 | `/nf-reset <nf> --full` → `/nf-init <nf> --primary <new-spec>` → `/nf-build <nf>` |
 | 단순히 부분 카테고리만 재빌드 (리셋 불필요) | `/nf-build <nf> --<category>` (직접) |
 
-## 절대 규칙
-1. CLAUDE.md THE FOUR RULES 를 따른다.
-2. archive 는 `kb/<nf>/_archive/<YYYYMMDD-HHMMSS>/` 로 timestamp 분리. 같은 NF 를 여러 번 reset 해도 이전 archive 가 덮어쓰이지 않는다.
-3. 실행 전 archive 위치 + 옮길 파일 목록을 사용자에게 알리고 확인을 받는다 (사용자 명시 동의 시에만 실행).
-4. `--full` 없이는 `_manifest.yaml` 을 보존. 사용자 의도 (manifest 살림 vs 함께 archive) 를 명확히 분리.
-5. 페이지 본 빌드는 *별도 호출* — 본 skill 은 archive 만 한다.
+## 동작 원칙 (이유 포함)
+
+- **CLAUDE.md THE FOUR RULES 가 우선.**
+- **archive 는 timestamp 폴더로 분리** (`kb/<nf>/_archive/<YYYYMMDD-HHMMSS>/`). 같은 NF 를 여러 번 reset 해도 이전 archive 가 덮어쓰이지 않게 — 사용자가 *언제든 어떤 시점으로든* 되돌아갈 수 있어야 한다.
+- **실행 전 사용자 확인 필수.** 본 skill 은 *파괴적* (archive 폴더로 mv 는 사실상 wipe). 사일런트 실행은 사용자가 의도하지 않은 시점에 작업물을 잃을 위험. archive 위치 + 옮길 파일 표를 미리 보여주고 명시 동의 받는다.
+- **`--full` 없이는 `_manifest.yaml` 보존.** 이유 — 매니페스트 자동 검출은 비용이 있는 작업 (docx 추출 + ref 분석). 페이지만 다시 짓고 싶을 때 매니페스트까지 archive 하면 `/nf-init` 부터 다시 해야 해 작업 흐름이 늘어진다. 두 의도 (페이지만 vs 처음부터) 를 명시적 옵션으로 분리.
+- **archive 후 페이지 빌드는 별도 호출.** 본 skill 은 백업·정리만 한다 — `/nf-build` 가 빌드의 진실 출처. 한 skill 이 mv + build 둘 다 하면 *어느 시점에 무엇이 망가졌는지* 추적이 어려워진다.
 
 ## Workflow
 
@@ -54,7 +55,40 @@ allowed-tools: Bash(mkdir -p *) Bash(mv *) Bash(ls *)
   - `_manifest.yaml` 살림 → `/nf-build <nf>` 로 즉시 재빌드.
   - `--full` 사용 → `/nf-init <nf> --primary <spec>` 부터.
 
-**커밋 자동 수행 금지.** archive 는 git 입장에서 *경로 변경* 으로 보이며, 사용자가 검토 후 별도 커밋.
+**커밋은 사용자 검토 후 별도** — 본 skill 은 자동 커밋 안 한다. archive 는 git 입장에서 *경로 변경* 으로 보이며, 사용자가 의미 단위로 묶어 커밋.
+
+## 예시
+
+**호출 — manifest 살리고 페이지만 백업.**
+
+```
+사용자: /nf-reset nssf
+도구:
+  archive 위치 — kb/nssf/_archive/20260509-220000/
+  옮길 파일 —
+    kb/nssf/3gpp-ts-29531.md (38 KB)
+    kb/nssf/_status.yaml (7 KB)
+    kb/nssf/_diagrams/ (3 SVG, 83 KB)
+  보존 — kb/nssf/_manifest.yaml
+  진행할까요? [Y/n]:
+사용자: Y
+도구:   git mv ...
+보고:   "archive 완료. 다음 — `/nf-build nssf` 로 fresh 빌드."
+```
+
+**호출 — manifest 까지 처음부터.**
+
+```
+사용자: /nf-reset nssf --full
+도구:
+  archive 위치 — kb/nssf/_archive/20260509-220500/
+  옮길 파일 —
+    kb/nssf/3gpp-ts-29531.md, _status.yaml, _diagrams/, _manifest.yaml
+  보존 — (없음)
+  진행할까요? [Y/n]: Y
+도구:   git mv ...
+보고:   "archive 완료. 다음 — `/nf-init nssf --primary <spec>` 부터 시작."
+```
 
 ## 자주 틀리는 지점
 

@@ -25,10 +25,11 @@ allowed-tools: Bash(.venv/bin/python3 scripts/nf-manifest.py *) Bash(ls *) Bash(
 | 매니페스트가 ready 됐고 페이지 생성 차례 | `/nf-build <nf>` |
 | 페이지가 implementation 기준 통과하는지 점검 | `/nf-status <nf>` |
 
-## 절대 규칙
-1. CLAUDE.md THE FOUR RULES 를 따른다.
-2. 매니페스트 자동 검출 결과는 *제안*. 사용자가 `manual_overrides.exclude` / `add` 를 통해 조정 가능. 본 skill 은 사용자 수정을 *덮어쓰지 않는다* (도구가 manual_overrides 를 보존).
-3. ready_for_build = true 가 아니면 사용자에게 무엇을 추가해야 하는지 명확히 알린다 — silent 진행 금지.
+## 동작 원칙 (이유 포함)
+
+- **CLAUDE.md THE FOUR RULES 가 우선.** 본 skill 의 매니페스트 자동 검출도 그 규칙 안에서 동작 — 외부 web 에서 의존성 가져오지 않고, 추출 텍스트(docx 또는 yaml) 에 적힌 ref 만 카운트.
+- **사용자 `manual_overrides` 는 `nf-manifest.py` 가 보존한다.** 이유 — 매니페스트 자동 검출은 *제안* 이고 일부 spec 은 NF 컨텍스트 외 (예 NG-RAN 38.413). 사용자가 exclude 로 결정하면 그 결정을 다음 호출에서 잃으면 안 됨.
+- **ready_for_build 가 false 면 *무엇을* 추가해야 하는지 알린다.** 그저 "ready=false" 만 보고하면 사용자가 다음 액션을 추측해야 한다. priority 순서로 missing spec 을 명시하면 즉시 다음 행동으로 이어진다.
 
 ## Workflow
 
@@ -57,6 +58,30 @@ allowed-tools: Bash(.venv/bin/python3 scripts/nf-manifest.py *) Bash(ls *) Bash(
 ### 5. 마무리
 - 사용자가 ready 시키면 `/nf-build <nf>` 가 다음 단계. 본 skill 은 거기로 *자동 위임하지 않는다* — ready_for_build 결과를 사용자가 확인 후 별도 호출.
 - 매니페스트가 이미 ready 였으면 — "이미 빌드 가능. `/nf-build <nf>` 로 진행" 안내.
+
+## 예시
+
+**호출 — 첫 NSSF 시작.**
+
+```
+사용자: /nf-init nssf --primary 29.531
+도구:   scripts/nf-manifest.py nssf --primary 29.531 --write
+산출:   kb/nssf/_manifest.yaml (12 의존 spec 검출, 5/11 in-scope present, ready=false)
+보고:   "manifest_completeness 5/11. ready_for_build=false.
+        추가 필요 priority — [29.500 SBA HTTP/2, 29.501 service 정의, 33.501 보안,
+                            29.503 chain leaf RecurTime, 23.003 NF instance ID].
+        specs/<spec>/ 에 cp 또는 manual_overrides.exclude 등록 후 재호출."
+```
+
+**호출 — specs/29.500 cp 후 재실행.**
+
+```
+사용자: /nf-init nssf --primary 29.531
+도구:   재실행 (manual_overrides 보존)
+보고:   "manifest_completeness 6/11 (29.500 추가). ready=false. 남은 4건 ..."
+```
+
+→ ready 가 될 때까지 specs/ cp + 재호출. ready=true 면 `/nf-build nssf`.
 
 ## 자주 틀리는 지점
 

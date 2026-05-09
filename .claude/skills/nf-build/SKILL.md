@@ -28,12 +28,14 @@ allowed-tools: Bash(.venv/bin/python3 scripts/extract.py *) Bash(.venv/bin/pytho
 | 페이지 완성도 검사 | `/nf-status` |
 | Data Model chain 갱신 (priority 부분 빌드) | `/nf-build <nf> --data-model` |
 
-## 절대 규칙
-1. CLAUDE.md THE FOUR RULES 를 따른다 — web 금지, specs/ 만 진실, 추출에 없는 사실 추측 금지, chain 미해결 시 명시 leaf.
-2. 매니페스트 `ready_for_build = false` 면 빌드 거절하고 `/nf-init` 으로 안내. 단 사용자가 명시적으로 `--force` 를 주면 미완 매니페스트로도 빌드 시도 (Data Model 트리에 missing leaf 가 박힘).
-3. 사용자가 *손으로 적은 산문* (Summary 보조 문단, 추가 본문) 은 보존. 본 skill 이 *교체* 하는 영역은 *기계 산출 영역* — Data Model 트리, mermaid SVG, API 매트릭스, Cross-NF 표 등.
-4. 카테고리 부분 빌드 시 다른 카테고리는 만지지 않는다.
-5. 커밋 자동 수행 금지.
+## 동작 원칙 (이유 포함)
+
+- **CLAUDE.md THE FOUR RULES 가 우선.** 추출 텍스트에 없는 사실을 본문에 끼워넣지 않는다 — wiki 의 신뢰성이 그것에 달려있다. yaml chain 이 끝까지 안 풀리면 `[TS XX.YYY] (참조 규격 미등록)` leaf 로 표시해 사용자에게 무엇을 cp 하면 풀릴지 보여준다.
+- **`ready_for_build = false` 면 기본 거절, `--force` 시 시도.** 거절이 default 인 이유 — missing dependency 로 빌드하면 Data Model 트리가 leaf 투성이라 다음 단계 (코드 생성·검토) 가 의미 없어진다. `--force` 는 사용자가 알면서 일부 결과만 원할 때의 escape hatch.
+- **사용자 산문 보존, 기계 산출만 교체.** Summary·Methodology 같은 prose 는 사용자가 손으로 다듬은 자산. 본 skill 이 매번 새로 쓰면 그 노력이 매 빌드마다 사라진다. 기계 산출 영역 — Data Model 트리, mermaid SVG, API 매트릭스, Cross-NF 표 — 은 도구가 진실 출처라 안전하게 교체.
+- **카테고리 부분 빌드 시 다른 카테고리 불간섭.** `--data-model` 호출은 *Data Model 만* 손댄다. Service Scenarios 의 mermaid 를 함께 갱신하지 않는다. 부분 빌드의 가치가 *예측 가능한 변경 범위* 에 있기 때문.
+- **mermaid 화살표·자료형은 추출 텍스트에 적힌 것만.** 다이어그램에서 추측하면 잘못된 시퀀스가 wiki 에 박혀 구현자를 오도한다. spec 본문이나 OpenAPI 에 없는 흐름은 *적지 않는다* 가 안전.
+- **커밋은 자동 수행 안 함.** wiki 변경은 사용자가 검토 + 의미 있는 단위로 묶고 싶어하는 영역. 자동 커밋이 그 흐름을 방해한다.
 
 ## Workflow
 
@@ -63,14 +65,14 @@ allowed-tools: Bash(.venv/bin/python3 scripts/extract.py *) Bash(.venv/bin/pytho
 - 자료원 — primary yaml + companion yaml + cross-spec chain.
 - 도구 — `scripts/resolve-yaml-refs.py <yaml> <Schema1> <Schema2> ... --depth 8 --external-depth 1`.
 - root schema 결정 — primary yaml(s) 의 `paths.*.requestBody.content.*.schema.$ref` 와 `paths.*.responses.*.content.*.schema.$ref` 의 unique 한 schema 이름 집합.
-- 출력 — 각 root 마다 `text 코드블록 안 트리. *반드시* 도구 산출 그대로 옮기고 손으로 가공하지 않음.
+- 출력 — 각 root 마다 ` ```text ` 코드블록 안 트리. 도구 산출을 그대로 옮긴다 — 손으로 가공하면 도구 발전 시 페이지 정확성이 흐려지고, `/nf-status` 의 `data_model_chain_complete` 검사도 표면적 통과를 잃는다.
 - 미해결 ref — `[TS XX.YYY] (참조 규격 미등록)` leaf 로 종료.
 
 #### 3d. Service Scenarios
 - 자료원 — primary docx 의 §5 (Services offered) + 트리거 절차의 stage 2 spec (예 23.502 §4.x).
 - 출력 — Mermaid `sequenceDiagram` 다이어그램 2~4개. autonumber, NF 약어 participant, 메시지 라벨은 HTTP method · 경로 · 자료형. 분기는 alt/else.
 - 도구 — `scripts/render-mermaid.py [--clean]` 으로 sibling `_diagrams/<page>-<n>.svg` 산출 (사용자가 검토 후 수동 호출 권장).
-- *추측 금지* — 다이어그램의 화살표·자료형은 본 spec 또는 OpenAPI 에 *실제로* 적힌 것만.
+- 다이어그램의 화살표·자료형은 본 spec 또는 OpenAPI 에 *실제로* 적힌 것만 — 추측한 흐름이 wiki 에 박히면 구현자를 오도하기 때문.
 
 #### 3e. Cross-NF Dependencies
 - 자료원 — 모든 specs/*/.docx grep — 본 NF 호출하는 곳 / 본 NF 가 호출하는 곳.
@@ -101,7 +103,34 @@ allowed-tools: Bash(.venv/bin/python3 scripts/extract.py *) Bash(.venv/bin/pytho
 - 제안 commit 메시지 — `feat(<nf>): TS NN.NNN 페이지 7-카테고리 빌드 (또는 부분)`.
 - 사용자 다음 액션 — `/nf-status <nf>` 로 acceptance gate 확인.
 
-**커밋 자동 수행 금지.**
+**커밋은 사용자 검토 후 별도 단계로** — 자동 수행하지 않는다.
+
+## 예시
+
+**호출 — full build (신규 NF).**
+
+```
+사용자: /nf-build nrf
+조건:   kb/nrf/_manifest.yaml.status.ready_for_build == true
+산출:
+  - kb/nrf/3gpp-ts-29510.md (7 카테고리 골격 + 채움)
+  - kb/nrf/_diagrams/3gpp-ts-29510-{1..N}.svg (mermaid 별 SVG)
+  - index.md 의 "## NRF" 섹션에 한 줄 항목 추가
+보고: "Interface ✓, API ✓ 표 작성, Data Model ✓ chain leaf 0건,
+       Service Scenarios — mermaid 3개 (다이어그램 4 권장 — 사용자가 추가),
+       Cross-NF — 도구 부재로 placeholder, Configuration ✓, Error Handling ✓.
+       다음 — `/nf-status nrf` 로 acceptance gate 확인."
+```
+
+**호출 — Data Model 만 부분 재빌드.**
+
+```
+사용자: specs/29.503/ 갱신 (예 i40 → j60). /nf-build nssf --data-model.
+도구: resolve-yaml-refs.py 재호출, kb/nssf/3gpp-ts-29531.md 의 ```text
+       Data Model 트리만 *교체*. 다른 H2 섹션 (Service Scenarios 등) 은
+       건드리지 않음.
+보고: "Data Model 만 갱신. 1 leaf 해결 (RecurTime), trees 산출 +14/-7 줄."
+```
 
 ## 자주 틀리는 지점
 
