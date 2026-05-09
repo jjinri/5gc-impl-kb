@@ -1,22 +1,21 @@
 ---
 name: add-spec
-description: 3GPP 5GC spec 한 건을 본 wiki(LLM Wiki — 3GPP 5G Core Systems) 에 등록하는 통합 워크플로우. 인자는 4가지 형태 모두 허용한다 — (a) 비워두면 papers/ 아래 sources 미등록 파일 후보를 보여주고 선택 요청, (b) `29.531` 같은 spec 번호만 주면 해당 폴더에서 미등록 파일 자동 선택 (모호하면 묻기), (c) `j60`·`29531-j60` 같은 부분 파일명, (d) `papers/29.531/29531-j60.docx` 전체 경로. 입력이 정해지면 (1) scripts/extract.py 로 텍스트 추출 (2) sources/3gpp-{ts|tr}-{n}-v{ver}.md 작성 (3) wiki/{nf}/3gpp-{ts|tr}-{n}.md 시리즈 페이지 작성/갱신 (4) index.md 의 NF 섹션 갱신까지 수행한다. 사용자가 papers/ 아래 새 파일을 cp 하고 "wiki 에 등록", "spec 추가", "이 문서 정리해줘", "TS NN.NNN 추가", "add this spec" 등을 말하면 무조건 이 skill 을 사용한다. 단순 텍스트 추출(extract.py 직접 호출) 과는 다르며, sources·wiki·index.md 세 곳을 모두 동기화하는 것이 본 skill 의 책임이다. 한 번에 여러 파일을 sweep 해 등록하고 싶으면 sibling skill `/update-spec` 을 사용한다. 커밋은 사용자 검토 후 별도로 진행한다.
-argument-hint: "(empty) | <spec> | <partial> | papers/{spec}/{filename}"
-allowed-tools: Bash(.venv/bin/python3 scripts/extract.py *) Bash(mkdir -p *) Bash(ls *) Bash(find *) Bash(grep *)
+description: 3GPP 5GC spec 한 *시리즈* 를 본 wiki 에 등록·완성하는 통합 워크플로우. 사용자가 "TS NN.NNN 추가", "29.531 wiki 만들어줘", "NSSF spec 정리해줘", "spec 추가", "wiki 에 등록", "add this spec" 등을 말하거나 spec 번호 (`29.531`) / spec 폴더 경로 (`papers/29.531`) 를 직접 지정하면 무조건 이 skill 을 사용한다. 동작 — papers/{spec}/ 의 가장 최신 docx/pdf/doc 와 같이 들어 있는 OpenAPI yaml(있으면) 까지 모두 끌어와 (1) 텍스트 추출 (2) sources 한국어 요약 (3) wiki 본 페이지 (Service Flows mermaid + Data Model chain 트리 등) 를 한 번에 생성한다. Data Model 의 `$ref` 체인은 papers/ 안의 *다른 spec yaml 까지* 끝까지 추적해 자료형 트리를 가능한 만큼 완성한다. 추적 도중 papers/ 에 없는 외부 spec 을 만나면 자동으로 leaf 로 표기하고 결과 보고에 "필요 규격 문서 업데이트 필요" 목록으로 정리해 사용자가 어느 spec 을 cp 하면 트리가 더 풀릴지 알 수 있게 한다. 단순 텍스트 추출(`extract.py` 직접) 과는 다르며 본 skill 은 sources·wiki·index.md 동기화 + 가능한 모든 외부 chain 자동 보강 + missing-refs 보고를 한 번에 한다. 커밋은 사용자 검토 후 별도. *이미 존재하는* wiki 페이지의 빈 곳 채우기·신규 ref 반영·Data Model 만 재추출하는 작업은 sibling `/update-spec` 의 책임이다.
+argument-hint: "<spec> | papers/{spec}[/{file}] | (empty)"
+allowed-tools: Bash(.venv/bin/python3 scripts/extract.py *) Bash(.venv/bin/python3 scripts/resolve-yaml-refs.py *) Bash(.venv/bin/python3 scripts/render-mermaid.py *) Bash(mkdir -p *) Bash(ls *) Bash(find *) Bash(grep *)
 ---
 
 # add-spec — 3GPP spec 문서를 wiki 에 등록
 
-## 입력 형태 (모두 허용)
+## 입력 형태
 
-`$ARGUMENTS` 가 다음 4가지 중 하나로 들어온다. Workflow §1 에서 단일 `papers/{spec}/{file}` 경로로 *해석* 한 뒤 본 절차를 시작한다.
+본 skill 의 *입력 단위는 spec 시리즈* 이다. 파일 한 건이 아니라 시리즈 폴더(`papers/{spec}/`) 가 단위다. `$ARGUMENTS` 는 다음 셋 중 하나로 들어온다.
 
-- **(a) 빈 값**. `papers/` 를 sweep 해서 `sources/` 에 매칭이 *없는* 파일 후보 목록을 보여주고 사용자에게 어느 것을 등록할지 묻는다.
-- **(b) spec 번호** — `29.531`, `papers/29.531`, `papers/29.531/`. 해당 폴더의 `.pdf|.docx|.doc` 파일 중 미등록이 정확히 1개면 그것으로, 여러 개면 후보를 보여주고 묻는다.
-- **(c) 부분 파일명** — `j60`, `29531-j60`, `29531-j60.docx`. `papers/**` 에서 substring 매칭. 정확히 1개면 그것으로, 여러 개면 후보를 보여주고 묻는다.
-- **(d) 전체 경로** — `papers/29.531/29531-j60.docx`. 그대로 사용.
+- **(a) spec 번호** — `29.531`, `23.501` 같은 점 포함 표기. 가장 자주 쓰이는 형태.
+- **(b) spec 폴더 경로** — `papers/29.531` 또는 `papers/29.531/29531-j60.docx` 같은 명시적 경로. (a) 와 등가이지만 같은 spec 시리즈에 여러 버전이 공존할 때 *특정 버전을 강제* 하고 싶으면 (c)-style 전체 파일 경로를 쓴다.
+- **(c) 빈 값** — `papers/` 안의 spec 폴더 중 wiki 에 *아직 페이지가 없는* 시리즈를 보여주고 사용자에게 어느 시리즈를 등록할지 묻는다.
 
-여러 파일을 한꺼번에 처리하려면 sibling skill `/update-spec` 을 사용한다. 본 skill 은 항상 *단 한 건* 만 등록한다.
+본 skill 은 항상 시리즈 한 건만 등록한다. 여러 시리즈를 한꺼번에 정리하거나, 이미 만든 wiki 페이지의 비어있는 부분을 사후에 채우는 작업은 sibling `/update-spec` 의 책임이다.
 
 ## 프로젝트 환경 (전제)
 - 프로젝트 루트는 `~/AI/llm-wiki`. 모든 경로는 그 기준 상대 경로로 다룬다.
@@ -39,31 +38,28 @@ allowed-tools: Bash(.venv/bin/python3 scripts/extract.py *) Bash(mkdir -p *) Bas
 
 ## Workflow
 
-### 1. 입력 해석 — `$ARGUMENTS` 를 단일 `papers/{spec}/{file}` 경로로 정규화
+### 1. 입력 해석 — `$ARGUMENTS` 를 단일 `(spec, file, yamls[])` 로 정규화
 
-다음 중 하나로 들어온다. 항상 한 번에 하나만 처리한다.
+본 skill 의 입력 단위는 *spec 시리즈* 다. 시리즈 안의 파일 선택은 skill 이 책임진다.
 
-**(a) 빈 값** — sweep 후보 제시 후 정지.
-1. `find papers -type f \( -iname '*.pdf' -o -iname '*.docx' -o -iname '*.doc' \) | sort` 로 모든 원본 수집.
-2. `sources/` 의 frontmatter `source_filename` 을 모아 등록 집합 구성. 예: `grep -hE '^source_filename:' sources/*.md 2>/dev/null | awk '{print $2}'`.
-3. 두 집합의 차집합(미등록) 을 사용자에게 표로 보여주고 *어느 것을 등록할지* 묻고 정지. 후보가 0개면 "모두 등록됨"으로 보고하고 정지.
+**(a) spec 번호** — `29.531`, `23.501` 같은 점 포함 표기.
+1. `papers/<spec>/` 디렉터리 실재 확인. 없으면 정지.
+2. 그 폴더의 `.pdf|.docx|.doc` 중 *가장 최신 버전* 을 자동 선택. 우선순위 — 파일명 끝의 letter 매핑 (j>i>h>g>f) → letter 가 같으면 NM 큰 쪽 (`j60` > `j50`). 동일 버전·다른 포맷이면 `.docx` > `.pdf` > `.doc`.
+3. 같은 폴더의 `.yaml` 들을 companion OpenAPI 정의로 모아둔다. (있으면 §5 Data Model chain 추적의 출발점이 된다.)
+4. *이미 등록된* 시리즈 (`wiki/{nf}/3gpp-{ts|tr}-{n}.md` 가 존재) 면 사용자에게 "재생성 vs Version History 갱신 vs 정지" 중 하나를 묻는다. 본 skill 의 기본 모드는 *최초 등록* 이며, 사후 보강은 `/update-spec` 의 책임이다.
 
-**(b) spec dir** — `29.531` / `papers/29.531` / `papers/29.531/` 형태.
-1. 정규화: `papers/<번호>`. 점 포함 형식만 허용.
-2. 그 폴더의 `.pdf|.docx|.doc` 중 미등록 파일을 모은다.
-3. 정확히 1개 → 그 경로로 결정. 0개 → "이미 등록됨" 정지. 2개 이상 → 후보를 보여주고 묻기.
+**(b) spec 폴더 경로** — `papers/29.531` / `papers/29.531/` 또는 `papers/29.531/29531-i40.docx` 같은 명시적 경로.
+1. 폴더 형태면 (a) 와 동일.
+2. 파일 형태면 *그 파일을 강제 사용* — 같은 시리즈의 다른 버전이 있어도 사용자가 지정한 것을 따른다 (예 과거 버전을 명시 등록하고 싶을 때).
+3. companion yaml 은 (a) 와 같은 방식으로 같은 폴더에서 모은다.
 
-**(c) 부분 파일명** — `j60`, `29531-j60`, `29531-j60.docx` 등 substring.
-1. `find papers -type f -iname "*<arg>*"` 로 매칭. 확장자 필터는 .pdf/.docx/.doc.
-2. 정확히 1개 → 그 경로로 결정. 0개 → "no match" 정지. 2개 이상 → 후보를 보여주고 묻기.
+**(c) 빈 값** — 후보 제시 후 정지.
+1. `papers/*/` 폴더 목록과, 각 폴더에 대응하는 `wiki/{nf}/3gpp-{ts|tr}-{n}.md` 의 존재 여부를 비교.
+2. 아직 wiki 페이지가 없는 spec 시리즈만 표로 보여주고 사용자가 어느 것을 등록할지 묻고 정지. 후보가 0개면 "모든 spec 이 wiki 에 있음"으로 보고하고 정지.
 
-**(d) 전체 경로** — `papers/` 로 시작.
-1. `ls -l <path>` 로 실재 확인. 없으면 정지.
-2. 확장자 `.pdf|.docx|.doc` 아니면 정지.
+해석 결과는 `(spec, file, yamls[])` 삼 요소. 이를 §2 이후 입력으로 넘긴다.
 
-해석 결과는 단일 절대 또는 repo-relative 경로 `papers/{spec}/{filename}`. 이를 §2 입력으로 넘긴다.
-
-> 여러 파일을 한 번에 등록하고 싶으면 본 skill 대신 `/update-spec` 을 사용해야 한다. 본 skill 은 *항상* 한 건만 처리한다.
+> 입력이 *시리즈* 단위이므로 같은 시리즈의 여러 버전 모두 등록하려면 (b) 의 명시적 파일 경로 형태로 한 번씩 호출하거나, 일괄 보강은 `/update-spec`.
 
 ### 2. 메타데이터 추론
 
@@ -253,10 +249,13 @@ tags: [<nf>, sbi, <topic1>, <topic2>]
 
 사용자에게 한 화면에 묶어 보고한다.
 
-- 새로 만들어진/수정된 파일 목록 (`sources/...`, `wiki/{nf}/...`, `index.md`).
+- **만들어진/수정된 파일 목록** (`sources/...`, `wiki/{nf}/...`, `index.md`, `wiki/{nf}/_diagrams/*.svg`).
 - 각 파일의 핵심 변경점 1~3줄 요약.
-- 알려진 한계 (truncate 된 섹션, 추론한 NF/release, 본문에서 끝까지 확인 못 한 항목 등).
-- 제안 commit 메시지 한 줄 (`feat({nf}): TS NN.NNN wiki 페이지 추가`).
+- **체인 보강 결과** — Data Model chain 이 어디까지 풀렸는지. `resolve-yaml-refs.py` 출력에서 발견된 외부 spec 마커 `[TS XX.YYY]` 를 spec-단위로 집계해 "체인이 풀린 외부 spec" 목록.
+- **필요 규격 문서 업데이트 필요** — chain 추적 도중 `papers/` 에 *없어서* leaf 로 종료된 외부 spec 들. 한 줄 한 줄 spec 번호 + 사용된 자료형 + 어느 페이지의 어느 트리에서 막혔는지를 보여줘 사용자가 무엇을 cp 하면 트리가 더 풀릴지 알 수 있게 한다. 사용자가 그 spec 을 papers/ 에 추가한 뒤 `/update-spec <nf> --data-model` 로 부분 보강 가능.
+- **알려진 한계 그 외** — 추출 truncate 된 섹션, 추정한 NF/release, 본문에서 끝까지 확인 못 한 항목, mermaid 렌더 실패 (있으면) 등.
+- **제안 commit 메시지 한 줄** (`feat({nf}): TS NN.NNN v{x.y.z} wiki 페이지 추가`).
+- **다음 단계 hint** — 산출 검토 후 `python3 scripts/render-mermaid.py` 로 SVG 갱신, 그리고 사용자가 만족하면 별도 커밋.
 
 **커밋은 절대 자동으로 하지 않는다.** 사용자가 검토 후 명시적으로 "커밋해" 라고 지시할 때만 진행한다.
 

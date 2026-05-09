@@ -1,103 +1,142 @@
 ---
 name: update-spec
-description: 본 LLM Wiki(3GPP 5GC) 의 papers/ 디렉터리를 sweep 해서 sources/ 에 매칭이 *없는* 파일(=미등록 신규 spec) 을 모두 찾아 일괄로 wiki 에 등록하는 워크플로우. 사용자가 새 머신에서 git clone 후 papers/ 에 여러 .pdf/.docx/.doc 를 cp 했거나, 평소에 누적된 미등록 파일을 한꺼번에 정리하고 싶을 때 사용한다. 트리거 표현 — "새로 받은 spec 들 다 등록해", "papers 검사", "미등록 wiki 에 올려", "papers/ 비교해서 wiki 갱신", "update wiki", "sweep specs". 단일 파일 등록은 sibling skill `/add-spec` 의 책임이며, 본 skill 은 발견된 각 파일에 대해 add-spec 의 절차(Workflow §2~§7) 를 그대로 위임한다. 본 skill 자체는 (1) sweep + diff (2) 사용자 확인 (3) 파일별 등록 위임 (4) 마지막 통합 보고 의 4단계만 수행한다. 커밋은 절대 자동으로 하지 않는다 — 사용자가 검토 후 별도로.
-argument-hint: "(empty) | --yes | <spec-or-nf-filter>"
-allowed-tools: Bash(.venv/bin/python3 scripts/extract.py *) Bash(mkdir -p *) Bash(ls *) Bash(find *) Bash(grep *) Bash(awk *) Bash(comm *) Bash(sort *)
+description: 본 LLM Wiki 의 NF 폴더(`wiki/{nf}/`) 를 *지식 보강* 하는 워크플로우. 사용자가 "NSSF 보강", "nssf 페이지 업데이트", "AMF wiki 채워줘", "데이터 모델만 다시 뽑아", "papers 에 새 ref 추가했으니 반영", "wiki 빈 곳 채워" 등을 말하거나 NF 이름 (`nssf`, `amf`, `smf` 등) 을 지정하면 무조건 이 skill 을 사용한다. 동작 — 지정 NF 의 `wiki/{nf}/*.md` 페이지마다 (1) 완성되지 않은 지식 (placeholder, 비어있는 섹션, "참조 규격 미등록" leaf, 빠진 mermaid, 빠진 Data Model 트리) 을 자동 식별 (2) 그 사이 papers/ 에 새로 들어온 소스 (.docx 신규 버전, .yaml 신규 등록, 이전엔 부재했던 참조 spec 폴더 등장) 가 있는지 비교 (3) 채울 수 있는 것은 채우고, 여전히 missing 인 부분은 "필요 규격 문서 업데이트 필요" 로 정리해 사용자에게 보고한다. 옵션 — `--data-model` 은 Data Model 트리만 따로 재추출·교체 (가장 자주 쓰이는 부분 보강). 신규 spec 시리즈를 처음 등록하는 작업은 sibling `/add-spec` 의 책임이며, 본 skill 은 *이미 존재하는* wiki 페이지의 빈 곳을 채우는 데 집중한다. 커밋은 절대 자동으로 하지 않는다.
+argument-hint: "<nf> [--data-model] | --data-model | (empty)"
+allowed-tools: Bash(.venv/bin/python3 scripts/extract.py *) Bash(.venv/bin/python3 scripts/resolve-yaml-refs.py *) Bash(.venv/bin/python3 scripts/render-mermaid.py *) Bash(mkdir -p *) Bash(ls *) Bash(find *) Bash(grep *) Bash(awk *) Bash(diff *)
 ---
 
-# update-spec — papers/ sweep 후 미등록 파일 일괄 wiki 등록
+# update-spec — NF 단위 wiki 지식 보강
 
 ## 입력
-- `$ARGUMENTS` 는 두 가지만 의미가 있다.
-  - 비어 있음 → 모든 미등록 파일을 후보로 본다.
-  - `--yes` → 사용자 확인 단계를 건너뛰고 후보 전부 자동 처리.
-  - 그 외 토큰 (예: `29.531`, `nssf`) → spec 번호 또는 NF 폴더명 필터로 해석. 후보를 그 범위로 좁힌다.
+- `<nf>` — `nssf`, `amf`, `smf` 등 wiki/{nf}/ 폴더명. 대소문자 무관, 내부적으로 소문자.
+- `--data-model` — Data Model 트리만 재추출해 교체. 다른 섹션은 건드리지 않는다.
+- 빈 값 + `--data-model` 없음 → wiki/ 의 모든 NF 폴더에 대해 gap 탐지 결과를 사용자에게 표로 보여주고 어느 NF 를 보강할지 묻고 정지.
+- 빈 값 + `--data-model` → wiki 전체에서 Data Model 트리만 일괄 재추출 (모든 NF 의 모든 페이지). 비파괴이지만 시간이 들 수 있음.
+- `<nf>` + `--data-model` → 그 NF 의 모든 페이지의 Data Model 트리만 재추출.
+- `<nf>` 단독 → 그 NF 의 모든 페이지에 대해 *전체 gap 보강* (Data Model + Service Flows + Version History + missing-refs 재평가).
 
 ## 본 skill 의 책임 범위
 
-본 skill 은 *발견·조율* 만 한다. 파일 한 건의 실제 등록 절차는 `.claude/skills/add-spec/SKILL.md` 의 Workflow §2~§7 (메타데이터 추론 / 텍스트 추출 / sources 작성 / wiki 작성 / index.md 갱신 / 결과 보고) 을 *그대로 위임*한다. 절차를 본 파일에 다시 적지 않는다 — 한쪽이 발전하면 다른 쪽도 함께 따라가야 하는 중복을 방지하기 위해서다.
+본 skill 은 *이미 존재하는* wiki 페이지의 빈 곳을 채운다. 신규 시리즈 등록은 `/add-spec <spec>` 의 책임. 두 skill 은 다음과 같이 분담.
+
+| 시나리오 | 사용 skill |
+| --- | --- |
+| 새 spec 시리즈 처음 등록 (`papers/{spec}/` 만 있고 wiki 페이지 없음) | `/add-spec <spec>` |
+| 같은 시리즈에 새 release 가 들어왔고 Version History 에 추가하고 싶음 | `/update-spec <nf>` (또는 `/add-spec` 의 명시 파일경로 모드) |
+| 본 페이지 만들 때 missing leaf 였던 외부 spec 이 papers/ 에 새로 cp 됨 | `/update-spec <nf> --data-model` |
+| 도구 (resolve-yaml-refs.py, render-mermaid.py) 가 발전해 트리 표현이 바뀜 | `/update-spec <nf> --data-model` |
+| Data Model 외 다른 섹션도 결락이 있다 (mermaid 미렌더, Service Flows placeholder 등) | `/update-spec <nf>` |
 
 ## 절대 규칙
-1. CLAUDE.md THE FOUR RULES 를 따른다 (web search 금지, sources/wiki 만 진실, 부족하면 사용자에게 묻기).
-2. 절차의 진실 출처는 `add-spec/SKILL.md` 다. 두 skill 간 정책이 어긋나면 add-spec 이 우선.
-3. 한 번에 처리할 파일이 많으면 *순서대로* 처리한다 (병렬 금지). 같은 spec 시리즈의 여러 버전이 섞여 있으면 *낮은 버전부터 → 높은 버전* 으로 처리해야 wiki 시리즈 페이지의 `## Version History` 가 자연스럽게 누적된다.
-4. 각 파일을 처리할 때 **모호한 메타데이터(spec type / release / version / NF)** 가 있으면 add-spec 의 정책대로 그 파일 처리만 정지하고 사용자에게 묻는다. 다른 파일 처리는 계속 시도하지 않고 일단 멈춘다 — 일괄 모드에서도 추측 금지.
-5. 커밋은 자동 수행 금지. 마지막 통합 보고에 제안 commit 메시지만 출력한다.
+1. CLAUDE.md THE FOUR RULES 를 따른다 (web search 금지, sources/wiki·papers 만 진실).
+2. 절차의 진실 출처는 `add-spec/SKILL.md` 의 §4·§5 (sources / wiki 작성) + 두 helper 스크립트 (`scripts/resolve-yaml-refs.py`, `scripts/render-mermaid.py`). 본 skill 은 그 산출을 *교체* 만 하고 새로운 형식을 만들어내지 않는다.
+3. 사용자 페이지의 *수동 편집 본문* (Summary / Key Contributions / Methodology and Architecture 등 산문) 은 본 skill 이 임의로 덮어쓰지 않는다. 보강은 *기계 산출 섹션* (Data Model 트리, mermaid SVG, missing-refs 목록, Version History 의 자동 집계 부분) 에 한정.
+4. 모호한 보강 (예 "이 placeholder 자리에 무엇을 채울지 모르겠음") 은 사용자에게 묻고 정지. silently 추측해 채우지 않는다.
+5. 커밋 자동 수행 금지.
 
 ---
 
 ## Workflow
 
-### 1. Sweep — 미등록 파일 식별
+### 1. 입력 해석 → 대상 페이지 리스트 확정
 
-원본 집합과 등록 집합의 차이를 구한다.
+- `<nf>` 가 주어지면 `wiki/{nf}/*.md` 의 모든 파일 (단, `_diagrams/` 제외) 을 대상으로.
+- `<nf>` 가 비고 `--data-model` 도 없으면 NF 별 gap 요약을 보여주고 묻기.
+- `<nf>` 가 비고 `--data-model` 만 있으면 `wiki/**/*.md` 전체를 대상으로 (단 NF 폴더 안만, `_diagrams/` 제외).
 
-```bash
-# 원본 집합 — papers/ 안의 모든 .pdf/.docx/.doc
-find papers -type f \( -iname '*.pdf' -o -iname '*.docx' -o -iname '*.doc' \) \
-  | sort > /tmp/_papers_all.txt
+### 2. 페이지별 Gap 탐지
 
-# 등록 집합 — sources/*.md 의 frontmatter source_filename
-grep -hE '^source_filename:' sources/*.md 2>/dev/null \
-  | awk '{print $2}' | sort -u > /tmp/_papers_registered.txt
+각 대상 페이지에 대해 다음을 확인한다.
 
-# 미등록 = basename 차집합 → 다시 full path 로 매핑
-while read -r p; do
-  bn="$(basename "$p")"
-  if ! grep -qxF "$bn" /tmp/_papers_registered.txt; then
-    echo "$p"
-  fi
-done < /tmp/_papers_all.txt > /tmp/_papers_unregistered.txt
+#### 2a. 메타데이터 변동
+- 페이지 frontmatter 의 `version`·`source_filename` 이 `papers/{spec}/` 의 *최신 파일* 과 다른가? 다르면 새 release 가 들어온 것 — Version History 갱신 후보.
+- 페이지 frontmatter 의 `related_versions` 와 papers/{spec}/ 의 옛 버전 파일들이 동기화되어 있는가?
+
+#### 2b. Data Model 트리 신선도
+- 페이지의 ` ```text ` 코드블록 (Data Model 트리) 들과, 같은 frontmatter 의 spec yaml 을 `resolve-yaml-refs.py` 로 *지금* 다시 추출한 결과를 텍스트 비교 (`diff`).
+- 차이가 있으면 두 가지 원인 — (i) papers/ 에 새로 cp 된 ref spec 이 있어 chain 이 더 풀림, (ii) 도구가 발전해 표현이 달라짐. 어느 쪽이든 *교체* 가 답이다.
+- 페이지에 Data Model 섹션 자체가 없거나 placeholder 상태면 "Data Model 결락" 으로 마크.
+
+#### 2c. Missing-refs 재평가
+- 페이지의 `(참조 규격 미등록)` leaf 들을 grep.
+- 각 leaf 의 spec 번호 (예 `TS 29.503`) 가 *지금 papers/{spec}/* 에 존재하는가? 존재하면 chain 이 풀릴 후보 — Data Model 재추출로 자동 해결됨 (2b 에서 처리됨).
+- 여전히 부재한 spec 은 보고에 다시 옮긴다.
+
+#### 2d. Service Flows 결락
+- ` ```mermaid ` 블록 개수 0 이면 "Service Flows 결락" 으로 마크.
+- mermaid 블록은 있는데 sibling `_diagrams/<page>-<n>.svg` 가 그 수보다 적으면 "SVG 미렌더" 로 마크 → 보강 단계에서 `render-mermaid.py` 호출.
+- mermaid 본문 자체의 보강 (새 흐름 추가) 은 본 skill 의 자동 책임 *아님* — 사용자에게 "Service Flows 본문 추가가 필요해 보임" 으로 안내만.
+
+#### 2e. 기타 placeholder
+- `_(아직 ...)_` 또는 `TODO` / `FIXME` 같은 명시적 placeholder 가 있는지 grep. 있으면 결락 마크 후 사용자에게 보고만.
+
+### 3. 사용자 확인 (빈 인자 또는 `<nf>` 단독 시)
+
+탐지 결과를 페이지·항목별 표로 보여주고 어떤 보강을 적용할지 묻는다.
+
+```
+[wiki/nssf/3gpp-ts-29531.md]
+  - Data Model 트리 신선도   : 변경 있음 (TS 29.503 chain 추가 풀림)
+  - Missing-refs            : (없음)
+  - Service Flows           : 3 블록, SVG 3 정상
+  - Version History         : 최신 (papers/29.531 의 j60 = v19.6.0 매칭)
+  - placeholder             : (없음)
 ```
 
-선택 인자가 있으면 후보 목록을 추가로 좁힌다.
-- spec 번호 (`29.531` / `papers/29.531`) → `grep` 으로 path 필터.
-- NF 폴더명 (`nssf` 등) → 이미 등록된 같은 NF 의 sources frontmatter `category` 값으로 추론. 명확하지 않으면 사용자에게 확인.
+`Y` (모두 적용) / `n` (정지) / 항목별 토글 등 옵션. `--data-model` 모드면 자동으로 그 항목만.
 
-### 2. 후보 확인
+### 4. 보강 적용
 
-미등록 파일이 0개면 "모두 등록됨" 보고 후 정지. 1개 이상이면 다음을 표로 보여준다.
+#### 4a. Data Model 트리 교체
 
-| # | 경로 | 추정 spec | 추정 version | 추정 NF |
-|---|------|-----------|---------------|---------|
-| 1 | papers/29.531/29531-j60.docx | TS 29.531 | v19.6.0 | nssf |
+- 페이지 frontmatter 의 `source_path` 또는 `source_filename` 으로 spec 폴더 추정 → `papers/{spec}/*.yaml` 들을 모두 입력으로 `resolve-yaml-refs.py` 호출.
+- 출력 ` ```text ` 블록(들) 을 페이지의 `## Data Model` 섹션 안의 같은 위치 블록으로 *교체*.
+- 손으로 적은 산문 설명 (트리 위 한두 단락) 은 보존. 트리 코드블록만 교체.
 
-추정 컬럼은 add-spec/SKILL.md "메타데이터 추론" 의 letter+NM 매핑 + spec→NF 힌트 표를 *경량* 으로 적용한 결과다. 실제 검증은 각 파일 처리 시 add-spec 절차가 다시 한다.
+#### 4b. SVG 재렌더
 
-`--yes` 가 없으면 사용자에게 `[Y/n/번호 골라서]` 형태로 처리 범위를 묻는다.
-- `Y` → 모두 처리.
-- `n` → 정지.
-- `1,3,5` 같은 번호 → 해당 항목만.
+- 변경 페이지 (또는 mermaid 가 있는 페이지) 에 대해 `python3 scripts/render-mermaid.py [--clean]` 실행.
 
-### 3. 파일별 등록 위임
+#### 4c. Version History 추가
 
-선택된 각 파일에 대해 순서대로 (낮은 버전 → 높은 버전) 다음을 실행한다.
+- papers/{spec}/ 에 새 release 가 발견된 경우 — `/add-spec papers/{spec}/{newer-file}` 의 명시 파일경로 모드를 *내부적으로 위임* 호출. add-spec 은 기존 wiki 페이지가 있으면 frontmatter 의 `version`·`source` 갱신, `related_versions` 에 이전 버전 push, `## Version History` 에 한 줄 추가 동작을 한다 (add-spec/SKILL.md §5 참조).
+- 본 skill 자체가 Version History 본문을 손으로 만들지 않는다 — add-spec 위임이 진실 출처.
 
-> add-spec/SKILL.md 의 Workflow §2 (메타데이터 추론) → §3 (텍스트 추출) → §4 (sources 작성) → §5 (wiki 작성/갱신, Version History 누적) → §6 (index.md 갱신) → §7 (파일별 결과 보고).
+#### 4d. Missing-refs 목록 갱신
 
-각 파일이 끝날 때마다 한 줄 요약 (`✓ <stem> registered (sources + wiki + index)` 또는 `⚠ <stem> stopped — 사유`) 을 누적한다. 한 파일이 모호 메타데이터로 정지하면 본 skill 도 정지하고 그 시점까지의 누적을 보고한다.
+- Data Model 교체로 자동 해결된 항목은 페이지에서 사라진다 (`resolve-yaml-refs.py` 가 새로 풀어낸 트리에 leaf 가 없을 것).
+- 여전히 미등록인 항목은 페이지의 "미등록 reference" 절을 갱신.
 
-### 4. 통합 보고
+### 5. 결과 보고 (커밋 X)
 
-- 처리된 파일 수 / 건너뛴 파일 수 / 실패·정지한 파일 수.
-- 새로 만들어진/수정된 파일 목록 (`sources/...`, `wiki/{nf}/...`, `index.md`).
-- 새로 생성된 NF 폴더 목록 (있을 때).
-- 알려진 한계 (truncate 된 섹션, 추출 미완료 등) — 파일 단위로.
-- 제안 commit 메시지 한 줄 (예: `feat(wiki): NSSF·SMF 첫 spec 페이지 batch 등록 (TS 29.531 v19.6.0, TS 29.502 v18.4.0)`).
+페이지별로.
+- 적용된 보강 (예 "Data Model 교체: +14 줄, -7 줄. TS 29.503 chain 새로 풀림").
+- 적용되지 않은 항목 + 사유 ("Service Flows 본문 추가는 본 skill 책임 아님 — `/add-spec` 으로 페이지 재생성 필요").
+- 여전히 missing 인 외부 spec 목록 (사용자가 papers/ 에 cp 하면 다음 호출에서 풀릴 후보).
+- 제안 commit 메시지.
 
-**커밋은 자동 수행 금지.**
+**커밋 자동 수행 금지.**
 
 ---
 
 ## 자주 틀리는 지점 — 사전 점검
 
-- 같은 spec 시리즈의 여러 버전을 처리할 때 *낮은 버전 → 높은 버전* 순서를 지켰는가. 그렇지 않으면 `## Version History` 가 거꾸로 쌓일 수 있다.
-- "미등록" 판정 기준이 frontmatter `source_filename` 한 가지 뿐이다. 사용자가 sources 파일을 수동 편집해 frontmatter 를 빠뜨렸다면 오탐(중복 등록 시도) 이 발생할 수 있다 — 그 경우 add-spec §4 의 "이미 있으면 덮어쓸지 확인" 가드가 잡는다.
-- `--yes` 모드에서도 모호 메타데이터는 정지가 정답이다. silently 추측해 잘못된 페이지를 만들면 안 된다.
-- 일괄 처리 도중 새 NF 폴더가 만들어지면 `index.md` 의 `## 다른 NF (예정)` 안내에서 그 NF 를 빼고 별도 섹션을 만든다 (add-spec 정책과 동일).
+- `--data-model` 모드인데 트리 외 다른 섹션을 만지지 않았는가.
+- 사용자 산문 (Summary / Key Contributions 등) 을 보존했는가.
+- Data Model 교체 시 *코드블록 전체* 만 교체하고 그 위 산문 설명은 그대로 두었는가.
+- mermaid SVG 와 mermaid 블록 수가 일치하는가 (`render-mermaid.py --clean` 으로 stale SVG 정리).
+- 같은 spec 의 새 release 추가는 본 skill 이 손으로 하지 않고 `/add-spec` 위임으로 했는가.
+- 모호한 보강에서 추측해 채우지 않고 사용자에게 물었는가.
+
+## 실패·모호 처리
+
+- frontmatter 가 깨져 있거나 `source_filename` 이 비면 그 페이지는 보강 대상에서 제외, 사용자에게 알린다.
+- yaml 이 papers/ 에 있는데 schema 이름을 결정 못 하는 경우 (예 yaml 안에 schema 가 0 개) 도구 산출 실패 — 페이지 그대로 두고 사용자에게 보고만.
+- diff 가 너무 큰 경우 (수백 줄 변경) 자동 적용하기 전에 사용자에게 *요약 + 적용 여부* 를 묻는다.
 
 ## 참고 — 본 skill 안에 다시 적지 말 것
 
-- 단일 파일 등록 절차의 모든 세부 사항은 `add-spec/SKILL.md` 의 Workflow §2~§7 가 진실 출처. 본 skill 은 거기에 위임만 한다.
+- sources / wiki 작성 정책: `add-spec/SKILL.md` 의 Workflow §4·§5.
+- Data Model 체인 추적: `scripts/resolve-yaml-refs.py` docstring + `--help`.
+- Mermaid 렌더링: `scripts/render-mermaid.py` docstring.
 - 디렉터리·파일명 규칙: `CLAUDE.md` 의 "Repository Structure"·"File Naming Convention"·"Categories".
-- 추출 도구의 옵션·폴백: `scripts/extract.py --help`.
