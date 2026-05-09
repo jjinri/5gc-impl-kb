@@ -44,15 +44,6 @@ checks:
     status: PASS
     current: "0 violations"
     to_pass:
-  - id: mermaid_renders
-    tier: 1
-    name: "mermaid 블록 수 = sibling _diagrams/ SVG 수"
-    applies_to: ['stage_3_only', 'stage_2_only', 'mixed', 'meta_only']
-    criterion: |
-      페이지의 ```mermaid 블록 수와 _diagrams/<page-stem>-<n>.svg 수가 일치.
-    status: PASS
-    current: "3 mermaid → 3 SVG"
-    to_pass:
   - id: manifest_ready
     tier: 1
     name: "_manifest.yaml.status.ready_for_build = true"
@@ -128,11 +119,11 @@ gates:
     status: FAIL
     blocked_by: ['sections_complete', 'manifest_ready']
   - id: implementation_ready
-    requires_pass: ['frontmatter_valid', 'sections_complete', 'manifest_ready', 'data_model_chain_complete', 'api_operation_coverage', 'service_flow_coverage', 'wikilinks_resolve', 'no_korean_colon_end', 'mermaid_renders']
+    requires_pass: ['frontmatter_valid', 'sections_complete', 'manifest_ready', 'data_model_chain_complete', 'api_operation_coverage', 'service_flow_coverage', 'wikilinks_resolve', 'no_korean_colon_end']
     status: FAIL
     blocked_by: ['sections_complete', 'manifest_ready', 'data_model_chain_complete', 'api_operation_coverage', 'service_flow_coverage']
   - id: production
-    requires_pass: ['frontmatter_valid', 'sections_complete', 'manifest_ready', 'data_model_chain_complete', 'api_operation_coverage', 'service_flow_coverage', 'wikilinks_resolve', 'no_korean_colon_end', 'mermaid_renders', 'yaml_to_c_compiles', 'implementation_guidance_quality']
+    requires_pass: ['frontmatter_valid', 'sections_complete', 'manifest_ready', 'data_model_chain_complete', 'api_operation_coverage', 'service_flow_coverage', 'wikilinks_resolve', 'no_korean_colon_end', 'yaml_to_c_compiles', 'implementation_guidance_quality']
     status: FAIL
     blocked_by: ['sections_complete', 'manifest_ready', 'data_model_chain_complete', 'api_operation_coverage', 'service_flow_coverage', 'yaml_to_c_compiles', 'implementation_guidance_quality']
 

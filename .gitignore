@@ -4,9 +4,6 @@ __pycache__/
 *.pyc
 *.pyo
 
-# Node tools (mermaid-cli 등 로컬 설치)
-.npm-tools/
-
 # Obsidian (per-user state, plugin cache)
 .obsidian/workspace
 .obsidian/workspace.json

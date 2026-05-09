@@ -211,33 +211,6 @@ def check_no_korean_colon_end(page: pathlib.Path | None, profile: str) -> dict:
     return base
 
 
-def check_mermaid_renders(page: pathlib.Path | None, nf_dir: pathlib.Path, profile: str) -> dict:
-    base = {
-        "id": "mermaid_renders", "tier": 1,
-        "name": "mermaid 블록 수 = sibling _diagrams/ SVG 수",
-        "criterion": "페이지의 ```mermaid 블록 수와 _diagrams/<page-stem>-<n>.svg 수가 일치.",
-        "applies_to": ["stage_3_only", "stage_2_only", "mixed", "meta_only"],
-    }
-    if page is None:
-        base.update(status="FAIL", current="페이지 없음", to_pass=["페이지 생성"])
-        return base
-    text = page.read_text(encoding="utf-8")
-    blocks = re.findall(r"^```mermaid", text, re.M)
-    diagrams_dir = nf_dir / "_diagrams"
-    svgs = []
-    if diagrams_dir.is_dir():
-        svgs = sorted(diagrams_dir.glob(f"{page.stem}-*.svg"))
-    if len(blocks) == 0 and len(svgs) == 0:
-        base.update(status="PASS", current="0 mermaid, 0 SVG", to_pass=[])
-    elif len(blocks) == len(svgs):
-        base.update(status="PASS", current=f"{len(blocks)} mermaid → {len(svgs)} SVG", to_pass=[])
-    else:
-        base.update(status="FAIL",
-                    current=f"{len(blocks)} mermaid vs {len(svgs)} SVG (불일치)",
-                    to_pass=[".venv/bin/python3 scripts/render-mermaid.py --clean 로 동기화"])
-    return base
-
-
 def check_manifest_ready(manifest: dict, profile: str) -> dict:
     base = {
         "id": "manifest_ready", "tier": 1,
@@ -434,13 +407,13 @@ GATE_DEFS = [
         "frontmatter_valid", "sections_complete", "manifest_ready",
         "data_model_chain_complete", "api_operation_coverage",
         "service_flow_coverage", "wikilinks_resolve",
-        "no_korean_colon_end", "mermaid_renders",
+        "no_korean_colon_end",
     ]),
     ("production", [
         "frontmatter_valid", "sections_complete", "manifest_ready",
         "data_model_chain_complete", "api_operation_coverage",
         "service_flow_coverage", "wikilinks_resolve",
-        "no_korean_colon_end", "mermaid_renders",
+        "no_korean_colon_end",
         "yaml_to_c_compiles", "implementation_guidance_quality",
     ]),
 ]
@@ -541,7 +514,6 @@ def main() -> None:
         check_sections_complete(page, profile),
         check_wikilinks_resolve(page, REPO/"kb", profile),
         check_no_korean_colon_end(page, profile),
-        check_mermaid_renders(page, nf_dir, profile),
         check_manifest_ready(manifest, profile),
         check_data_model_chain(page, profile),
         check_api_coverage(page, manifest, profile),
