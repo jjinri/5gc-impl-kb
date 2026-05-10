@@ -8,7 +8,7 @@
 
 ## 0. 한 줄 요약
 
-본 repo (`5gc-impl-kb`) 는 **5gc-design 시스템** — 3GPP spec → LLM agent 자동 파이프라인 → NF design deliverable (`design/<nf>/3gpp-*.md` + `handoff/<nf>/_handoff.yaml`). NF 빌드·시뮬·배포는 별도 시스템 5gc-dev 의 책임이며 본 repo 의 영역이 아님. 현 자산 일부 (yaml-to-c.py 의 본격 codegen, gate 이름 `implementation_ready`/`production`) 가 dev 책임을 끌어안는 *드리프트* 를 보이므로 *책임 경계 회복* + *handoff contract 1급 승격* 을 한다.
+본 repo (`5gc-impl-kb`) 는 **5gc-design + 5gc-dev 를 한 git repo 안에 통합한 단일 monorepo**. 안에서 *논리적으로* 두 시스템 역할을 분리 — `design/` 은 3GPP spec → LLM agent 자동 파이프라인 → NF design deliverable (`design/<nf>/3gpp-*.md` + `handoff/<nf>/_handoff.yaml`) 산출, `handoff/` 는 두 시스템 사이의 contract, `dev/` 는 NF 빌드·시뮬·배포 (현재 placeholder, 추후 채워질 예정). 현 자산 일부 (yaml-to-c.py 의 본격 codegen, gate 이름 `implementation_ready`/`production`) 가 *dev 책임을 design 측이 끌어안는 드리프트* 를 보였으므로 *논리적 책임 경계 회복* + *handoff contract 1급 승격* 을 본 plan 에서 처리.
 
 ---
 
@@ -244,8 +244,86 @@ acceptance — `/nf-status nssf` → 4 gate (`draft/review_ready/handoff_ready/c
 - 회고 (retrospective) 단계 정형화 — 본 grill 흐름이 이미 회고의 한 형태. 추후 별도 plan.
 - 5gc-dev 자체 설계 — 본 repo 에서 다루지 않음. `dev/README.md` 1줄 placeholder 만.
 
-## 5. 다음 plan 의 후보 (본 plan 종료 후)
+## 5. C3 진입 전 결정 — 파싱 정책 D1~D4
 
-- 5gc-dev placeholder 의 *minimal consumer* (yaml 만 읽어 operation 카운트 출력) 작성 → contract 가 *실제로 실행 가능* 한지 1회 검증.
+C3 (`build-handoff.py` 신설) 시작 전에 4 sub-결정 필요. 각 추천 답안 포함.
+
+### D1 — 카테고리별 *source of data* (yaml vs markdown)
+
+handoff yaml 의 각 키를 *어디서* 추출하는가. 5gc-design 의 source-of-truth 는 markdown 이지만, 일부 카테고리는 spec yaml 이 더 결정론적.
+
+| handoff 키 | 추천 source | 이유 |
+|---|---|---|
+| `interface` | yaml (`info`, `servers`, `securitySchemes`) | yaml 직접 정의 |
+| `api` | yaml (`paths.*.{get,post,...}`) | yaml 이 canonical |
+| `data_model` | yaml ($ref chain — `resolve-yaml-refs.py`) | yaml 이 canonical |
+| `service_scenarios` | **markdown** (mermaid 블록) | yaml 에 없음 |
+| `cross_nf` | **markdown** 표 | yaml 에 없음 |
+| `configuration` | **markdown** 표 | yaml 에 없음 |
+| `error_handling` | yaml 응답 코드 + markdown 표 (병합) | HTTP status = yaml, application error = markdown |
+| `persistent_state` | manifest manual_overrides 또는 미정 | v1 미명시 OK |
+| `concurrency` | yaml `timeout` + manifest hint | v1 미명시 OK |
+
+### D2 — Markdown 파싱 *방식*
+
+추천 — **regex 기반 H2/H3 splitter + table parser 자체 구현**. pyyaml 외 신규 의존성 추가 금지. 페이지 골격이 `/nf-build` SKILL 로 강제 (7개 H2 + sections_complete check) 라 충분.
+
+### D3 — Mermaid → `service_scenarios[]` 변환 *깊이*
+
+v1 — **raw mermaid 보존 + participants 만 추출**. step list parsing 없음.
+
+```yaml
+service_scenarios:
+  - id: nsselection_get_registration   # H3 제목 + § 번호로 slug
+    section_path: ["Service Scenarios", "Nnssf_NSSelection — Get"]
+    description: |                     # mermaid 직전까지 prose
+    mermaid: |                         # 원본 mermaid 블록 그대로
+    participants: ["AMF", "NSSF"]      # mermaid 에서 정규식 추출
+    spec_clause: "5.2.2.2.2"           # 본문 § 패턴 best-effort
+```
+
+v2 (별도 plan, 미래) — `participant`·`->>`·`alt/else` 토큰을 step 단위로 분해.
+
+### D4 — *실패 모드* — 카테고리 누락·파싱 불가 시
+
+추천 — **fail-soft + coverage 필드 기록**. 도구는 항상 yaml 산출, 누락은 빈 list/object + `coverage.missing_categories` 에 기록. nf-status 의 `handoff_yaml_valid` check 가 downstream 검증.
+
+```yaml
+schema_version: handoff-v1
+generated_at: ...
+coverage:
+  status: complete | incomplete
+  missing_categories: []
+  warnings: []
+```
+
+> **다음 세션 시작 시 행동.** 위 D1~D4 의 추천 답안에 동의 / 수정 후 C3 코드 작성 진입. 지금은 사용자 답변 대기 상태.
+
+---
+
+## 6. 진행 상태 — 2026-05-10 wrap-up
+
+**완료된 commit (local).**
+- `c4797a1` C1 — kb/→design/, scripts/→design/scripts/, handoff/·dev/·docs/ 신설.
+- `f8313fb` C1-sup — CLAUDE.md "진행 중 작업" 섹션 + plan.md C7·C8 복원.
+- `3faa698` C2 — gate rename (implementation_ready→handoff_ready, production→canonical, yaml_to_c_compiles→schema_implementable).
+- (예정) handover prep — docs/setup.md, docs/handover.md, 본 §5·§6 추가.
+
+**다음 세션 시작 시 우선 작업.**
+
+1. 다른 PC 라면 `~/.claude/projects/-home-<user>-AI-5gc-impl-kb/memory/` 가 비어있을 것. [`docs/handover.md`](./handover.md) 의 5개 memory 블록을 같은 이름 파일로 cp (Claude 자동 처리 가능).
+2. 다른 PC 라면 [`docs/setup.md`](./setup.md) §1 의 mattpocock skill 13개 install 한 번 실행.
+3. 본 §5 의 D1~D4 추천 답안에 동의/수정.
+4. C3 코드 작성 (별도 plan 사이클).
+5. C4~C7 계속.
+6. C8 — push (이미 push 되어있는 commit 들 외 추가분).
+
+**push 정책.** 본 wrap-up 시점에 origin/main 으로 push 됨. 그 이후 commit 은 (다른 PC 에서 작업 시) 다시 push 후 다른 환경이 pull 가능.
+
+---
+
+## 7. 다음 plan 의 후보 (전체 sequence 종료 후)
+
+- dev/ placeholder 의 *minimal consumer* (yaml 만 읽어 operation 카운트 출력) 작성 → contract 가 *실제로 실행 가능* 한지 1회 검증.
 - NRF 시작 — `/nf-init nrf --primary 29.510`. 두 번째 NF 로 framework 일반화 검증.
 - repo 이름 변경 결정.

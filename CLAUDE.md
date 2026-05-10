@@ -20,9 +20,9 @@
 
 ## 진행 중 작업
 
-본 repo 를 *5gc-design 시스템* 으로 재정렬하는 마이그레이션 진행 중. 상세 plan·체크리스트는 [@docs/plan.md](./docs/plan.md) 가 진실 출처.
+본 repo 의 *논리적 design ↔ dev 분리 + handoff contract 승격* 마이그레이션 진행 중. 상세 plan·체크리스트는 [@docs/plan.md](./docs/plan.md) 가 진실 출처. 새 PC 에서 작업 시작 시 — [@docs/handover.md](./docs/handover.md) 의 memory 5개 블록 cp + [@docs/setup.md](./docs/setup.md) 의 mattpocock skill install 한 번.
 
-- **다음**. C2 — `nf-status.py` GATE_DEFS rename (`implementation_ready` → `handoff_ready`, `production` → `canonical`) + check rename (`yaml_to_c_compiles` → `schema_implementable`).
+- **다음**. C3 — `build-handoff.py` 신규 도구. 사전 결정 (D1~D4 파싱 정책) 은 docs/plan.md §5 의 추천안 동의 절차부터.
 - **종료 조건**. `/nf-status nssf` 가 새 4 gate 모두 PASS 후 C8 push.
 - **본 섹션 처리**. C8 완료 시 본 섹션 제거 또는 다음 plan 으로 교체 (정책 only 원칙 회복).
 
