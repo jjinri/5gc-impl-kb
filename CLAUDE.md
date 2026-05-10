@@ -18,6 +18,16 @@
 
 ---
 
+## 진행 중 작업
+
+본 repo 를 *5gc-design 시스템* 으로 재정렬하는 마이그레이션 진행 중. 상세 plan·체크리스트는 [@docs/plan.md](./docs/plan.md) 가 진실 출처.
+
+- **다음**. C2 — `nf-status.py` GATE_DEFS rename (`implementation_ready` → `handoff_ready`, `production` → `canonical`) + check rename (`yaml_to_c_compiles` → `schema_implementable`).
+- **종료 조건**. `/nf-status nssf` 가 새 4 gate 모두 PASS 후 C8 push.
+- **본 섹션 처리**. C8 완료 시 본 섹션 제거 또는 다음 plan 으로 교체 (정책 only 원칙 회복).
+
+---
+
 ## THE FOUR RULES (do not violate)
 
 매 응답에 적용. 본 KB 의 implementation 정의에 맞춰 강화됨.

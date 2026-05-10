@@ -208,6 +208,7 @@ acceptance — `/nf-status nssf` → 4 gate (`draft/review_ready/handoff_ready/c
     - "Acceptance Gates" 표 갱신 — 새 4 gate 이름·의미
     - 새 섹션 *"5gc-design ↔ 5gc-dev 책임 경계"* — Q6 결정 배치 표 그대로
     - "NF Profile" 표·"Knowledge depth, not breadth" 섹션은 유지
+    - "진행 중 작업" 섹션 (본 plan 의 일부, C8 으로 plan 종료 시 제거 또는 갱신)
   - **README.md.**
     - 첫 문단 — *"3GPP spec 으로부터 NF design deliverable 을 자동 생산하는 5gc-design 시스템"*
     - "Quick start" 의 명령은 그대로 (인터페이스 동일)
@@ -219,16 +220,19 @@ acceptance — `/nf-status nssf` → 4 gate (`draft/review_ready/handoff_ready/c
 
 ---
 
-### [ ] C8 — push
+### [ ] C8 — push + 진행 중 작업 섹션 정리
 
-- **배경.** 모든 commit 이 origin 에 반영되어 다른 환경 (또는 다음 세션) 에서 즉시 pull 가능 상태.
-- **관련 파일.** 없음 (git 작업만).
-- **예상 변경.** `git push origin main`.
+- **배경.** 모든 commit 이 origin 에 반영되고, CLAUDE.md 의 "진행 중 작업" 섹션을 종료 표시 또는 다음 plan 으로 교체.
+- **관련 파일.**
+  - `CLAUDE.md` (진행 중 작업 섹션)
+- **예상 변경.**
+  - `git push origin main`
+  - CLAUDE.md 의 "진행 중 작업" 섹션 — `docs/plan.md` 종료 표기 또는 다음 plan 안내로 갱신 (다음 plan 이 없으면 섹션 자체 제거)
 - **검증.**
   - `git ls-remote origin HEAD` 가 local HEAD 와 일치
   - `/nf-status nssf` → 4 gate 모두 PASS
-  - `git log --oneline -7` → C1~C7 의 의미 단위 commit 7 개 (C8 자체는 commit 없음)
-- **commit msg.** 없음 (push only).
+  - `git log --oneline -8` → 의미 단위 분리된 8 commit
+- **commit msg.** (CLAUDE.md 변경이 있을 때만) `docs(progress): plan.md C1~C8 완료 — 진행 중 작업 종료`
 
 ---
 
