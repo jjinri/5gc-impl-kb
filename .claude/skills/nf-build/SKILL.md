@@ -1,11 +1,11 @@
 ---
 name: nf-build
-description: 매니페스트가 준비된 NF 에 대해 7 카테고리 implementation-grade wiki 페이지를 생성·갱신하는 워크플로우. 사용자가 "/nf-build nssf", "NSSF 페이지 만들어", "NRF 빌드", "data-model 만 다시 뽑아", "build nf page" 등을 말하거나 NF 이름을 지정하면 무조건 이 skill 을 사용한다. 동작 — `design/<nf>/_manifest.yaml` 의 ready_for_build 가 true 인지 확인하고, 7 카테고리 (Interface / API / Data Model / Service Scenarios / Cross-NF Dependencies / Configuration / Error Handling) 를 일괄 또는 부분 빌드한다. 카테고리 인자 (`--data-model`, `--api`, `--interface` 등) 로 부분 빌드 가능 — 가장 자주 쓰이는 시나리오는 "papers/ 에 새 ref 추가 후 Data Model 트리만 재추출". Data Model 은 `design/scripts/resolve-yaml-refs.py` 가 chain 추적, Service Scenarios 의 mermaid 는 사람이 작성 (도구가 자동 작성하지 않음 — figure 추출은 sprint 후반). 매니페스트 생성·갱신은 sibling `/nf-init`, 완성도 검사는 `/nf-status` 의 책임이며 본 skill 은 페이지 *내용 생성* 에 집중한다. 커밋은 자동 수행 금지.
+description: 매니페스트가 준비된 NF 에 대해 7 카테고리 design wiki 페이지 (handoff_ready·canonical 목표)를 생성·갱신하는 워크플로우. 사용자가 "/nf-build nssf", "NSSF 페이지 만들어", "NRF 빌드", "data-model 만 다시 뽑아", "build nf page" 등을 말하거나 NF 이름을 지정하면 무조건 이 skill 을 사용한다. 동작 — `design/<nf>/_manifest.yaml` 의 ready_for_build 가 true 인지 확인하고, 7 카테고리 (Interface / API / Data Model / Service Scenarios / Cross-NF Dependencies / Configuration / Error Handling) 를 일괄 또는 부분 빌드한다. 카테고리 인자 (`--data-model`, `--api`, `--interface` 등) 로 부분 빌드 가능 — 가장 자주 쓰이는 시나리오는 "papers/ 에 새 ref 추가 후 Data Model 트리만 재추출". Data Model 은 `design/scripts/resolve-yaml-refs.py` 가 chain 추적, Service Scenarios 의 mermaid 는 사람이 작성 (도구가 자동 작성하지 않음 — figure 추출은 sprint 후반). 매니페스트 생성·갱신은 sibling `/nf-init`, 완성도 검사는 `/nf-status` 의 책임이며 본 skill 은 페이지 *내용 생성* 에 집중한다. 커밋은 자동 수행 금지.
 argument-hint: "<nf> [--<category>]"
 allowed-tools: Bash(.venv/bin/python3 design/scripts/extract.py *) Bash(.venv/bin/python3 design/scripts/spec-split.py *) Bash(.venv/bin/python3 design/scripts/resolve-yaml-refs.py *) Bash(.venv/bin/python3 design/scripts/nf-manifest.py *) Bash(mkdir -p *) Bash(ls *) Bash(grep *) Bash(awk *) Bash(find *)
 ---
 
-# nf-build — 7 카테고리 implementation-grade 페이지 생성·갱신
+# nf-build — 7 카테고리 design 페이지 생성·갱신
 
 ## 입력
 - `<nf>` — NF 이름. `design/<nf>/_manifest.yaml` 가 이미 존재해야 한다 (없으면 `/nf-init` 먼저).
@@ -54,7 +54,7 @@ allowed-tools: Bash(.venv/bin/python3 design/scripts/extract.py *) Bash(.venv/bi
 nf: <nf>           # 폴더명과 일치 (예 nssf)
 spec: TS NN.NNN    # 본 페이지가 다루는 spec (예 TS 29.531)
 version: <ver>     # docx version 또는 yaml info.version (둘이 다르면 둘 다 표기 가능)
-status: draft|ready_for_review|implementation_ready  # 사람이 갱신
+status: draft|ready_for_review|handoff_ready|canonical  # 사람이 갱신
 ---
 ```
 

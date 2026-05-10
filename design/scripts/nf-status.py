@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# design/<nf>/ 의 implementation-grade 완성도를 검사해 _status.yaml 산출
+# design/<nf>/ 의 design 완성도를 검사해 _status.yaml 산출 (handoff_ready·canonical gate)
 """
 Usage:
     .venv/bin/python3 design/scripts/nf-status.py <nf> [--no-write]
@@ -10,10 +10,14 @@ Usage:
 평가 framework. 무가중치, 항목별 criterion + to_pass 의무,
 applies_to 별 NOT_APPLICABLE 처리, acceptance gate 는 check id 의 AND.
 
+Gate (4 단계).
+  draft → review_ready → handoff_ready → canonical
+  의미는 ../docs/plan.md 또는 project memory project_gate_naming.md 참조.
+
 Tier 1 (Validation, binary)
   - frontmatter_valid
   - sections_complete (7 카테고리 H2 + 비어있지 않음)
-  - wikilinks_resolve (kb 내부 [[...]] 모두 실재)
+  - wikilinks_resolve (design 내부 [[...]] 모두 실재)
   - no_korean_colon_end
   - manifest_ready (_manifest.yaml.status.ready_for_build)
 
@@ -22,8 +26,9 @@ Tier 2 (Coverage, threshold)
   - api_operation_coverage (yaml paths operation 수 = 매트릭스 row 수, stage_3+mixed)
   - service_flow_coverage (mermaid 블록 수 ≥ manifest 명시 procedure 수)
 
-Tier 3 (Implementation viability)
-  - yaml_to_c_compiles  (design/scripts/yaml-to-c.py + gcc -fsyntax-only)
+Tier 3 (Implementability sanity)
+  - schema_implementable  (design/scripts/yaml-to-c.py + gcc -fsyntax-only — C 는 *증명 수단*,
+    의미는 schema 가 *언어 무관* 으로 구현 가능. 5gc-dev 의 본격 codegen 은 별도.)
 
 Tier 4 (Subjective)
   - implementation_guidance_quality (manifest.manual_overrides.judge_result.score >= 4 면 PASS,
@@ -375,11 +380,11 @@ def check_service_flow_coverage(page: pathlib.Path | None, profile: str) -> dict
 
 # ─── Tier 3 / 4 — NOT_RUN placeholder ────────────────────────────────
 
-def check_yaml_to_c(nf: str, profile: str) -> dict:
+def check_schema_implementable(nf: str, profile: str) -> dict:
     base = {
-        "id": "yaml_to_c_compiles", "tier": 3,
-        "name": "Data Model 의 모든 자료형이 C struct 로 컴파일 통과",
-        "criterion": "design/scripts/yaml-to-c.py 산출이 gcc -fsyntax-only 통과.",
+        "id": "schema_implementable", "tier": 3,
+        "name": "Data Model 자료형이 *언어 무관* 으로 구현 가능 (sanity probe — 수단은 C)",
+        "criterion": "design/scripts/yaml-to-c.py (수단으로 C 사용) 산출이 gcc -fsyntax-only 통과. 본 check 의 의미는 schema 가 self-contained 하게 닫혀 *어떤 언어로든* 구현 가능하다는 sanity probe — 5gc-dev 의 본격 codegen 은 별도.",
         "applies_to": ["stage_3_only", "mixed"],
     }
     if not applies(base, profile):
@@ -448,18 +453,18 @@ def check_subjective_review(manifest: dict) -> dict:
 GATE_DEFS = [
     ("draft", ["frontmatter_valid"]),
     ("ready_for_review", ["frontmatter_valid", "sections_complete", "manifest_ready"]),
-    ("implementation_ready", [
+    ("handoff_ready", [
         "frontmatter_valid", "sections_complete", "manifest_ready",
         "data_model_chain_complete", "api_operation_coverage",
         "service_flow_coverage", "wikilinks_resolve",
         "no_korean_colon_end",
     ]),
-    ("production", [
+    ("canonical", [
         "frontmatter_valid", "sections_complete", "manifest_ready",
         "data_model_chain_complete", "api_operation_coverage",
         "service_flow_coverage", "wikilinks_resolve",
         "no_korean_colon_end",
-        "yaml_to_c_compiles", "implementation_guidance_quality",
+        "schema_implementable", "implementation_guidance_quality",
     ]),
 ]
 
@@ -475,8 +480,8 @@ def compute_gates(checks: list[dict]) -> list[dict]:
                 blocked.append(f"{cid} (check 미존재)")
             elif c["status"] == "FAIL":
                 blocked.append(cid)
-            # NOT_APPLICABLE 은 자동 만족, NOT_RUN 은 production 까지만 blocker
-            elif c["status"] == "NOT_RUN" and gate_id == "production":
+            # NOT_APPLICABLE 은 자동 만족, NOT_RUN 은 canonical 까지만 blocker
+            elif c["status"] == "NOT_RUN" and gate_id == "canonical":
                 blocked.append(cid)
         out.append({
             "id": gate_id,
@@ -496,7 +501,7 @@ def render_yaml(nf: str, profile: str, manifest: dict, checks: list[dict], gates
     out.append("")
     out.append(f"nf: {nf}")
     out.append(f"profile: {profile}")
-    out.append(f"target_schema: implementation-grade-v1")
+    out.append(f"target_schema: design-v1")
     out.append("")
     out.append("checks:")
     for c in checks:
@@ -563,7 +568,7 @@ def main() -> None:
         check_data_model_chain(page, profile),
         check_api_coverage(page, manifest, profile),
         check_service_flow_coverage(page, profile),
-        check_yaml_to_c(nf, profile),
+        check_schema_implementable(nf, profile),
         check_subjective_review(manifest),
     ]
 
