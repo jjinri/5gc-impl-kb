@@ -26,7 +26,7 @@ specs/{spec}/{file}.{pdf,docx,doc,yaml}
 ## Quick start
 
 ```bash
-git clone <repo> && cd 5gc-impl-kb
+git clone https://github.com/jjinri/5gc-impl-kb.git && cd 5gc-impl-kb
 sudo apt install python3-venv python3-pip   # 사용자 권한 필요 — 한 번만
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
