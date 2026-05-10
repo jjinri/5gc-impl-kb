@@ -2,7 +2,7 @@
 # OpenAPI yaml 의 $ref 체인을 끝까지 추적해 wiki Data Model 섹션용 트리를 출력
 """
 Usage:
-    .venv/bin/python3 scripts/resolve-yaml-refs.py <yaml-path> [schema-name ...] [options]
+    .venv/bin/python3 design/scripts/resolve-yaml-refs.py <yaml-path> [schema-name ...] [options]
 
 옵션:
     --depth N            최대 재귀 깊이 (기본 8)
@@ -13,10 +13,10 @@ Usage:
     1) input yaml 안의 schema 를 시작점으로 트리 구성.
     2) 각 $ref 해결 우선순위 — 동일 파일 → 동일 spec 폴더의 다른 yaml → 다른 spec 폴더의 yaml → 그 spec 의 docx Annex A → 미등록 leaf.
     3) 깊이/visited set 으로 cycle 방지.
-    4) kb/{nf}/*.md 의 Data Model 섹션에 그대로 붙일 수 있는 ```text 트리를 stdout 에 출력.
+    4) design/{nf}/*.md 의 Data Model 섹션에 그대로 붙일 수 있는 ```text 트리를 stdout 에 출력.
 
 예:
-    .venv/bin/python3 scripts/resolve-yaml-refs.py \\
+    .venv/bin/python3 design/scripts/resolve-yaml-refs.py \\
       specs/29.531/TS29531_Nnssf_NSSelection.yaml AuthorizedNetworkSliceInfo
 """
 
@@ -34,8 +34,8 @@ from typing import Any
 import yaml
 
 
-REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
-EXTRACT_PY = REPO_ROOT / "scripts" / "extract.py"
+REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent.parent
+EXTRACT_PY = REPO_ROOT / "design" / "scripts" / "extract.py"
 
 # 파일명 패턴 → spec 폴더 (TS29571_CommonData.yaml → 29.571)
 TS_FILENAME_RE = re.compile(r"^TS(\d{2})(\d{3})_")

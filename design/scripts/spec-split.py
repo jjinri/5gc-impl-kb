@@ -2,7 +2,7 @@
 # 3GPP TS docx 를 § 단위 .md 들로 split 해 specs/<spec>/_extracted/ 에 캐시하는 도구
 """
 Usage:
-    .venv/bin/python3 scripts/spec-split.py <spec-or-docx> [--force] [--dry-run]
+    .venv/bin/python3 design/scripts/spec-split.py <spec-or-docx> [--force] [--dry-run]
 
 산출 — `specs/<spec>/_extracted/` 안의 split .md 들과 `_index.md` 인벤토리.
 매 빌드마다 600KB docx 를 재추출 + grep 하는 비용을 제거한다.
@@ -16,7 +16,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 GENERATOR_VERSION = 1
 
 # 본문 numeric heading. 줄 시작 점-구분 숫자 + (탭 또는 공백) + 제목.
@@ -72,7 +72,7 @@ def resolve_docx(arg: str) -> tuple[str, Path]:
 
 def extract_text(docx_path: Path) -> str:
     """extract.py 의 extract_docx 를 import 해 평문 획득. max_chars 는 사실상 무한."""
-    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    sys.path.insert(0, str(REPO_ROOT / "design" / "scripts"))
     try:
         import extract  # type: ignore
     except ImportError as e:

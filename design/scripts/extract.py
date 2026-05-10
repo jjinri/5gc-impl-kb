@@ -2,7 +2,7 @@
 # 3GPP 스펙 문서(.pdf/.doc/.docx)에서 텍스트를 추출해 stdout 으로 출력하는 헬퍼
 """
 Usage:
-    python3 scripts/extract.py <path-to-document> [--max-chars N]
+    python3 design/scripts/extract.py <path-to-document> [--max-chars N]
 
 Supported formats:
     .pdf  → pypdf
@@ -39,7 +39,7 @@ def extract_pdf(path: Path, max_chars: int) -> str:
         fail(
             "pypdf 미설치. 설치: \n"
             "  python3 -m venv .venv && .venv/bin/pip install pypdf python-docx\n"
-            "이후 `.venv/bin/python3 scripts/extract.py ...` 로 실행."
+            "이후 `.venv/bin/python3 design/scripts/extract.py ...` 로 실행."
         )
     reader = pypdf.PdfReader(str(path))
     chunks: list[str] = []

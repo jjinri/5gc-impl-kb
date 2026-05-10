@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-# kb/<nf>/ 의 implementation-grade 완성도를 검사해 _status.yaml 산출
+# design/<nf>/ 의 implementation-grade 완성도를 검사해 _status.yaml 산출
 """
 Usage:
-    .venv/bin/python3 scripts/nf-status.py <nf> [--no-write]
+    .venv/bin/python3 design/scripts/nf-status.py <nf> [--no-write]
 
 옵션:
     --no-write   _status.yaml 저장 없이 stdout 만 보고
@@ -23,7 +23,7 @@ Tier 2 (Coverage, threshold)
   - service_flow_coverage (mermaid 블록 수 ≥ manifest 명시 procedure 수)
 
 Tier 3 (Implementation viability)
-  - yaml_to_c_compiles  (scripts/yaml-to-c.py + gcc -fsyntax-only)
+  - yaml_to_c_compiles  (design/scripts/yaml-to-c.py + gcc -fsyntax-only)
 
 Tier 4 (Subjective)
   - implementation_guidance_quality (manifest.manual_overrides.judge_result.score >= 4 면 PASS,
@@ -41,7 +41,7 @@ from typing import Any
 
 import yaml
 
-REPO = pathlib.Path(__file__).resolve().parent.parent
+REPO = pathlib.Path(__file__).resolve().parent.parent.parent
 
 REQUIRED_FRONTMATTER_KEYS = {"nf", "spec", "version", "status"}
 
@@ -81,7 +81,7 @@ def check_frontmatter_valid(page: pathlib.Path | None, profile: str) -> dict:
         "id": "frontmatter_valid", "tier": 1,
         "name": "frontmatter 가 valid YAML 이고 필수 키 모두 보유",
         "criterion": (
-            "kb/{nf}/3gpp-*.md 의 상단 `---` 블록이 yaml.safe_load 통과. "
+            "design/{nf}/3gpp-*.md 의 상단 `---` 블록이 yaml.safe_load 통과. "
             f"필수 키 — {sorted(REQUIRED_FRONTMATTER_KEYS)}."
         ),
         "applies_to": ["stage_3_only", "stage_2_only", "mixed", "meta_only"],
@@ -159,8 +159,8 @@ def check_sections_complete(page: pathlib.Path | None, profile: str) -> dict:
 def check_wikilinks_resolve(page: pathlib.Path | None, kb_root: pathlib.Path, profile: str) -> dict:
     base = {
         "id": "wikilinks_resolve", "tier": 1,
-        "name": "모든 [[wikilink]] 이 kb/ 안에 실재",
-        "criterion": "페이지 안 [[...]] 패턴의 모든 target 이 kb/ 하위에 .md 로 존재.",
+        "name": "모든 [[wikilink]] 이 design/ 안에 실재",
+        "criterion": "페이지 안 [[...]] 패턴의 모든 target 이 design/ 하위에 .md 로 존재.",
         "applies_to": ["stage_3_only", "stage_2_only", "mixed", "meta_only"],
     }
     if page is None:
@@ -215,7 +215,7 @@ def check_manifest_ready(manifest: dict, profile: str) -> dict:
         "id": "manifest_ready", "tier": 1,
         "name": "_manifest.yaml.status.ready_for_build = true",
         "criterion": (
-            "kb/{nf}/_manifest.yaml 의 status.ready_for_build == true. "
+            "design/{nf}/_manifest.yaml 의 status.ready_for_build == true. "
             "in-scope 의존 spec 이 모두 specs/ 에 cp 되었거나 "
             "manual_overrides.exclude 로 제외됨."
         ),
@@ -223,7 +223,7 @@ def check_manifest_ready(manifest: dict, profile: str) -> dict:
     }
     if not manifest:
         base.update(status="FAIL", current="_manifest.yaml 없음",
-                    to_pass=["scripts/nf-manifest.py <nf> --primary <spec> --write"])
+                    to_pass=["design/scripts/nf-manifest.py <nf> --primary <spec> --write"])
         return base
     status = manifest.get("status", {})
     ready = status.get("ready_for_build", False)
@@ -237,7 +237,7 @@ def check_manifest_ready(manifest: dict, profile: str) -> dict:
                     to_pass=[
                         f"specs/<spec>/ 에 cp — {missing}" if missing else None,
                         "또는 _manifest.yaml manual_overrides.exclude 에 등록",
-                        "scripts/nf-manifest.py <nf> --primary <spec> --write 재실행",
+                        "design/scripts/nf-manifest.py <nf> --primary <spec> --write 재실행",
                     ])
         base["to_pass"] = [t for t in base["to_pass"] if t]
     return base
@@ -250,7 +250,7 @@ def check_data_model_chain(page: pathlib.Path | None, profile: str) -> dict:
         "id": "data_model_chain_complete", "tier": 2,
         "name": "Data Model 트리에 (참조 규격 미등록) leaf 0건",
         "criterion": (
-            "kb/{nf}/*.md 의 ```text Data Model 코드블록 안에 "
+            "design/{nf}/*.md 의 ```text Data Model 코드블록 안에 "
             "문자열 \"(참조 규격 미등록)\" 등장 횟수 == 0."
         ),
         "applies_to": ["stage_3_only", "mixed"],
@@ -379,16 +379,16 @@ def check_yaml_to_c(nf: str, profile: str) -> dict:
     base = {
         "id": "yaml_to_c_compiles", "tier": 3,
         "name": "Data Model 의 모든 자료형이 C struct 로 컴파일 통과",
-        "criterion": "scripts/yaml-to-c.py 산출이 gcc -fsyntax-only 통과.",
+        "criterion": "design/scripts/yaml-to-c.py 산출이 gcc -fsyntax-only 통과.",
         "applies_to": ["stage_3_only", "mixed"],
     }
     if not applies(base, profile):
         base.update(status="NOT_APPLICABLE", current=f"profile={profile}", to_pass=[])
         return base
-    tool = REPO / "scripts" / "yaml-to-c.py"
+    tool = REPO / "design" / "scripts" / "yaml-to-c.py"
     if not tool.is_file():
         base.update(status="NOT_RUN", current="도구 미존재",
-                    to_pass=["scripts/yaml-to-c.py 신규"])
+                    to_pass=["design/scripts/yaml-to-c.py 신규"])
         return base
     try:
         result = subprocess.run(
@@ -491,7 +491,7 @@ def compute_gates(checks: list[dict]) -> list[dict]:
 
 def render_yaml(nf: str, profile: str, manifest: dict, checks: list[dict], gates: list[dict]) -> str:
     out = []
-    out.append("# Auto-generated by scripts/nf-status.py — 사용자가 손으로 수정하지 않음.")
+    out.append("# Auto-generated by design/scripts/nf-status.py — 사용자가 손으로 수정하지 않음.")
     out.append("# 본 파일을 수정하지 말고, 각 check 의 to_pass 액션을 따라 페이지를 고친 뒤 재실행.")
     out.append("")
     out.append(f"nf: {nf}")
@@ -535,9 +535,9 @@ def main() -> None:
     args = parser.parse_args()
 
     nf = args.nf.lower()
-    nf_dir = REPO / "kb" / nf
+    nf_dir = REPO / "design" / nf
     if not nf_dir.is_dir():
-        sys.exit(f"[nf-status] kb/{nf}/ 부재. /nf-init 먼저 실행하세요.")
+        sys.exit(f"[nf-status] design/{nf}/ 부재. /nf-init 먼저 실행하세요.")
 
     manifest_path = nf_dir / "_manifest.yaml"
     manifest: dict = {}
@@ -557,7 +557,7 @@ def main() -> None:
     checks = [
         check_frontmatter_valid(page, profile),
         check_sections_complete(page, profile),
-        check_wikilinks_resolve(page, REPO/"kb", profile),
+        check_wikilinks_resolve(page, REPO/"design", profile),
         check_no_korean_colon_end(page, profile),
         check_manifest_ready(manifest, profile),
         check_data_model_chain(page, profile),

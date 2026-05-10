@@ -10,13 +10,13 @@
 
 > 시작점. TS 29.531 등 NSSF 관련 spec 시리즈를 정리.
 
-- [TS 29.531 — Network Slice Selection Services (NSSF)](./kb/nssf/3gpp-ts-29531.md) — Nnssf_NSSelection v2 + Nnssf_NSSAIAvailability v1, docx V19.6.0, status `draft`.
+- [TS 29.531 — Network Slice Selection Services (NSSF)](./design/nssf/3gpp-ts-29531.md) — Nnssf_NSSelection v2 + Nnssf_NSSAIAvailability v1, docx V19.6.0, status `draft`.
 
 ---
 
 ## 다른 NF (예정)
 
-> 첫 문서가 들어가는 시점에 해당 NF 폴더(`kb/{nf}/`) 와 본 카탈로그 섹션을 생성한다.
+> 첫 문서가 들어가는 시점에 해당 NF 폴더(`design/{nf}/`) 와 본 카탈로그 섹션을 생성한다.
 >
 > 후보: `amf`, `smf`, `upf`, `nrf`, `ausf`, `udm`, `udr`, `pcf`, `nef`, `nwdaf`, `chf`, `bsf`, `scp`, `sepp`.
 

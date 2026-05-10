@@ -1,14 +1,14 @@
 ---
 name: nf-build
-description: 매니페스트가 준비된 NF 에 대해 7 카테고리 implementation-grade wiki 페이지를 생성·갱신하는 워크플로우. 사용자가 "/nf-build nssf", "NSSF 페이지 만들어", "NRF 빌드", "data-model 만 다시 뽑아", "build nf page" 등을 말하거나 NF 이름을 지정하면 무조건 이 skill 을 사용한다. 동작 — `kb/<nf>/_manifest.yaml` 의 ready_for_build 가 true 인지 확인하고, 7 카테고리 (Interface / API / Data Model / Service Scenarios / Cross-NF Dependencies / Configuration / Error Handling) 를 일괄 또는 부분 빌드한다. 카테고리 인자 (`--data-model`, `--api`, `--interface` 등) 로 부분 빌드 가능 — 가장 자주 쓰이는 시나리오는 "papers/ 에 새 ref 추가 후 Data Model 트리만 재추출". Data Model 은 `scripts/resolve-yaml-refs.py` 가 chain 추적, Service Scenarios 의 mermaid 는 사람이 작성 (도구가 자동 작성하지 않음 — figure 추출은 sprint 후반). 매니페스트 생성·갱신은 sibling `/nf-init`, 완성도 검사는 `/nf-status` 의 책임이며 본 skill 은 페이지 *내용 생성* 에 집중한다. 커밋은 자동 수행 금지.
+description: 매니페스트가 준비된 NF 에 대해 7 카테고리 implementation-grade wiki 페이지를 생성·갱신하는 워크플로우. 사용자가 "/nf-build nssf", "NSSF 페이지 만들어", "NRF 빌드", "data-model 만 다시 뽑아", "build nf page" 등을 말하거나 NF 이름을 지정하면 무조건 이 skill 을 사용한다. 동작 — `design/<nf>/_manifest.yaml` 의 ready_for_build 가 true 인지 확인하고, 7 카테고리 (Interface / API / Data Model / Service Scenarios / Cross-NF Dependencies / Configuration / Error Handling) 를 일괄 또는 부분 빌드한다. 카테고리 인자 (`--data-model`, `--api`, `--interface` 등) 로 부분 빌드 가능 — 가장 자주 쓰이는 시나리오는 "papers/ 에 새 ref 추가 후 Data Model 트리만 재추출". Data Model 은 `design/scripts/resolve-yaml-refs.py` 가 chain 추적, Service Scenarios 의 mermaid 는 사람이 작성 (도구가 자동 작성하지 않음 — figure 추출은 sprint 후반). 매니페스트 생성·갱신은 sibling `/nf-init`, 완성도 검사는 `/nf-status` 의 책임이며 본 skill 은 페이지 *내용 생성* 에 집중한다. 커밋은 자동 수행 금지.
 argument-hint: "<nf> [--<category>]"
-allowed-tools: Bash(.venv/bin/python3 scripts/extract.py *) Bash(.venv/bin/python3 scripts/spec-split.py *) Bash(.venv/bin/python3 scripts/resolve-yaml-refs.py *) Bash(.venv/bin/python3 scripts/nf-manifest.py *) Bash(mkdir -p *) Bash(ls *) Bash(grep *) Bash(awk *) Bash(find *)
+allowed-tools: Bash(.venv/bin/python3 design/scripts/extract.py *) Bash(.venv/bin/python3 design/scripts/spec-split.py *) Bash(.venv/bin/python3 design/scripts/resolve-yaml-refs.py *) Bash(.venv/bin/python3 design/scripts/nf-manifest.py *) Bash(mkdir -p *) Bash(ls *) Bash(grep *) Bash(awk *) Bash(find *)
 ---
 
 # nf-build — 7 카테고리 implementation-grade 페이지 생성·갱신
 
 ## 입력
-- `<nf>` — NF 이름. `kb/<nf>/_manifest.yaml` 가 이미 존재해야 한다 (없으면 `/nf-init` 먼저).
+- `<nf>` — NF 이름. `design/<nf>/_manifest.yaml` 가 이미 존재해야 한다 (없으면 `/nf-init` 먼저).
 - `--<category>` — 부분 빌드. 카테고리 명은 다음 중 하나.
   - `--interface`
   - `--api`
@@ -40,11 +40,11 @@ allowed-tools: Bash(.venv/bin/python3 scripts/extract.py *) Bash(.venv/bin/pytho
 ## Workflow
 
 ### 1. 입력 검증
-- `kb/<nf>/_manifest.yaml` 존재 확인. 없으면 `/nf-init <nf> --primary <spec>` 먼저 안내 후 정지.
+- `design/<nf>/_manifest.yaml` 존재 확인. 없으면 `/nf-init <nf> --primary <spec>` 먼저 안내 후 정지.
 - 매니페스트 `status.ready_for_build` 점검. false 면 `missing_priority` 알리고 정지 (또는 `--force`).
 
 ### 2. 페이지 파일 결정
-- `kb/<nf>/3gpp-{ts|tr}-{n}.md` 가 이미 있으면 *갱신* 모드, 없으면 *신규* 모드.
+- `design/<nf>/3gpp-{ts|tr}-{n}.md` 가 이미 있으면 *갱신* 모드, 없으면 *신규* 모드.
 - 신규 모드 — 7 카테고리 H2 헤더 모두 + frontmatter 만 우선 골격으로 생성.
 - 갱신 모드 — 사용자 산문 보존, 기계 산출 영역만 교체.
 
@@ -64,7 +64,7 @@ status: draft|ready_for_review|implementation_ready  # 사람이 갱신
 
 ```bash
 # specs/<spec>/_extracted/ 가 부재하거나 docx mtime > cache 면 재생성
-.venv/bin/python3 scripts/spec-split.py <spec>
+.venv/bin/python3 design/scripts/spec-split.py <spec>
 ```
 
 산출 — `specs/<spec>/_extracted/<NN-slug>.md` + `_index.md` 인벤토리. cache fresh 면 즉시 종료, stale 또는 부재면 자동 재생성. **빌드 전에 한 번 호출** 후 카테고리별 작업은 _extracted/ 안의 § 파일을 Read.
@@ -93,7 +93,7 @@ status: draft|ready_for_review|implementation_ready  # 사람이 갱신
 
 #### 3c. Data Model
 - 자료원 — primary yaml + companion yaml + cross-spec chain.
-- 도구 — `scripts/resolve-yaml-refs.py <yaml> <Schema1> <Schema2> ... --depth 8 --external-depth 1`.
+- 도구 — `design/scripts/resolve-yaml-refs.py <yaml> <Schema1> <Schema2> ... --depth 8 --external-depth 1`.
 - root schema 결정 — primary yaml(s) 의 `paths.*.requestBody.content.*.schema.$ref` 와 `paths.*.responses.*.content.*.schema.$ref` 의 unique 한 schema 이름 집합.
 - 출력 — 각 root 마다 ` ```text ` 코드블록 안 트리. 도구 산출을 그대로 옮긴다 — 손으로 가공하면 도구 발전 시 페이지 정확성이 흐려지고, `/nf-status` 의 `data_model_chain_complete` 검사도 표면적 통과를 잃는다.
 - 미해결 ref — `[TS XX.YYY] (참조 규격 미등록)` leaf 로 종료.
@@ -109,12 +109,12 @@ status: draft|ready_for_review|implementation_ready  # 사람이 갱신
 - 자료원 — 본 NF 의 docx + manifest 의 cross-nf 카테고리 + yaml 의 oAuth scope (호출자 추정 보조).
 - 출력 — 표. 열 — `상대 NF | 방향 | 트리거 | 출처 (docx 절·yaml)`.
 - 자동 추출 도구는 부재 (sprint 후반). 그러나 본 NF docx 만으로 표가 채워지는 경우가 대부분 — *본 섹션은 placeholder 가 아니라 단편 표로 완성*.
-- **여러 NF 합성 (cross-NF 호출 그래프 mermaid + 절차 매핑) 은 본 섹션 책임 아님.** 그건 `kb/overviews/cross-nf-graph.md` 같은 합성 페이지에서. NSSF·AMF·SMF 등 여러 NF 의 본 섹션이 모인 *후* 별도 산출물로 작성.
+- **여러 NF 합성 (cross-NF 호출 그래프 mermaid + 절차 매핑) 은 본 섹션 책임 아님.** 그건 `design/overviews/cross-nf-graph.md` 같은 합성 페이지에서. NSSF·AMF·SMF 등 여러 NF 의 본 섹션이 모인 *후* 별도 산출물로 작성.
 
 | 산출 | 어디 | 무엇 | 의존 |
 |---|---|---|---|
-| 본 NF Cross-NF 단편 | `kb/<nf>/3gpp-*.md` §Cross-NF | 본 NF docx 의 호출 표 | 본 NF docx 만 |
-| 합성 호출 그래프 | `kb/overviews/cross-nf-graph.md` (가칭) | 여러 NF 합성 + mermaid | 여러 NF 페이지 |
+| 본 NF Cross-NF 단편 | `design/<nf>/3gpp-*.md` §Cross-NF | 본 NF docx 의 호출 표 | 본 NF docx 만 |
+| 합성 호출 그래프 | `design/overviews/cross-nf-graph.md` (가칭) | 여러 NF 합성 + mermaid | 여러 NF 페이지 |
 
 #### 3f. Configuration
 - 자료원 — primary yaml 의 `info.x-gateway-rate-limit-policy`(있다면) + supportedFeatures 표 (docx §6.x.8) + default·timeout (docx 본문).
@@ -131,7 +131,7 @@ status: draft|ready_for_review|implementation_ready  # 사람이 갱신
 - 형식 — `- [[{nf}/{wiki-stem}]] — TS NN.NNN v<x.y.z>, <한국어 한 줄 설명>`.
 
 ### 5. 결과 보고 (커밋 X)
-- 갱신·신규 파일 목록 (`kb/<nf>/3gpp-*.md`, 매니페스트는 변경 없음).
+- 갱신·신규 파일 목록 (`design/<nf>/3gpp-*.md`, 매니페스트는 변경 없음).
 - 카테고리별 빌드 상태 — *완료 / placeholder / not-built (도구 부재)*.
 - 미해결 leaf 목록 (Data Model 의 chain leaf, Cross-NF 의 자동 추출 미가용 등).
 - 제안 commit 메시지 — `feat(<nf>): TS NN.NNN 페이지 7-카테고리 빌드 (또는 부분)`.
@@ -145,9 +145,9 @@ status: draft|ready_for_review|implementation_ready  # 사람이 갱신
 
 ```
 사용자: /nf-build nrf
-조건:   kb/nrf/_manifest.yaml.status.ready_for_build == true
+조건:   design/nrf/_manifest.yaml.status.ready_for_build == true
 산출:
-  - kb/nrf/3gpp-ts-29510.md (7 카테고리 골격 + 채움)
+  - design/nrf/3gpp-ts-29510.md (7 카테고리 골격 + 채움)
   - index.md 의 "## NRF" 섹션에 한 줄 항목 추가
 보고: "Interface ✓, API ✓ 표 작성, Data Model ✓ chain leaf 0건,
        Service Scenarios — mermaid 3개 (다이어그램 4 권장 — 사용자가 추가),
@@ -159,7 +159,7 @@ status: draft|ready_for_review|implementation_ready  # 사람이 갱신
 
 ```
 사용자: specs/29.503/ 갱신 (예 i40 → j60). /nf-build nssf --data-model.
-도구: resolve-yaml-refs.py 재호출, kb/nssf/3gpp-ts-29531.md 의 ```text
+도구: resolve-yaml-refs.py 재호출, design/nssf/3gpp-ts-29531.md 의 ```text
        Data Model 트리만 *교체*. 다른 H2 섹션 (Service Scenarios 등) 은
        건드리지 않음.
 보고: "Data Model 만 갱신. 1 leaf 해결 (RecurTime), trees 산출 +14/-7 줄."
@@ -174,6 +174,6 @@ status: draft|ready_for_review|implementation_ready  # 사람이 갱신
 
 ## 참고 — 본 skill 안에 다시 적지 말 것
 
-- 매니페스트 schema: `scripts/nf-manifest.py` docstring.
-- Data Model chain 알고리즘: `scripts/resolve-yaml-refs.py` docstring.
+- 매니페스트 schema: `design/scripts/nf-manifest.py` docstring.
+- Data Model chain 알고리즘: `design/scripts/resolve-yaml-refs.py` docstring.
 - 디렉터리·파일명·언어 정책: `CLAUDE.md`.

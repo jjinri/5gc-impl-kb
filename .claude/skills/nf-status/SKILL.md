@@ -1,8 +1,8 @@
 ---
 name: nf-status
-description: 본 5gc-impl-kb 의 NF 페이지가 implementation-grade 완성도를 만족하는지 검사해 `_status.yaml` 산출하는 워크플로우. 사용자가 "/nf-status nssf", "NSSF 검증", "NRF 페이지 점수 알려줘", "이 NF 빌드 가능?", "implementation 가능 검사", "wiki check" 등을 말하거나 NF 이름을 지정하면 무조건 이 skill 을 사용한다. 동작 — `scripts/nf-status.py <nf>` 호출 → `kb/<nf>/_status.yaml` 갱신 + 콘솔에 acceptance gate 보고. 평가 framework — 가중치 없음·항목별 criterion + to_pass 의무·NF profile 별 NOT_APPLICABLE 처리. Tier 1 (validation, binary), Tier 2 (coverage, threshold), Tier 3 (yaml-to-c viability, NOT_RUN 도구 미존재), Tier 4 (subjective, SKIPPED). 매니페스트 생성은 `/nf-init`, 페이지 빌드는 `/nf-build` 의 책임이며 본 skill 은 *완성도 측정* 에 집중한다.
+description: 본 5gc-impl-kb 의 NF 페이지가 implementation-grade 완성도를 만족하는지 검사해 `_status.yaml` 산출하는 워크플로우. 사용자가 "/nf-status nssf", "NSSF 검증", "NRF 페이지 점수 알려줘", "이 NF 빌드 가능?", "implementation 가능 검사", "wiki check" 등을 말하거나 NF 이름을 지정하면 무조건 이 skill 을 사용한다. 동작 — `design/scripts/nf-status.py <nf>` 호출 → `design/<nf>/_status.yaml` 갱신 + 콘솔에 acceptance gate 보고. 평가 framework — 가중치 없음·항목별 criterion + to_pass 의무·NF profile 별 NOT_APPLICABLE 처리. Tier 1 (validation, binary), Tier 2 (coverage, threshold), Tier 3 (yaml-to-c viability, NOT_RUN 도구 미존재), Tier 4 (subjective, SKIPPED). 매니페스트 생성은 `/nf-init`, 페이지 빌드는 `/nf-build` 의 책임이며 본 skill 은 *완성도 측정* 에 집중한다.
 argument-hint: "<nf> [--no-write]"
-allowed-tools: Bash(.venv/bin/python3 scripts/nf-status.py *) Bash(cat *) Bash(ls *)
+allowed-tools: Bash(.venv/bin/python3 design/scripts/nf-status.py *) Bash(cat *) Bash(ls *)
 ---
 
 # nf-status — implementation-grade 완성도 검사
@@ -33,22 +33,22 @@ allowed-tools: Bash(.venv/bin/python3 scripts/nf-status.py *) Bash(cat *) Bash(l
 
 ### 1. 입력 검증
 - `<nf>` 가 비어있으면 사용자에게 묻고 정지.
-- `kb/<nf>/` 디렉터리 존재 확인. 없으면 "/nf-init <nf> --primary <spec> 먼저" 안내 후 정지.
+- `design/<nf>/` 디렉터리 존재 확인. 없으면 "/nf-init <nf> --primary <spec> 먼저" 안내 후 정지.
 
 ### 2. 도구 실행
 ```bash
-.venv/bin/python3 scripts/nf-status.py <nf> [--no-write]
+.venv/bin/python3 design/scripts/nf-status.py <nf> [--no-write]
 ```
-- 도구가 `kb/<nf>/_status.yaml` 갱신 + stdout/stderr 로 보고.
-- 검사 항목 (도구 docstring 진실 출처) — Tier 1·2 자동, Tier 3 (`yaml_to_c_compiles`) 도 도구가 `scripts/yaml-to-c.py` 자동 호출, Tier 4 (`implementation_guidance_quality`) 는 본 SKILL 의 §2.5 가 처리.
+- 도구가 `design/<nf>/_status.yaml` 갱신 + stdout/stderr 로 보고.
+- 검사 항목 (도구 docstring 진실 출처) — Tier 1·2 자동, Tier 3 (`yaml_to_c_compiles`) 도 도구가 `design/scripts/yaml-to-c.py` 자동 호출, Tier 4 (`implementation_guidance_quality`) 는 본 SKILL 의 §2.5 가 처리.
 
 ### 2.5 Tier 4 — sub-agent judge (선택)
 `implementation_guidance_quality` 가 NOT_RUN 이고 사용자가 production gate 까지 진행을 원하면, main agent 가 sub-agent (general-purpose) 에 페이지 채점을 위임한다.
 
-- 입력 — `kb/<nf>/3gpp-*.md` 본문 + `_manifest.yaml`.
+- 입력 — `design/<nf>/3gpp-*.md` 본문 + `_manifest.yaml`.
 - 채점 기준 — implementation 가이던스 품질 (1-5 점). 5 = 본 페이지만으로 구현 시작 가능, 4 = 약간의 spec 참고로 구현 가능, 3 = 페이지 보강 필요, 2 이하 = 빌드 재진행 필요.
 - sub-agent 산출 — `score`, `judged_by` (예 "sub-agent"), `rationale` (한 문단).
-- main agent 가 결과를 `kb/<nf>/_manifest.yaml` 의 `manual_overrides.judge_result` 에 등록.
+- main agent 가 결과를 `design/<nf>/_manifest.yaml` 의 `manual_overrides.judge_result` 에 등록.
 - `/nf-status <nf>` 재실행 → `nf-status.py` 가 그 field 를 보고 PASS/FAIL 판정 (`score >= 4` PASS).
 
 **언제 호출하는가.** 본 단계는 *명시적*. 매 nf-status 호출마다 자동 트리거하지 않는다 — sub-agent 채점은 비용·시간이 들고 페이지가 크게 변하지 않은 이상 결과가 안정적이기 때문. 사용자가 "production 까지 가자" 또는 페이지 큰 갱신 후일 때만 호출.
@@ -87,15 +87,15 @@ gate 상태에 따라.
     2. {check_id}: {to_pass[0]}
     3. {check_id}: {to_pass[0]}
 
-  상세 — kb/{nf}/_status.yaml
+  상세 — design/{nf}/_status.yaml
 ```
 
 ## 예시
 
 ```
 사용자: /nf-status nssf
-도구:   scripts/nf-status.py nssf
-산출:   kb/nssf/_status.yaml
+도구:   design/scripts/nf-status.py nssf
+산출:   design/nssf/_status.yaml
 보고:   "[nf-status] nssf: PASS 4, FAIL 5, NOT_APPLICABLE/NOT_RUN 2
          gate draft: PASS
          gate ready_for_review: FAIL — blocked by [sections_complete, manifest_ready]
@@ -107,7 +107,7 @@ gate 상태에 따라.
            2. manifest_ready: specs/<spec>/ 에 cp 또는 manual_overrides.exclude 등록
            3. data_model_chain_complete: papers/29.503 cp 후 /nf-build nssf --data-model
 
-         상세 — kb/nssf/_status.yaml"
+         상세 — design/nssf/_status.yaml"
 ```
 
 ## 자주 틀리는 지점
@@ -118,6 +118,6 @@ gate 상태에 따라.
 
 ## 참고 — 본 skill 안에 다시 적지 말 것
 
-- 검사 항목·criterion·to_pass 형식: `scripts/nf-status.py` docstring + 같은 파일의 함수.
-- acceptance gate 정의: `scripts/nf-status.py` 의 `GATE_DEFS`.
-- NF profile 매트릭스: `scripts/nf-status.py` 의 `applies_to` + CLAUDE.md "NF Profile" 표.
+- 검사 항목·criterion·to_pass 형식: `design/scripts/nf-status.py` docstring + 같은 파일의 함수.
+- acceptance gate 정의: `design/scripts/nf-status.py` 의 `GATE_DEFS`.
+- NF profile 매트릭스: `design/scripts/nf-status.py` 의 `applies_to` + CLAUDE.md "NF Profile" 표.

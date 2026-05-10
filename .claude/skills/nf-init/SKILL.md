@@ -1,14 +1,14 @@
 ---
 name: nf-init
-description: 본 5gc-impl-kb 의 새 NF (Network Function) 작업을 *시작* 하는 워크플로우. 사용자가 "NSSF 시작", "/nf-init nrf", "AMF 매니페스트 만들어", "amf 구현 시작", "create nf manifest", "29.510 으로 NRF 작업 시작" 등을 말하거나 NF 이름 + 주 spec 번호를 지정하면 무조건 이 skill 을 사용한다. 동작 — (1) `scripts/nf-manifest.py <nf> --primary <spec> --write` 호출 (2) 산출 매니페스트 (`kb/<nf>/_manifest.yaml`) 의 status 를 사용자에게 보고 (3) `ready_for_build = true` 가 되려면 어느 spec 을 specs/ 에 추가해야 하는지 priority 순으로 알린다. 본 skill 은 *반복 가능* 하다 — 사용자가 새 spec 을 specs/ 에 cp 한 뒤 다시 호출하면 매니페스트가 보강된다. ready 가 될 때까지 반복하고, 그 다음 `/nf-build` 로 페이지 생성. 신규 NF 의 매니페스트 *생성* 만 한다 — 페이지 빌드는 `/nf-build`, 완성도 검사는 `/nf-status` 의 책임.
+description: 본 5gc-impl-kb 의 새 NF (Network Function) 작업을 *시작* 하는 워크플로우. 사용자가 "NSSF 시작", "/nf-init nrf", "AMF 매니페스트 만들어", "amf 구현 시작", "create nf manifest", "29.510 으로 NRF 작업 시작" 등을 말하거나 NF 이름 + 주 spec 번호를 지정하면 무조건 이 skill 을 사용한다. 동작 — (1) `design/scripts/nf-manifest.py <nf> --primary <spec> --write` 호출 (2) 산출 매니페스트 (`design/<nf>/_manifest.yaml`) 의 status 를 사용자에게 보고 (3) `ready_for_build = true` 가 되려면 어느 spec 을 specs/ 에 추가해야 하는지 priority 순으로 알린다. 본 skill 은 *반복 가능* 하다 — 사용자가 새 spec 을 specs/ 에 cp 한 뒤 다시 호출하면 매니페스트가 보강된다. ready 가 될 때까지 반복하고, 그 다음 `/nf-build` 로 페이지 생성. 신규 NF 의 매니페스트 *생성* 만 한다 — 페이지 빌드는 `/nf-build`, 완성도 검사는 `/nf-status` 의 책임.
 argument-hint: "<nf> --primary <spec>"
-allowed-tools: Bash(.venv/bin/python3 scripts/nf-manifest.py *) Bash(ls *) Bash(cat *)
+allowed-tools: Bash(.venv/bin/python3 design/scripts/nf-manifest.py *) Bash(ls *) Bash(cat *)
 ---
 
 # nf-init — NF 매니페스트 생성·보강
 
 ## 입력
-- `<nf>` — `nssf`, `nrf`, `amf` 등 NF 이름 (소문자, kb/ 하위 폴더명).
+- `<nf>` — `nssf`, `nrf`, `amf` 등 NF 이름 (소문자, design/ 하위 폴더명).
 - `--primary <spec>` — NF 의 주 spec 번호 (점 포함, 예 `29.531`). 필수.
 - 인자 없으면 어느 NF 인지·주 spec 이 무엇인지 사용자에게 묻고 정지.
 
@@ -43,13 +43,13 @@ allowed-tools: Bash(.venv/bin/python3 scripts/nf-manifest.py *) Bash(ls *) Bash(
 
 ### 3. 도구 실행
 ```bash
-.venv/bin/python3 scripts/nf-manifest.py <nf> --primary <spec> --write
+.venv/bin/python3 design/scripts/nf-manifest.py <nf> --primary <spec> --write
 ```
-- `--write` 로 `kb/<nf>/_manifest.yaml` 저장.
+- `--write` 로 `design/<nf>/_manifest.yaml` 저장.
 - 도구 stderr 의 status 라인을 사용자에게 그대로 전달.
 
 ### 4. 결과 보고
-- 매니페스트 위치 — `kb/<nf>/_manifest.yaml`.
+- 매니페스트 위치 — `design/<nf>/_manifest.yaml`.
 - `manifest_completeness` 비율 (예 `5/11`).
 - `ready_for_build` (true/false).
 - false 면 `missing_priority` 리스트 + 각각의 의미 (sba_common / data_types / security 등).
@@ -65,8 +65,8 @@ allowed-tools: Bash(.venv/bin/python3 scripts/nf-manifest.py *) Bash(ls *) Bash(
 
 ```
 사용자: /nf-init nssf --primary 29.531
-도구:   scripts/nf-manifest.py nssf --primary 29.531 --write
-산출:   kb/nssf/_manifest.yaml (12 의존 spec 검출, 5/11 in-scope present, ready=false)
+도구:   design/scripts/nf-manifest.py nssf --primary 29.531 --write
+산출:   design/nssf/_manifest.yaml (12 의존 spec 검출, 5/11 in-scope present, ready=false)
 보고:   "manifest_completeness 5/11. ready_for_build=false.
         추가 필요 priority — [29.500 SBA HTTP/2, 29.501 service 정의, 33.501 보안,
                             29.503 chain leaf RecurTime, 23.003 NF instance ID].
@@ -90,6 +90,6 @@ allowed-tools: Bash(.venv/bin/python3 scripts/nf-manifest.py *) Bash(ls *) Bash(
 
 ## 참고 — 본 skill 안에 다시 적지 말 것
 
-- 매니페스트 schema·자동 검출 알고리즘: `scripts/nf-manifest.py` docstring.
+- 매니페스트 schema·자동 검출 알고리즘: `design/scripts/nf-manifest.py` docstring.
 - 카테고리 분류 표 (CATEGORY_TABLE): 같은 도구 안.
 - 디렉터리·파일명 규칙: `CLAUDE.md`.
