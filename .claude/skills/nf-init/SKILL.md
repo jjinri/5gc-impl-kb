@@ -23,7 +23,7 @@ allowed-tools: Bash(.venv/bin/python3 design/scripts/nf-manifest.py *) Bash(ls *
 | 새 NF 작업 처음 시작 | `/nf-init <nf> --primary <spec>` |
 | specs/ 에 새 ref spec cp 후 매니페스트 갱신 | `/nf-init <nf> --primary <spec>` (재실행) |
 | 매니페스트가 ready 됐고 페이지 생성 차례 | `/nf-build <nf>` |
-| 페이지가 implementation 기준 통과하는지 점검 | `/nf-status <nf>` |
+| 페이지가 handoff_ready 기준 통과하는지 점검 | `/nf-status <nf>` |
 
 ## 동작 원칙 (이유 포함)
 

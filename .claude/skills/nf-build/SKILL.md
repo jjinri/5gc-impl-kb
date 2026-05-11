@@ -2,7 +2,7 @@
 name: nf-build
 description: 매니페스트가 준비된 NF 에 대해 7 카테고리 design wiki 페이지 (handoff_ready·canonical 목표)를 생성·갱신하는 워크플로우. 사용자가 "/nf-build nssf", "NSSF 페이지 만들어", "NRF 빌드", "data-model 만 다시 뽑아", "build nf page" 등을 말하거나 NF 이름을 지정하면 무조건 이 skill 을 사용한다. 동작 — `design/<nf>/_manifest.yaml` 의 ready_for_build 가 true 인지 확인하고, 7 카테고리 (Interface / API / Data Model / Service Scenarios / Cross-NF Dependencies / Configuration / Error Handling) 를 일괄 또는 부분 빌드한다. 카테고리 인자 (`--data-model`, `--api`, `--interface` 등) 로 부분 빌드 가능 — 가장 자주 쓰이는 시나리오는 "papers/ 에 새 ref 추가 후 Data Model 트리만 재추출". Data Model 은 `design/scripts/resolve-yaml-refs.py` 가 chain 추적, Service Scenarios 의 mermaid 는 사람이 작성 (도구가 자동 작성하지 않음 — figure 추출은 sprint 후반). 매니페스트 생성·갱신은 sibling `/nf-init`, 완성도 검사는 `/nf-status` 의 책임이며 본 skill 은 페이지 *내용 생성* 에 집중한다. 커밋은 자동 수행 금지.
 argument-hint: "<nf> [--<category>]"
-allowed-tools: Bash(.venv/bin/python3 design/scripts/extract.py *) Bash(.venv/bin/python3 design/scripts/spec-split.py *) Bash(.venv/bin/python3 design/scripts/resolve-yaml-refs.py *) Bash(.venv/bin/python3 design/scripts/nf-manifest.py *) Bash(mkdir -p *) Bash(ls *) Bash(grep *) Bash(awk *) Bash(find *)
+allowed-tools: Bash(.venv/bin/python3 design/scripts/extract.py *) Bash(.venv/bin/python3 design/scripts/spec-split.py *) Bash(.venv/bin/python3 design/scripts/resolve-yaml-refs.py *) Bash(.venv/bin/python3 design/scripts/nf-manifest.py *) Bash(.venv/bin/python3 design/scripts/build-handoff.py *) Bash(mkdir -p *) Bash(ls *) Bash(grep *) Bash(awk *) Bash(find *)
 ---
 
 # nf-build — 7 카테고리 design 페이지 생성·갱신
@@ -130,7 +130,20 @@ status: draft|ready_for_review|handoff_ready|canonical  # 사람이 갱신
 - 갱신 페이지 — 항목이 이미 있으면 *내용 줄* 만 갱신 (예 version, 한 줄 설명).
 - 형식 — `- [[{nf}/{wiki-stem}]] — TS NN.NNN v<x.y.z>, <한국어 한 줄 설명>`.
 
-### 5. 결과 보고 (커밋 X)
+### 5. handoff yaml 갱신
+
+markdown 7 카테고리 페이지 빌드 완료 직후 `build-handoff.py` 를 자동 호출해 handoff contract 를 최신 상태로 갱신한다.
+
+```bash
+.venv/bin/python3 design/scripts/build-handoff.py <nf>
+```
+
+- 산출 — `handoff/<nf>/_handoff.yaml` (schema_version: handoff-v1, self-contained).
+- fail-soft — 카테고리 파싱 실패 시 `coverage.missing_categories` 에 기록, 빌드를 멈추지 않는다.
+- 부분 빌드 (`--<category>`) 시에도 호출 — yaml 전체를 덮어쓰되 나머지 카테고리는 빈 값 대신 이전 산출이 남는다 (build-handoff.py 는 항상 전체를 새로 생성함 — 부분 병합 아님).
+- handoff yaml 은 사용자가 직접 편집하지 않는다 — 매 빌드 시 자동 갱신됨.
+
+### 6. 결과 보고 (커밋 X)
 - 갱신·신규 파일 목록 (`design/<nf>/3gpp-*.md`, 매니페스트는 변경 없음).
 - 카테고리별 빌드 상태 — *완료 / placeholder / not-built (도구 부재)*.
 - 미해결 leaf 목록 (Data Model 의 chain leaf, Cross-NF 의 자동 추출 미가용 등).

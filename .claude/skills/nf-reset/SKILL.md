@@ -35,7 +35,7 @@ allowed-tools: Bash(mkdir -p *) Bash(mv *) Bash(ls *) Bash(git mv *)
 
 ### 1. 입력 검증
 - `<nf>` 가 비어있거나 `design/<nf>/` 가 부재하면 정지.
-- 옮길 파일 목록 수집 — `design/<nf>/3gpp-*.md`, `design/<nf>/_status.yaml`. `--full` 면 `_manifest.yaml` 추가.
+- 옮길 파일 목록 수집 — `design/<nf>/3gpp-*.md`, `design/<nf>/_status.yaml`, `handoff/<nf>/_handoff.yaml` (존재 시). `--full` 면 `_manifest.yaml` 추가.
 - `index.md` 의 해당 NF 섹션이 wikilink 항목을 가지고 있는지 확인 — 있으면 §3 에서 placeholder 로 되돌릴 대상.
 - 옮길 파일이 0개이고 index 항목도 없으면 "이미 비어있음" 보고 후 정지 (archive 폴더 만들지 않음).
 
@@ -54,6 +54,7 @@ allowed-tools: Bash(mkdir -p *) Bash(mv *) Bash(ls *) Bash(git mv *)
 ### 4. 결과 보고
 - archive 위치.
 - 남은 design/<nf>/ 파일 (보존된 것). `--full` 이 아니면 `_manifest.yaml` 만 남음.
+- `handoff/<nf>/_handoff.yaml` 은 `--full` 여부와 무관하게 항상 archive (`design/` 페이지와 함께 갱신되므로 오래된 yaml 잔존은 잘못된 계약이 됨).
 - index.md 의 NF 섹션이 placeholder 로 되돌려졌음을 명시.
 - 다음 액션 추천.
   - `_manifest.yaml` 살림 + manifest 가 ready → `/nf-build <nf>` 로 즉시 재빌드.
@@ -73,6 +74,7 @@ allowed-tools: Bash(mkdir -p *) Bash(mv *) Bash(ls *) Bash(git mv *)
   옮길 파일 —
     design/nssf/3gpp-ts-29531.md (38 KB)
     design/nssf/_status.yaml (7 KB)
+    handoff/nssf/_handoff.yaml (존재 시)
   보존 — design/nssf/_manifest.yaml
   index.md NSSF 섹션 — [[nssf/3gpp-ts-29531]] 항목 제거 후 placeholder 로 되돌림.
   진행할까요? [Y/n]:
