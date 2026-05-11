@@ -18,16 +18,6 @@
 
 ---
 
-## 진행 중 작업
-
-본 repo 의 *논리적 design ↔ dev 분리 + handoff contract 승격* 마이그레이션 진행 중. 상세 plan·체크리스트는 [@docs/plan.md](./docs/plan.md) 가 진실 출처. 새 PC 에서 작업 시작 시 — [@docs/handover.md](./docs/handover.md) 의 memory 5개 블록 cp + [@docs/setup.md](./docs/setup.md) 의 mattpocock skill install 한 번.
-
-- **다음**. C8 — push + 본 섹션 정리.
-- **종료 조건**. `/nf-status nssf` 가 새 4 gate 모두 PASS 후 C8 push.
-- **본 섹션 처리**. C8 완료 시 본 섹션 제거 또는 다음 plan 으로 교체 (정책 only 원칙 회복).
-
----
-
 ## THE FOUR RULES (do not violate)
 
 매 응답에 적용.
