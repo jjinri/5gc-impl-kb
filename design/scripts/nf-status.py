@@ -378,6 +378,95 @@ def check_service_flow_coverage(page: pathlib.Path | None, profile: str) -> dict
     return base
 
 
+# ─── Tier 1/2 — handoff contract ────────────────────────────────────
+
+def _has_dollar_ref(obj: Any) -> bool:
+    """handoff yaml 구조 안에 '$ref' 키 존재 여부 재귀 검사."""
+    if isinstance(obj, dict):
+        if "$ref" in obj:
+            return True
+        return any(_has_dollar_ref(v) for v in obj.values())
+    if isinstance(obj, list):
+        return any(_has_dollar_ref(item) for item in obj)
+    return False
+
+
+def check_handoff_yaml_valid(nf: str, profile: str) -> dict:
+    base = {
+        "id": "handoff_yaml_valid", "tier": 1,
+        "name": "handoff yaml 존재·valid·schema_version==handoff-v1·필수 top-level key 4개",
+        "criterion": (
+            "handoff/<nf>/_handoff.yaml 존재 + yaml.safe_load 통과 + "
+            "schema_version == 'handoff-v1' + "
+            "top-level key nf·spec·api·data_model 모두 보유."
+        ),
+        "applies_to": ["stage_3_only", "mixed"],
+    }
+    if not applies(base, profile):
+        base.update(status="NOT_APPLICABLE", current=f"profile={profile}", to_pass=[])
+        return base
+    handoff_path = REPO / "handoff" / nf / "_handoff.yaml"
+    if not handoff_path.is_file():
+        base.update(status="FAIL", current="handoff yaml 없음",
+                    to_pass=[f"python3 design/scripts/build-handoff.py {nf}"])
+        return base
+    try:
+        data = yaml.safe_load(handoff_path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as e:
+        base.update(status="FAIL", current=f"yaml 파싱 실패 — {e}",
+                    to_pass=[f"python3 design/scripts/build-handoff.py {nf}"])
+        return base
+    issues = []
+    if data.get("schema_version") != "handoff-v1":
+        issues.append(f"schema_version={data.get('schema_version')!r} (≠ handoff-v1)")
+    for k in ("nf", "spec", "api", "data_model"):
+        if k not in data:
+            issues.append(f"top-level key '{k}' 없음")
+    if issues:
+        base.update(status="FAIL", current="; ".join(issues),
+                    to_pass=[f"python3 design/scripts/build-handoff.py {nf} 로 재생성"])
+    else:
+        base.update(status="PASS",
+                    current="schema_version=handoff-v1, 필수 top-level key 4개 존재",
+                    to_pass=[])
+    return base
+
+
+def check_handoff_yaml_self_contained(nf: str, profile: str) -> dict:
+    base = {
+        "id": "handoff_yaml_self_contained", "tier": 2,
+        "name": "handoff yaml 안 외부 $ref 0건 (self-contained)",
+        "criterion": (
+            "handoff/<nf>/_handoff.yaml 구조 안에 '$ref' 키 0건. "
+            "외부 spec yaml 또는 다른 NF handoff 를 가리키는 참조 없음."
+        ),
+        "applies_to": ["stage_3_only", "mixed"],
+    }
+    if not applies(base, profile):
+        base.update(status="NOT_APPLICABLE", current=f"profile={profile}", to_pass=[])
+        return base
+    handoff_path = REPO / "handoff" / nf / "_handoff.yaml"
+    if not handoff_path.is_file():
+        base.update(status="FAIL", current="handoff yaml 없음",
+                    to_pass=[f"python3 design/scripts/build-handoff.py {nf}"])
+        return base
+    try:
+        data = yaml.safe_load(handoff_path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as e:
+        base.update(status="FAIL", current=f"yaml 파싱 실패 — {e}",
+                    to_pass=[f"python3 design/scripts/build-handoff.py {nf}"])
+        return base
+    if _has_dollar_ref(data):
+        base.update(status="FAIL", current="$ref 키 존재",
+                    to_pass=[
+                        "build-handoff.py 의 data_model 파싱에서 $ref 키가 yaml 에 포함되는 버그 수정",
+                        f"python3 design/scripts/build-handoff.py {nf} 재실행",
+                    ])
+    else:
+        base.update(status="PASS", current="$ref 키 0건", to_pass=[])
+    return base
+
+
 # ─── Tier 3 / 4 — NOT_RUN placeholder ────────────────────────────────
 
 def check_schema_implementable(nf: str, profile: str) -> dict:
@@ -458,12 +547,14 @@ GATE_DEFS = [
         "data_model_chain_complete", "api_operation_coverage",
         "service_flow_coverage", "wikilinks_resolve",
         "no_korean_colon_end",
+        "handoff_yaml_valid", "handoff_yaml_self_contained",
     ]),
     ("canonical", [
         "frontmatter_valid", "sections_complete", "manifest_ready",
         "data_model_chain_complete", "api_operation_coverage",
         "service_flow_coverage", "wikilinks_resolve",
         "no_korean_colon_end",
+        "handoff_yaml_valid", "handoff_yaml_self_contained",
         "schema_implementable", "implementation_guidance_quality",
     ]),
 ]
@@ -568,6 +659,8 @@ def main() -> None:
         check_data_model_chain(page, profile),
         check_api_coverage(page, manifest, profile),
         check_service_flow_coverage(page, profile),
+        check_handoff_yaml_valid(nf, profile),
+        check_handoff_yaml_self_contained(nf, profile),
         check_schema_implementable(nf, profile),
         check_subjective_review(manifest),
     ]
