@@ -1,16 +1,15 @@
 # 5gc-impl-kb
 
-3GPP 5G Core 의 *core NF (TS 29.531 NSSF, TS 29.510 NRF 등) 를 software 로 구현하는 데 필요한 모든 지식* 을 카테고리별로 정리한 knowledge base. 단순 spec 요약 wiki 가 아니라 *구현용* — `$ref` chain 이 끝까지 풀려 C struct 로 떨어질 수 있어야 하고, 표·그림이 보존되어야 하며, cross-NF 호출 그래프가 명확해야 한다.
+3GPP spec 으로부터 LLM agent 자동 파이프라인으로 *NF design deliverable* 을 생산하는 **5gc-design 시스템**. `design/<nf>/3gpp-*.md` (7 카테고리 페이지) 와 `handoff/<nf>/_handoff.yaml` (5gc-dev contract) 가 주요 산출.
 
 ```
 specs/{spec}/{file}.{pdf,docx,doc,yaml}
         │
-        ▼
-   매니페스트 (kb/<nf>/_manifest.yaml)
-   yaml $ref chain + docx clause 2 References 자동 검출
+        ▼  nf-manifest.py
+   _manifest.yaml  (의존성 + ready_for_build)
         │
-        ▼
-   7 카테고리 페이지 (kb/<nf>/3gpp-{ts|tr}-{n}.md)
+        ▼  nf-build SKILL
+   design/<nf>/3gpp-{ts|tr}-{n}.md   (7 카테고리 페이지)
    ├── Interface         (URI, transport, auth)
    ├── API               (operation 매트릭스)
    ├── Data Model        (chain-resolved 트리)
@@ -19,8 +18,11 @@ specs/{spec}/{file}.{pdf,docx,doc,yaml}
    ├── Configuration     (feature, default, timeout)
    └── Error Handling    (code · cause · 복구)
         │
-        ▼
-   완성도 평가 (kb/<nf>/_status.yaml) — Tier 1~4 acceptance gate
+        ▼  build-handoff.py  (nf-build 내 자동 호출)
+   handoff/<nf>/_handoff.yaml   (5gc-dev contract — self-contained)
+        │
+        ▼  nf-status SKILL
+   _status.yaml  (acceptance gate: draft → review_ready → handoff_ready → canonical)
 ```
 
 ## Quick start
@@ -32,14 +34,14 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```
 
-의존성은 `requirements.txt` 가 진실 출처 (`pypdf`·`python-docx`·`pyyaml`). 본 repo 의 모든 도구는 `.venv/bin/python3 scripts/<name>.py` 형태로 호출하므로 venv 활성화는 불필요. `.doc` (legacy MS Word) 처리가 필요하면 별도로 `sudo apt install libreoffice-core` 또는 `antiword`.
+의존성은 `requirements.txt` 가 진실 출처 (`pypdf`·`python-docx`·`pyyaml`). 본 repo 의 모든 도구는 `.venv/bin/python3 design/scripts/<name>.py` 형태로 호출하므로 venv 활성화는 불필요. `.doc` (legacy MS Word) 처리가 필요하면 별도로 `sudo apt install libreoffice-core` 또는 `antiword`.
 
 ## 작업 사이클 — 4 SKILL
 
-NF 한 개를 KB 에 등록·완성·재시작하는 흐름은 다음 4 SKILL 의 사이클.
+NF 한 개를 design 에 등록·완성·재시작하는 흐름은 다음 4 SKILL 의 사이클.
 
 - `/nf-init <nf> --primary <spec>` — 매니페스트 보강 (반복).
-- `/nf-build <nf> [--<category>]` — 7 카테고리 페이지 생성·갱신.
+- `/nf-build <nf> [--<category>]` — 7 카테고리 페이지 생성·갱신 + `handoff/<nf>/_handoff.yaml` 자동 갱신.
 - `/nf-status <nf>` — acceptance gate 평가, FAIL 마다 다음 액션 보고.
 - `/nf-reset <nf> [--full]` — 백업 후 재시작.
 
