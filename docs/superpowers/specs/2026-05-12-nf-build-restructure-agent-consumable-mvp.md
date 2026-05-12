@@ -166,7 +166,7 @@ tasks:
       - <impl-path>/api/nsselection.*       # 구체 path 는 dev agent 결정 (may_decide)
       - <test-path>/test_nsselection.*
     blocked_by:
-      - api/NSSelectionGet.status != canonical
+      - api/NSSelectionGet.status not in [canonical, handoff_ready]
       - data-model/SliceInfoForRegistration.status not in [canonical, handoff_ready]
       - data-model/AuthorizedNetworkSliceInfo.status not in [canonical, handoff_ready]
     acceptance:
@@ -205,12 +205,22 @@ tasks:
 
 | # | 룰 | 검사 방법 |
 |---|---|---|
-| 1 | `handoff-v2` schema valid | yaml schema 파일 (별도 산출) 으로 jsonschema validate |
+| 1 | `handoff-v2` schema valid | yaml 구조 검증. MVP 는 *경량 Python validator* (`design/scripts/validate-extraction.py` 안 dict 검사). jsonschema 외부 의존성 추가하지 않음 — 후속 사이클에서 dependency 추가 여부 별도 결정 |
 | 2 | status enum valid | 값이 `[canonical, handoff_ready, draft, blocked, not_applicable]` 안 |
-| 3 | topic file exists | yaml 의 모든 토픽 ID 가 `design/<nf>/<topic>/<id>.md` 또는 단일 파일로 존재 |
-| 4 | `depends_on` target exists | 각 토픽의 depends_on 이 yaml 안 다른 토픽 ID 와 일치 |
+| 3 | topic file exists | 모든 토픽 ID 가 path resolution 규칙 (§4.5) 으로 실존 파일에 매핑 |
+| 4 | cross-reference target exists | 각 토픽의 `depends_on` · `related` · `error_refs` 와 `tasks[*].read` 가 모두 yaml 안 다른 토픽 ID (또는 토픽#anchor) 와 일치. depends_on 만이 아닌 *모든 cross-ref* 검증 |
 | 5 | category/topic consistency | category status 가 `handoff_ready` 면 산하 모든 topic status 도 `handoff_ready` 또는 `canonical` |
 | 6 | blocked/not_applicable semantics | `blocked` 는 `blocked_reason` 필수, `not_applicable` 은 `na_reason` 필수 + 본문 비어있어야 함 |
+| 7 | **marker ID unique** | 같은 파일 안에 `AUTO:<id>` 또는 `USER:<id>` 가 2번 이상 등장하면 FAIL (§2 의 marker 원칙) |
+| 8 | **frontmatter ↔ marker sync** | 토픽 파일 frontmatter 의 `generated_sections` · `user_sections` 가 본문의 marker ID 집합과 정확히 일치. marker 정책은 MVP 의 *핵심 안전장치* 이므로 report-only 가 아닌 hard gate |
+
+### 4.5 Path resolution 규칙 (basic #3 의 정의)
+
+| layout | path | 예 |
+|---|---|---|
+| `directory` 카테고리 | `design/<nf>/<category>/<topic-id>.md` | `api/NSSelectionGet` → `design/nssf/api/NSSelectionGet.md` |
+| `single-file` 카테고리 | `design/<nf>/<category>.md`. 토픽 ID == 카테고리 ID | `interface` → `design/nssf/interface.md` |
+| 토픽#anchor | `<topic-path>` 안 `<a id="anchor">` 또는 `## <heading>` 슬러그 일치 | `error-handling#nsselection-400` → `design/nssf/error-handling.md` 안 `nsselection-400` anchor |
 
 ### Strict (report only, MVP 단계에선 차단 안 함)
 
@@ -218,7 +228,6 @@ tasks:
 - docx § anchor exact match
 - error cause 전수 매칭 (yaml responses × ProblemDetails cause)
 - mermaid op semantic validation (sequenceDiagram 화살표 자료형 = yaml schema 와 일치)
-- generated_sections manifest ↔ marker 위치 sync (MVP 후반에 hard 로 격상 검토)
 
 ### 출력 형식
 
@@ -286,7 +295,7 @@ categories:
   behavior-state:       { status: draft, layout: directory }
   failure-policy:       { status: draft, layout: single-file }
   configuration:        { status: draft, layout: single-file }
-  persistence-design:   { status: not_applicable, na_reason: "NSSF 는 stateless reference impl" }
+  persistence:          { status: draft, layout: single-file, deferred_reason: "NSSelectionGet MVP 범위 밖. stateless 여부는 구현 정책 결정 — agent_contract.may_decide 가 아닌 별도 decision record 로 후속 사이클에서 처리" }
   test-matrix:          { status: draft, layout: single-file }
   work-plan:            { status: draft, layout: single-file }
   cross-nf:             { status: draft, layout: single-file }
@@ -319,8 +328,19 @@ tasks:
   nssf-api-nsselection-get:
     # §3 참조
 
+# spec ref → topic ID 역방향 lookup (상위 spec §4 와 일치).
+# agent 가 "TS 29.531 §X 를 구현하라" 요청 시 어떤 토픽을 읽어야 하는지 즉시 결정.
 spec_index:
-  TS 29.531: specs/29.531/29531-i40.docx
+  "TS 29.531 §5.2.2.2.1":  [api/NSSelectionGet]
+  "TS 29.531 §6.1.6.2.4":  [data-model/SliceInfoForRegistration]
+  "TS 29.531 §6.1.6.2.5":  [data-model/AuthorizedNetworkSliceInfo]
+  "TS 29.531 §6.1.1":      [interface]
+  "TS 29.531 §6.1.5":      [interface]
+  "TS 29.531 §6.1.7":      [error-handling]
+
+# spec ref → source file (별도 블록 — spec_index 와 의미 분리).
+sources:
+  "TS 29.531": specs/29.531/29531-i40.docx
 ```
 
 ### MVP 에서 *수동* 으로 이주할 prose (M.5 등가)
@@ -337,8 +357,8 @@ spec_index:
 
 1. NSSF MVP yaml + 6 토픽 파일 commit.
 2. fresh Claude Code agent 세션 시작 (본 spec / 직전 대화 context 없음).
-3. 입력 — `handoff/nssf/_handoff.yaml` 경로만 제공.
-4. 요청 — "이 yaml 을 entry point 로 NSSelectionGet API 구현 plan 을 세워라. 본 yaml 외 design 본문 일부를 읽어도 좋다."
+3. 초기 entry point — `handoff/nssf/_handoff.yaml` 하나만 제공. 이후 agent 가 contract 의 `default_read_order` 에 따라 topic 파일을 *읽는 것은 허용 (요구됨)*.
+4. 요청 — "이 yaml 을 초기 entry point 로 NSSelectionGet API 구현 plan 을 세워라."
 5. agent 산출 — plan 마크다운 1개.
 
 ### PASS 기준 (4개 — AND)
@@ -346,15 +366,15 @@ spec_index:
 | # | 기준 | 판정 |
 |---|---|---|
 | 1 | agent 가 `default_read_order` 를 따라 토픽을 읽었는가 (plan 의 *Read* 절에 명시) | agent 산출에 read 목록 존재 + 순서가 contract 와 일치 |
-| 2 | `status=draft` 또는 `status=blocked` 토픽을 구현 대상에 *포함하지 않았는가* | plan 의 implement 절에 module-decomposition/SelectionEngine (draft) 가 없음 |
-| 3 | `status=not_applicable` 토픽을 *invent 하지 않았는가* | plan 에 persistence-design 관련 산출 없음 |
+| 2 | `status=draft` 또는 `status=blocked` 토픽을 *구현 대상에 포함하지 않았는가* (기존 토픽의 잘못된 implement) | plan 의 implement 절에 module-decomposition/SelectionEngine (draft) 가 없음. persistence 등 MVP 외 draft 카테고리에 대한 implement 산출 없음 |
+| 3 | yaml 에 *없는* 토픽·산출을 *invent 하지 않았는가* (새 artifact 의 무근거 추가) | plan 의 `produces` 가 yaml 의 tasks[*].produces 와 일치하고, yaml 외 토픽 ID (예 `data-model/Foo`) 가 등장하지 않음 |
 | 4 | plan 에 `read` / `produces` / `acceptance` 가 있고 yaml 의 task schema 와 isomorphic 한가 | plan 의 구조가 §3 task schema 와 1:1 매핑 |
 
 ### FAIL 시 행동
 
 - 기준 1·4 FAIL → `agent_contract.default_read_order` 또는 `tasks` schema 가 너무 모호. spec 정련.
-- 기준 2 FAIL → agent 가 draft 토픽을 *채우려* 했다. `must_not` 어절이 약함. 더 명확한 금지 표현 + status enum 행동 표 강화.
-- 기준 3 FAIL → not_applicable 의 행동 정의 부족. `must_not` 에 명시 강화.
+- 기준 2 FAIL → agent 가 draft/blocked 토픽을 *implement 하려* 했다. `must_not` 어절이 약함. 더 명확한 금지 표현 + status enum 행동 표 강화.
+- 기준 3 FAIL → agent 가 yaml 외 토픽·산출을 *invent* 했다. `must_not` 의 "spec_refs / Implementation Notes 에 근거 없는 행동 invent" 항목 강화.
 - 다음 사이클 진입 전 PASS 필수.
 
 ### MVP 종료 후 next
@@ -376,10 +396,14 @@ spec_index:
 - [ ] §2 MVP 범위의 marker 적용 위치 표 명시
 - [ ] §3 task schema 6 필드 (phase·goal·read·produces·blocked_by·acceptance) 정의
 - [ ] §3 사람 vs 도구 자리 분리 표 명시
-- [ ] §4 basic 6 룰 (hard gate) + strict (report-only) 분리 명시
+- [ ] §4 basic 8 룰 (hard gate, marker 안전장치 포함) + strict (report-only) 분리 명시
+- [ ] §4.5 path resolution 규칙 (directory / single-file / topic#anchor) 명시
+- [ ] §4 basic #1 의 schema 검증 방식 (경량 Python validator, jsonschema 의존성 없음) 명시
 - [ ] §5 NSSF MVP 토픽 6 개 목록 + handoff-v2 yaml 예시 명시
-- [ ] §5 MVP 외 카테고리는 `status=draft` 또는 `not_applicable` 로 처리
-- [ ] §6 Agent Proof 절차 + 4 PASS 기준 + FAIL 시 행동 정의
+- [ ] §5 MVP 외 카테고리는 `status=draft` (deferred_reason 포함) 로 처리. `not_applicable` 은 MVP 에서 사용하지 않음 (구현 정책 결정은 별도 decision record)
+- [ ] §5 category slug 가 상위 spec 과 일관 (특히 `persistence` — `persistence-design` 아님)
+- [ ] §5 `spec_index` 가 spec ref → topic 역방향 lookup, source file 매핑은 별도 `sources:` 블록
+- [ ] §6 Agent Proof 절차 (초기 entry point 만 제공, topic 파일 read 허용) + 4 PASS 기준 + FAIL 시 행동 정의
 - [ ] §6 MVP 종료 후 next (NSSF 나머지 API / 다른 카테고리 / 다른 NF) 가 *별도 사이클* 임을 명시
 
 ---
@@ -389,7 +413,7 @@ spec_index:
 | # | 위험 | 임계 / 재평가 시점 |
 |---|---|---|
 | 1 | NSSelection 1 API 가 너무 작아 agent contract 의 한계가 드러나지 않음 | Agent Proof PASS 후에도 다음 사이클 진입 전 NSSelectionPost 같은 *복잡한* API 로 한 번 더 검증 |
-| 2 | basic 6 룰이 너무 느슨해 strict 룰 일부가 hard gate 가 됐어야 함이 사후 드러남 | Agent Proof FAIL 의 원인이 strict 룰 영역이었는지 분석 — 해당 룰을 basic 으로 격상 |
+| 2 | basic 8 룰이 너무 느슨해 strict 룰 일부가 hard gate 가 됐어야 함이 사후 드러남 | Agent Proof FAIL 의 원인이 strict 룰 영역이었는지 분석 — 해당 룰을 basic 으로 격상 |
 | 3 | AUTO/USER marker 의 frontmatter manifest 가 사람이 수동 동기화하기 부담 | MVP 종료 시점에 도구 자동 sync 가 필요한지 (`generated_sections` 자동 산출) 판정 |
 | 4 | agent_contract 가 yaml top-level 에 박혀 NF 추가 시 contract 중복 | NSSF 의 contract 와 다른 NF 의 contract 가 *실제로* 다른지 확인 — 같다면 별도 `agent-contract.yaml` (옵션 B) 재검토 |
 | 5 | Agent Proof 가 본 KB 외 환경 (다른 IDE·다른 모델) 으로 generalize 안 됨 | MVP 종료 후 Claude Code 외 1 환경 (예 codex CLI) 에서 동일 yaml 로 proof 재실행 |
