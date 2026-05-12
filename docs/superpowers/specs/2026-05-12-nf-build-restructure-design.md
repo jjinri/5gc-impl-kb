@@ -442,7 +442,7 @@ stateDiagram-v2
 | M.6 | `/nf-status nssf` → handoff_ready gate 통과 확인 |
 | M.7 | `.gitignore` 에 `design/*/_archive/` 추가. archive 는 git tag (M.1) 로 보존, repo 트리에서 제거 |
 | M.8 | CLAUDE.md 갱신 (§11) + nf-reset SKILL 삭제 |
-| M.9 | NSSF dev 단계 진입 — handoff-v2 yaml 을 단일 entry point 로 dev agent 가 코드 생성. 본 spec 의 *최종 검증* — design 산출만으로 dev 완성 가능했는지 회고 |
+| M.9 | NSSF dev 단계 진입 — handoff-v2 yaml 을 단일 entry point 로 dev agent 가 코드 생성. 본 spec 의 *최종 검증* — design 산출만으로 dev 완성 가능했는지 회고. 회고 산출은 `docs/retros/<YYYY-MM-DD>-nssf-design-to-dev-cycle.md` 로 commit — 후속 NF 사이클·후속 spec 의 *공식 입력* |
 
 ### archive 정책
 
@@ -537,6 +537,7 @@ stateDiagram-v2
 - [x] 마이그레이션 — NSSF 단일 사이클 (M.1~M.9, design → dev 완성까지) — 정량 기준 포함 — fix 되었다 (§10)
 - [x] CLAUDE.md 갱신 포인트 7 종이 명시되었다 (§11)
 - [x] 위험 11 종 + 완화 + 재평가 시점이 fix 되었다 (§12)
+- [x] 토픽 frontmatter 표준 (부록 A) + admonition 어휘 (부록 B) 가 명시되었다
 
 → implementation plan 작성 가능 상태.
 
@@ -565,7 +566,7 @@ related:                        # 비의존 cross-ref
 error_refs:                     # error-handling.md 의 section anchor
   - error-handling#403
   - error-handling#404
-migrated_from: null             # M.5 prose 이주 시 채움 (예 "3gpp-ts-29531.md#L123-L145")
+migrated_from: "3gpp-ts-29531.md#L123-L145"   # 키 부재 = 신규 토픽 / 키 존재 = M.5 prose 이주. 표기 (null vs 키 부재) 는 도구 구현 시점 결정
 ---
 ```
 
