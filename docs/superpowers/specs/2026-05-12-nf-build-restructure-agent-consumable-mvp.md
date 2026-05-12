@@ -256,8 +256,8 @@ tasks:
 
 ```text
 [validate-extraction] nssf --level basic
-  basic: PASS 5, FAIL 1
-    FAIL #4 depends_on target: api/NSSelectionGet → data-model/SliceInfoForRegistration_v2 (yaml 에 없음)
+  basic: PASS 12, FAIL 1
+    FAIL #4 cross-reference target: api/NSSelectionGet → data-model/SliceInfoForRegistration_v2 (yaml 에 없음)
   strict (report): WARN 3
     WARN service flow participant: SD-1 에 "OAuth Server" — spec 어절 "NRF" 와 mismatch
 ```
