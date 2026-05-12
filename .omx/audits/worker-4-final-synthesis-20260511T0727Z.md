@@ -95,3 +95,7 @@ Main risk: this is NSSF-only evidence. Do not generalize until NRF or another NF
 - Test discovery found no Python tests under max-depth 3 (`NO_TESTS_FOUND`).
 
 Subagent skip reason: task-4 delegation was optional and serial execution was safer/sufficient because final synthesis required integrating live team state, local command evidence, and no code edits; no independent write subtask was needed.
+
+## Worker worktree integration caveat
+
+The final recommendation audits the leader repo root `/home/jjinri/AI/5gc-impl-kb`, where ignored/generated artifacts were present during evidence capture. A separate verification in the worker-4 git worktree reported `nf-status nssf --no-write` as PASS 8, FAIL 3, NOT_RUN 1 because ignored/generated files such as `design/nssf/_manifest.yaml` and related local artifacts are not present in the isolated worktree. This reinforces the recommendation: generated status/manifest/handoff state must be made explicit in the handoff/integration process before treating team-worker verification as equivalent to leader-root verification.
