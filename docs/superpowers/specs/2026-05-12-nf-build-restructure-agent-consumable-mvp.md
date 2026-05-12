@@ -141,6 +141,14 @@ user_sections:
 | interface | `auth-block`, `transport-block` | `implementation-notes` |
 | error-handling | `error-matrix` | `recovery-prose`, `implementation-notes` |
 
+### Data Model JSON — marker 대상 아님 (별도 정책)
+
+`data-model/<id>.json` 은 markdown marker 정책 대상 *아니다*. 완전 **AUTO machine artifact** — `/nf-build --data-model` (내부 `resolve-yaml-refs.py --emit-json`) 가 매 빌드 전체 재생성. 사람 편집 금지.
+
+- 정책 — markdown 은 trace/prose, JSON 은 agent/codegen contract. 두 산출 모두 같은 yaml chain 해석의 결과.
+- 사람 산문은 markdown 의 `Implementation Notes` (USER section) 에만. JSON 에는 prose field 없음.
+- JSON 안에는 agent 행동 계약 (`may_codegen` 등) 을 *박지 않는다*. 행동 계약은 handoff-v2 top-level `agent_contract` 가 단일 진실 출처.
+
 ---
 
 ## §3. Work Plan = Agent Task Graph
@@ -157,7 +165,9 @@ tasks:
     goal: Implement NSSelectionGet handler
     read:
       - api/NSSelectionGet
-      - data-model/SliceInfoForRegistration
+      - data-model/SliceInfoForRegistration.machine_file        # JSON normalized schema (agent/codegen primary)
+      - data-model/SliceInfoForRegistration                     # markdown (trace/Implementation Notes)
+      - data-model/AuthorizedNetworkSliceInfo.machine_file
       - data-model/AuthorizedNetworkSliceInfo
       - module-decomposition/SelectionEngine
       - interface
@@ -213,6 +223,11 @@ tasks:
 | 6 | blocked/not_applicable semantics | `blocked` 는 `blocked_reason` 필수, `not_applicable` 은 `na_reason` 필수 + 본문 비어있어야 함 |
 | 7 | **marker ID unique** | 같은 파일 안에 `AUTO:<id>` 또는 `USER:<id>` 가 2번 이상 등장하면 FAIL (§2 의 marker 원칙) |
 | 8 | **frontmatter ↔ marker sync** | 토픽 파일 frontmatter 의 `generated_sections` · `user_sections` 가 본문의 marker ID 집합과 정확히 일치. marker 정책은 MVP 의 *핵심 안전장치* 이므로 report-only 가 아닌 hard gate |
+| 9 | **data-model machine_file 존재** | 카테고리 `data-model` 의 모든 토픽은 handoff yaml 에 `machine_file` 키 + 해당 path (`design/<nf>/data-model/<id>.json`) 실존 파일 둘 다 필수 |
+| 10 | **machine_file JSON parse valid** | `json.load` 가능. `schema_version`·`topic_id`·`status`·`fields`·`dependencies`·`unresolved_refs` 필드 존재 |
+| 11 | **JSON ↔ handoff topic 정합** | JSON 의 `topic_id` 가 handoff topic ID 와 일치. JSON 의 `status` 가 handoff topic `status` 와 일치 (둘이 다르면 어느 쪽이 진실인지 불명) |
+| 12 | **JSON unresolved_refs ↔ status** | JSON `unresolved_refs` 가 비어있지 *않으면* topic status 는 `blocked` 또는 `draft` 여야 함. `canonical` / `handoff_ready` 상태인데 unresolved 가 남아있으면 FAIL |
+| 13 | **JSON dependencies target exists** | JSON `dependencies` 의 모든 ID 가 handoff topics 안에 존재. cross-ref 검증의 JSON 변형 (basic #4 의 markdown 측면과 paired) |
 
 ### 4.5 Path resolution 규칙 (basic #3 의 정의)
 
@@ -257,13 +272,15 @@ design/nssf/
 ├── api/
 │   └── NSSelectionGet.md         # 디렉터리·토픽 — 1 API
 ├── data-model/
-│   ├── SliceInfoForRegistration.md
-│   └── AuthorizedNetworkSliceInfo.md
+│   ├── SliceInfoForRegistration.md         # trace / Implementation Notes
+│   ├── SliceInfoForRegistration.json       # AUTO machine artifact (agent/codegen primary)
+│   ├── AuthorizedNetworkSliceInfo.md
+│   └── AuthorizedNetworkSliceInfo.json
 └── module-decomposition/
     └── SelectionEngine.md
 ```
 
-총 6 토픽. 13 카테고리 중 5 카테고리만 MVP. **MVP 외 카테고리** — Service Scenarios, Behavior & State, Failure Policy, Test Matrix, Work Plan (graph 형태로는 yaml 안에만), Configuration, Persistence Design, Cross-NF Calls — 본 MVP 에서는 *생성하지 않거나 빈 placeholder + status=draft*.
+총 6 토픽 + 2 machine_file (.json). 13 카테고리 중 5 카테고리만 MVP. **MVP 외 카테고리** — Service Scenarios, Behavior & State, Failure Policy, Test Matrix, Work Plan (graph 형태로는 yaml 안에만), Configuration, Persistence Design, Cross-NF Calls — 본 MVP 에서는 *생성하지 않거나 빈 placeholder + status=draft*.
 
 ### 산출 — handoff-v2 yaml MVP 예시 (요약)
 
@@ -311,9 +328,13 @@ topics:
     spec_refs: [TS 29.531 §5.2.2.2.1]
   data-model/SliceInfoForRegistration:
     status: canonical
+    file: design/nssf/data-model/SliceInfoForRegistration.md           # trace / Implementation Notes (markdown)
+    machine_file: design/nssf/data-model/SliceInfoForRegistration.json  # AUTO normalized schema (agent/codegen primary)
     spec_refs: [TS 29.531 §6.1.6.2.4]
   data-model/AuthorizedNetworkSliceInfo:
     status: canonical
+    file: design/nssf/data-model/AuthorizedNetworkSliceInfo.md
+    machine_file: design/nssf/data-model/AuthorizedNetworkSliceInfo.json
     spec_refs: [TS 29.531 §6.1.6.2.5]
   module-decomposition/SelectionEngine:
     status: draft         # MVP — 사람이 Implementation Notes 채울 자리
@@ -346,6 +367,44 @@ sources:
 ### MVP 에서 *수동* 으로 이주할 prose (M.5 등가)
 
 기존 단일 `design/nssf/3gpp-ts-29531.md` 에서 위 6 토픽에 해당하는 부분만 분리. *전체 이주가 아니다* — MVP 외 카테고리의 prose 는 archive 로 보내고 후속 사이클에서 다룬다.
+
+### Data Model JSON — 산출 형식 + 도구 자리
+
+**도구 자리** — `design/scripts/resolve-yaml-refs.py` 를 *확장* (`--emit-json` 옵션 또는 markdown 산출과 동시 emit). 별도 신설 도구 추가하지 않음 — 이미 chain resolve 책임이 같은 도구에 있음.
+
+**산출 형식 (예시 — `AuthorizedNetworkSliceInfo.json`)**
+
+```json
+{
+  "schema_version": "data-model-v1",
+  "nf": "nssf",
+  "topic_id": "data-model/AuthorizedNetworkSliceInfo",
+  "status": "canonical",
+  "source": {
+    "spec_refs": ["TS 29.531 §6.1.6.2.5"],
+    "openapi_refs": ["#/components/schemas/AuthorizedNetworkSliceInfo"],
+    "source_yaml": "specs/29.531/TS29531_Nnssf_NSSelection.yaml"
+  },
+  "root_schema": "AuthorizedNetworkSliceInfo",
+  "fields": [
+    {
+      "name": "authorizedNssai",
+      "required": true,
+      "type": "array",
+      "items": { "ref": "data-model/AllowedSnssai" },
+      "nullable": false
+    }
+  ],
+  "dependencies": ["data-model/AllowedSnssai"],
+  "unresolved_refs": []
+}
+```
+
+**JSON 안에 두지 않는 것** —
+
+- `agent_contract` (`may_codegen` 등) — handoff-v2 top-level 의 단일 진실. JSON 안 중복 금지.
+- 사람 산문 — markdown 의 `Implementation Notes` (USER section) 에만.
+- spec 어절 인용 prose — markdown 본문에만 (JSON 은 `spec_refs` 메타로만 추적).
 
 ---
 
@@ -394,12 +453,14 @@ sources:
 - [ ] §1 status enum × agent 행동 매핑 표 명시
 - [ ] §2 AUTO / USER marker 어휘 + frontmatter `generated_sections` manifest 정의
 - [ ] §2 MVP 범위의 marker 적용 위치 표 명시
+- [ ] §2 Data Model JSON 은 marker 대상 아님 (완전 AUTO machine artifact) 명시
 - [ ] §3 task schema 6 필드 (phase·goal·read·produces·blocked_by·acceptance) 정의
 - [ ] §3 사람 vs 도구 자리 분리 표 명시
-- [ ] §4 basic 8 룰 (hard gate, marker 안전장치 포함) + strict (report-only) 분리 명시
+- [ ] §4 basic 13 룰 (hard gate, marker 안전장치 + data-model JSON 5 룰 포함) + strict (report-only) 분리 명시
 - [ ] §4.5 path resolution 규칙 (directory / single-file / topic#anchor) 명시
 - [ ] §4 basic #1 의 schema 검증 방식 (경량 Python validator, jsonschema 의존성 없음) 명시
-- [ ] §5 NSSF MVP 토픽 6 개 목록 + handoff-v2 yaml 예시 명시
+- [ ] §5 NSSF MVP 토픽 6 개 + machine_file 2 개 (data-model JSON) 목록 + handoff-v2 yaml 예시 명시
+- [ ] §5 Data Model JSON 산출 형식 + 도구 자리 (`resolve-yaml-refs.py --emit-json`) 명시
 - [ ] §5 MVP 외 카테고리는 `status=draft` (deferred_reason 포함) 로 처리. `not_applicable` 은 MVP 에서 사용하지 않음 (구현 정책 결정은 별도 decision record)
 - [ ] §5 category slug 가 상위 spec 과 일관 (특히 `persistence` — `persistence-design` 아님)
 - [ ] §5 `spec_index` 가 spec ref → topic 역방향 lookup, source file 매핑은 별도 `sources:` 블록
@@ -418,6 +479,8 @@ sources:
 | 4 | agent_contract 가 yaml top-level 에 박혀 NF 추가 시 contract 중복 | NSSF 의 contract 와 다른 NF 의 contract 가 *실제로* 다른지 확인 — 같다면 별도 `agent-contract.yaml` (옵션 B) 재검토 |
 | 5 | Agent Proof 가 본 KB 외 환경 (다른 IDE·다른 모델) 으로 generalize 안 됨 | MVP 종료 후 Claude Code 외 1 환경 (예 codex CLI) 에서 동일 yaml 로 proof 재실행 |
 | 6 | MVP 외 카테고리를 `draft` 로 두면 `handoff_ready` gate 통과 못 함 → `/nf-status` 가 거짓 FAIL | gate 정의에서 `draft` 카테고리는 *해당 카테고리만 FAIL* 로 보고. NF 전체 gate 와는 별도. nf-status.py 갱신 |
+| 7 | data-model JSON 과 markdown 두 산출이 분기 (yaml chain 재해석 차이로) | 둘 다 같은 `resolve-yaml-refs.py` 의 *한 번 resolve* 결과에서 emit. 별개 호출 금지. validator basic #11 (JSON ↔ handoff topic 정합) 이 분기 검출 |
+| 8 | `resolve-yaml-refs.py` 확장 (`--emit-json`) 이 markdown emit 동작을 깨뜨림 | MVP 작업 시 markdown emit 회귀 테스트 (NSSF 2 토픽 markdown 출력 비교) 를 step 진입 조건으로 |
 
 ---
 
