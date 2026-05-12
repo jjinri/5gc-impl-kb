@@ -16,8 +16,8 @@ related:
 
 ## §0. 본 spec 메타
 
-- 목표 — `/nf-build` 산출을 **단일 페이지 → 13 카테고리·하이브리드 분할** 로 재설계. dev agent 가 design 산출만으로 NF 코드 시작 가능한 깊이로 격상.
-- 적용 시점 — 본 spec 승인 후 P1 (NSSF reference impl) → P2 (AMF stress test) 순으로 적용.
+- 목표 — `/nf-build` 산출을 **단일 페이지 → 13 카테고리·하이브리드 분할** 로 재설계. dev agent 가 design 산출만으로 NSSF 코드 시작 가능한 깊이로 격상.
+- 적용 시점 — 본 spec 승인 후 **NSSF 단일 NF reference impl** 로 적용. dev 단계까지 한 사이클 완성 목표. 다른 NF (AMF/SMF/UPF/NRF 등) 는 NSSF dev 완료 후 별도 사이클로 진행 — 본 spec 범위 밖.
 - 영향 범위 — `/nf-build`, `/nf-init`, `/nf-status` SKILL.md, `design/scripts/` 도구 7종 (4 신규 + 3 확장), `CLAUDE.md` 정책, `design/<nf>/` 디렉터리 레이아웃, `handoff/<nf>/_handoff.yaml` schema (v1 → v2).
 - `/nf-reset` SKILL — **폐기** (`/nf-init --reset` 으로 통합).
 
@@ -424,39 +424,25 @@ stateDiagram-v2
 
 + transition 표 (markdown table, trigger·precondition·side-effect·spec_ref 컬럼).
 
-**왜 admonition 인가** — spec auto-extraction 은 AMF 5GMM/5GSM 같이 transition 이 산문에 흩어진 경우 추출 정확도가 낮다. State machine 의 정확한 정의는 *결정적 의도* 의 일부이므로 사람이 admonition 5-10줄 작성하는 것이 정확도·자동화의 균형점. P2 (AMF) 검증 후 spec auto-extraction 으로 격상 여부 재판단.
+**왜 admonition 인가** — spec auto-extraction 은 transition 이 산문에 흩어진 경우 추출 정확도가 낮다. State machine 의 정확한 정의는 *결정적 의도* 의 일부이므로 사람이 admonition 5-10줄 작성하는 것이 정확도·자동화의 균형점. spec auto-extraction 으로의 격상 여부는 NSSF dev 완료 후 다른 NF 사이클 진입 시점에 별도 판단 — 본 spec 범위 밖.
 
 ---
 
-## §10. 마이그레이션 — 2 Phase
+## §10. 마이그레이션 — NSSF 단일 사이클
 
-### Phase 1 — NSSF reference impl
-
-| 단계 | 동작 |
-|---|---|
-| P1.1 | 기존 산출 백업 — `git tag archive/nssf-pre-restructure-20260512` + `/nf-init nssf --primary 29.531 --reset` |
-| P1.2 | 도구 4 신규 + 3 확장 구현 (`extract-service-flow`, `extract-state-machine` v1, `extract-module-graph`, `validate-extraction`, `build-handoff` v2, `nf-status` 확장) |
-| P1.3 | SKILL 3종 갱신 (`/nf-init` `--reset`/`--reset-keep-prose` 옵션, `/nf-build` 새 흐름, `/nf-status` 새 check) |
-| P1.4 | NSSF 새 구조 fresh 빌드 (`/nf-build nssf` → 13 카테고리 산출) |
-| P1.5 | 기존 prose 일회성 수동 이주 — **5 단락 / 1000 단어 이하**. 초과 시 일회성 `prose-migrate.py` 작성 후 폐기. 이주 단락 frontmatter 에 `migrated_from: 3gpp-ts-29531.md#L123-L145` 박아 trace 유지 |
-| P1.6 | `/nf-status nssf` → handoff_ready gate 통과 확인 |
-| P1.7 | `.gitignore` 에 `design/*/_archive/` 추가. archive 는 git tag (P1.1) 로 보존, repo 트리에서 제거 |
-| P1.8 | CLAUDE.md 갱신 (§11) + nf-reset SKILL 삭제 |
-
-### Phase 2 — AMF stress test
-
-P2 = **AMF** (SMF 아님). 이유 — AMF 는 5G 에서 가장 복잡 (5GMM/5GSM 상태·세션·시그널링 결합). P2 에서 AMF 가 깨지면 SMF 도 깨질 확률이 높고, 역은 안 그렇다.
+본 spec 의 마이그레이션 범위는 **NSSF 한 NF 의 design → dev 완성** 한 사이클. 다른 NF 는 본 spec 범위 밖 — NSSF dev 완료 시점에 회고 후 별도 spec 으로 진행.
 
 | 단계 | 동작 |
 |---|---|
-| P2.1 | AMF manifest 작성 (`/nf-init amf --primary 23.502 + 29.518`) — profile=`mixed` |
-| P2.2 | AMF 빌드 (`/nf-build amf`) — 새 구조 적용 |
-| P2.3 | State machine 정확도 평가 — `extract-state-machine.py` v1 (admonition) 의 ROI 가 AMF 수준 복잡도 (5GMM, 5GSM 등 다중 state machine) 에서도 유지되는지 확인. v2 (spec auto-extraction) 필요 여부 결정 |
-| P2.4 | handoff-v2 yaml 토큰 비용 평가 — AMF 의 topic 수가 NSSF 대비 2-3배 (10-15K 토큰 추정). 30K 넘으면 §12 위험 표의 *토픽 단위 sub-yaml 분할* 옵션 발동 |
-| P2.5 | 13 카테고리 수정·확장 여부 결정 — AMF 가 추가로 필요로 하는 카테고리·subsection 식별 |
-| P2.6 | NSSF 페이지 회귀 빌드 — 도구 갱신이 NSSF 산출을 깨지 않는지 확인 |
-
-P2 후 SMF, UPF, NRF 등 나머지 NF 자동 적용.
+| M.1 | 기존 산출 백업 — `git tag archive/nssf-pre-restructure-20260512` + `/nf-init nssf --primary 29.531 --reset` |
+| M.2 | 도구 4 신규 + 3 확장 구현 (`extract-service-flow`, `extract-state-machine` v1, `extract-module-graph`, `validate-extraction`, `build-handoff` v2, `nf-status` 확장) |
+| M.3 | SKILL 3종 갱신 (`/nf-init` `--reset`/`--reset-keep-prose` 옵션, `/nf-build` 새 흐름, `/nf-status` 새 check) |
+| M.4 | NSSF 새 구조 fresh 빌드 (`/nf-build nssf` → 13 카테고리 산출) |
+| M.5 | 기존 prose 일회성 수동 이주 — **5 단락 / 1000 단어 이하**. 초과 시 일회성 `prose-migrate.py` 작성 후 폐기. 이주 단락 frontmatter 에 `migrated_from: 3gpp-ts-29531.md#L123-L145` 박아 trace 유지 |
+| M.6 | `/nf-status nssf` → handoff_ready gate 통과 확인 |
+| M.7 | `.gitignore` 에 `design/*/_archive/` 추가. archive 는 git tag (M.1) 로 보존, repo 트리에서 제거 |
+| M.8 | CLAUDE.md 갱신 (§11) + nf-reset SKILL 삭제 |
+| M.9 | NSSF dev 단계 진입 — handoff-v2 yaml 을 단일 entry point 로 dev agent 가 코드 생성. 본 spec 의 *최종 검증* — design 산출만으로 dev 완성 가능했는지 회고 |
 
 ### archive 정책
 
@@ -523,16 +509,16 @@ P2 후 SMF, UPF, NRF 등 나머지 NF 자동 적용.
 
 | 위험 | 완화 | 재평가 시점 |
 |---|---|---|
-| `extract-state-machine.py` v1 의 admonition 파서가 AMF 수준 복잡도에서 부족할 가능성 | NSSF 는 사람이 admonition 5-10줄 작성. v2 (spec auto-extraction) 는 P2 후 ROI 평가 후 결정 | P2.3 |
-| `extract-service-flow.py` 의 spec procedure 추출 정확도 | `validate-extraction` 룰 #1a/#1b 가 부정확한 산출을 즉시 차단. extract 도구는 spec 어절 인용만 — 추측 금지 | P1.6 (NSSF validate 결과 검토) |
-| `validate-extraction` 의 룰 자체가 부정확할 가능성 (false positive/negative) | 룰을 grep 가능한 정의로 명시 (§6 표). spec set 의 어절 변형은 *명시적 추가* 만 — 모호한 fuzzy match 금지 | P1.6, P2.3 |
-| frontmatter 자동 추출 도구 비용 (LLM 비용) | NSSF reference impl 으로 도구 안정화. NSSF 빌드 1회 비용 측정 후 다른 NF 추정 | P1.4 |
-| handoff-v2 schema 변경 — 기존 v1 consumer 영향 | 현재 v1 consumer 없음 (dev 영역 미구현). v1 → v2 마이그레이션 비용 0 | P1.2 |
-| AMF/SMF 에서 handoff yaml 토큰이 30K+ 폭증 | **토픽 단위 sub-yaml 분할** 옵션 — `_handoff/api.yaml`, `_handoff/modules.yaml`, ..., `_handoff/_index.yaml` (통합 index). agent 가 index 만 먼저 로드 후 필요한 sub-yaml 추가 로드. P2 에서 30K 임계 넘으면 발동 | P2.4 |
-| 13 카테고리가 NSSF 외 NF (특히 큰 AMF) 에서 부족할 가능성 | P2 검증 후 카테고리 추가 여부 판단. 본 spec 은 13 으로 fix 하되 P2 후 별도 spec 으로 확장 가능 | P2.5 |
-| P1 수동 이주가 5 단락 / 1000 단어 한계 초과 | 일회성 `prose-migrate.py` 작성 후 폐기. 이주 추적은 frontmatter `migrated_from` 으로 영구 보존 | P1.5 |
-| archive 가 repo 트리에 쌓이면 검색 노이즈 | `_archive/` 는 `.gitignore`, git tag 로 보존 | P1.7 |
-| Implementation Notes 가 길어져 단일 파일 카테고리 (e.g. interface.md) 가 다시 비대해질 가능성 | NF 한 카테고리 단일 파일 한계 800 줄 권장. 초과 시 토픽 디렉터리로 승격 — P3 (장기) 정책 |
+| `extract-state-machine.py` v1 의 admonition 파서가 NSSF 외 복잡한 NF (5GMM/5GSM 등) 에서 부족할 가능성 | NSSF 는 사람이 admonition 5-10줄 작성으로 충분. spec auto-extraction (v2) 격상 여부는 **본 spec 범위 밖** — NSSF dev 완료 후 다른 NF 사이클에서 별도 판단 | NSSF dev 완료 시점 회고 |
+| `extract-service-flow.py` 의 spec procedure 추출 정확도 | `validate-extraction` 룰 #1a/#1b 가 부정확한 산출을 즉시 차단. extract 도구는 spec 어절 인용만 — 추측 금지 | M.6 (NSSF validate 결과 검토) |
+| `validate-extraction` 의 룰 자체가 부정확할 가능성 (false positive/negative) | 룰을 grep 가능한 정의로 명시 (§6 표). spec set 의 어절 변형은 *명시적 추가* 만 — 모호한 fuzzy match 금지 | M.6 |
+| frontmatter 자동 추출 도구 비용 (LLM 비용) | NSSF reference impl 으로 도구 안정화 + 비용 1회 측정. 다른 NF 추정은 본 spec 범위 밖 | M.4 |
+| handoff-v2 schema 변경 — 기존 v1 consumer 영향 | 현재 v1 consumer 없음 (dev 영역 미구현). v1 → v2 마이그레이션 비용 0 | M.2 |
+| handoff-v2 yaml 토큰이 NSSF 에서도 예상 초과 시 (~30K) | **토픽 단위 sub-yaml 분할** 옵션 — `_handoff/api.yaml`, `_handoff/modules.yaml`, ..., `_handoff/_index.yaml` (통합 index). agent 가 index 만 먼저 로드 후 필요한 sub-yaml 추가 로드. NSSF 가 임계 넘으면 발동, 안 넘으면 옵션으로 남김 | M.9 (NSSF dev 진입 시 토큰 측정) |
+| 13 카테고리가 NSSF 에서 부족·과잉할 가능성 | M.4 빌드 + M.9 dev 회고 시 검증. 본 spec 은 13 으로 fix, NSSF dev 완료 후 회고 결과로 다른 NF 사이클 진입 시 조정 가능 | M.9 |
+| M.5 수동 이주가 5 단락 / 1000 단어 한계 초과 | 일회성 `prose-migrate.py` 작성 후 폐기. 이주 추적은 frontmatter `migrated_from` 으로 영구 보존 | M.5 |
+| archive 가 repo 트리에 쌓이면 검색 노이즈 | `_archive/` 는 `.gitignore`, git tag 로 보존 | M.7 |
+| Implementation Notes 가 길어져 단일 파일 카테고리 (e.g. interface.md) 가 다시 비대해질 가능성 | NF 한 카테고리 단일 파일 한계 800 줄 권장. 초과 시 토픽 디렉터리로 승격 — 후속 정책 (NSSF dev 완료 후 회고) |
 
 ---
 
@@ -548,7 +534,7 @@ P2 후 SMF, UPF, NRF 등 나머지 NF 자동 적용.
 - [x] boundary 정의 — manifest 안 spec set vs 다른 NF design 페이지 — 가 fix 되었다 (§7)
 - [x] SKILL 3종 (init / build / status) — nf-reset 폐기 — fix 되었다 (§8)
 - [x] 도구 7종 (4 신규 + 3 확장) 의 입력·산출·호출 위치가 명시되었다 (§9)
-- [x] 마이그레이션 P1 (NSSF) + P2 (AMF) — 정량 기준 포함 — fix 되었다 (§10)
+- [x] 마이그레이션 — NSSF 단일 사이클 (M.1~M.9, design → dev 완성까지) — 정량 기준 포함 — fix 되었다 (§10)
 - [x] CLAUDE.md 갱신 포인트 7 종이 명시되었다 (§11)
 - [x] 위험 11 종 + 완화 + 재평가 시점이 fix 되었다 (§12)
 
@@ -579,7 +565,7 @@ related:                        # 비의존 cross-ref
 error_refs:                     # error-handling.md 의 section anchor
   - error-handling#403
   - error-handling#404
-migrated_from: null             # P1.5 prose 이주 시 채움 (예 "3gpp-ts-29531.md#L123-L145")
+migrated_from: null             # M.5 prose 이주 시 채움 (예 "3gpp-ts-29531.md#L123-L145")
 ---
 ```
 
@@ -587,7 +573,7 @@ migrated_from: null             # P1.5 prose 이주 시 채움 (예 "3gpp-ts-295
 
 ---
 
-## 부록 B — `extract-state-machine.py` admonition 어휘 (P1)
+## 부록 B — `extract-state-machine.py` admonition 어휘 (NSSF)
 
 | Admonition | 필수 행 | 의미 |
 |---|---|---|
@@ -595,4 +581,4 @@ migrated_from: null             # P1.5 prose 이주 시 채움 (예 "3gpp-ts-295
 | `> [!state-node] <name>` | (블록 본문 — 노드 의미) | state node 정의 |
 | `> [!transition] <from> → <to>` | `trigger:`, `precondition:`, `side-effect:`, `spec_ref:` | transition 정의. validate 룰이 4 행 모두 요구 |
 
-NSSF 의 경우 admonition 총 ~10-20줄 (state node 3-5개 + transition 5-10개). P2 (AMF) 에서 50-100줄로 확장 예상.
+NSSF 의 경우 admonition 총 ~10-20줄 (state node 3-5개 + transition 5-10개) 으로 충분. 더 복잡한 NF 에서의 확장·자동화 격상은 본 spec 범위 밖.
