@@ -35,14 +35,22 @@ schema_version: handoff-v2
 nf: nssf
 
 agent_contract:
+  # 우선 순위 — 토픽 status 가 카테고리 status 보다 우선 (토픽이 실제 작업 단위).
+  # 카테고리 status 는 "이 카테고리에 새 토픽을 더 추가할지" 의 메타 정보.
+  # 예 — module-decomposition (category=draft) + SelectionEngine (topic=handoff_ready)
+  # 는 *MVP scope 한정 의도* 이며 정상. 반대 (category=handoff_ready, topic=draft) 는
+  # validator basic #5 가 FAIL 처리.
+  status_precedence: topic_over_category
+
   # Agent 가 자료를 어떤 순서로 읽는다.
   default_read_order:
     - handoff/<nf>/_handoff.yaml                       # 1. 본 yaml — 토픽 ID·status·depends_on
-    - handoff/<nf>/_handoff.yaml#categories            # 2. 카테고리 status — 진입 가능 토픽 필터
+    - handoff/<nf>/_handoff.yaml#categories            # 2. 카테고리 status — 진입 가능 토픽 필터 (참조용, 토픽 status 가 최종)
     - design/<nf>/<topic>/<id>.md (target)             # 3. 작업 대상 토픽
-    - design/<nf>/<topic>/<dep>.md (depends_on)        # 4. 의존 토픽
-    - design/<nf>/error-handling.md (error_refs)       # 5. 오류 처리
-    - design/<nf>/<topic>/<related>.md (related)       # 6. 관련 토픽 (필요 시)
+    - design/<nf>/<topic>/<id>.json (target machine)   # 4. data-model 토픽이면 .json 도 (agent/codegen primary)
+    - design/<nf>/<topic>/<dep>.md (depends_on)        # 5. 의존 토픽
+    - design/<nf>/error-handling.md (error_refs)       # 6. 오류 처리
+    - design/<nf>/<topic>/<related>.md (related)       # 7. 관련 토픽 (필요 시)
 
   # Agent 가 절대 하지 말아야 할 것 — 안전선.
   must_not:
@@ -63,7 +71,7 @@ agent_contract:
   must_ask_or_block:
     - 필수 정책 값 부재 (timeout/retry/idempotency 미정)
     - OpenAPI chain leaf 가 `(참조 규격 미등록)` 인데 구현이 필요
-    - category status 와 topic status 충돌 (예 category=handoff_ready 인데 토픽=draft)
+    - 역방향 status 불일치 (category=handoff_ready 인데 산하 topic=draft) — basic #5 영역. 정방향 (category=draft, topic=handoff_ready + scope) 은 MVP 한정 의도이므로 정상
     - depends_on 의 target 토픽이 yaml 에 부재
     - Cross-NF 호출의 상대 NF op 가 아직 미정의
 
@@ -227,7 +235,7 @@ tasks:
 | 10 | **machine_file JSON parse valid** | `json.load` 가능. `schema_version`·`topic_id`·`status`·`fields`·`dependencies`·`unresolved_refs` 필드 존재 |
 | 11 | **JSON ↔ handoff topic 정합** | JSON 의 `topic_id` 가 handoff topic ID 와 일치. JSON 의 `status` 가 handoff topic `status` 와 일치 (둘이 다르면 어느 쪽이 진실인지 불명) |
 | 12 | **JSON unresolved_refs ↔ status** | JSON `unresolved_refs` 가 비어있지 *않으면* topic status 는 `blocked` 또는 `draft` 여야 함. `canonical` / `handoff_ready` 상태인데 unresolved 가 남아있으면 FAIL |
-| 13 | **JSON dependencies target exists** | JSON `dependencies` 의 모든 ID 가 handoff topics 안에 존재. cross-ref 검증의 JSON 변형 (basic #4 의 markdown 측면과 paired) |
+| 13 | **JSON dependencies target exists** | JSON `dependencies` 는 *handoff topic ID 만* 담는다 (transitive non-handoff schema 는 `_inlined_from` 으로 inline). 등록된 모든 ID 가 handoff topics 안에 존재해야 함. cross-ref 검증의 JSON 변형 (basic #4 의 markdown 측면과 paired) |
 
 ### 4.5 Path resolution 규칙 (basic #3 의 정의)
 
@@ -337,7 +345,10 @@ topics:
     machine_file: design/nssf/data-model/AuthorizedNetworkSliceInfo.json
     spec_refs: [TS 29.531 §6.1.6.2.5]
   module-decomposition/SelectionEngine:
-    status: draft         # MVP — 사람이 Implementation Notes 채울 자리
+    status: handoff_ready
+    scope: "NSSelectionGet MVP only"   # 카테고리 module-decomposition 은 draft 지만, 본 토픽만 MVP 범위에서 handoff_ready (다른 모듈은 후속 사이클)
+    file: design/nssf/module-decomposition/SelectionEngine.md
+    spec_refs: []                       # spec 기반 아닌 *사람이 정한 분해 의도*. Implementation Notes 가 진실
   interface:
     status: handoff_ready
     spec_refs: [TS 29.531 §6.1.1, §6.1.5]
@@ -372,7 +383,18 @@ sources:
 
 **도구 자리** — `design/scripts/resolve-yaml-refs.py` 를 *확장* (`--emit-json` 옵션 또는 markdown 산출과 동시 emit). 별도 신설 도구 추가하지 않음 — 이미 chain resolve 책임이 같은 도구에 있음.
 
+**Schema 해석 정책 — transitive 는 inline-resolved**
+
+JSON 안의 sub-schema 는 두 가지로 처리:
+
+- **Handoff topic 인 schema** — `{ "topic": "data-model/<id>" }` 로 *참조만*. `dependencies` 리스트에도 등록. agent 는 해당 토픽의 `.json` 을 따로 read.
+- **Handoff topic 이 아닌 transitive schema** (`AllowedSnssai` 등) — **inline 으로 펼친다**. OpenAPI ref 출처는 `_inlined_from` 메타로 추적. `dependencies` 에 등록하지 *않음*.
+
+이 정책의 의도 — `dependencies` 가 *handoff topic 간 의존* 만 표현. validator basic #13 ("JSON dependencies target exists in handoff topics") 의 의미를 명확히 하고, MVP 의 작은 토픽 집합으로도 정합한 JSON 산출 가능.
+
 **산출 형식 (예시 — `AuthorizedNetworkSliceInfo.json`)**
+
+MVP 에서 AuthorizedNetworkSliceInfo 는 `AllowedSnssai` 같은 transitive 만 의존 (handoff topic 의존 없음). 따라서 `dependencies: []`, AllowedSnssai 는 inline.
 
 ```json
 {
@@ -391,11 +413,18 @@ sources:
       "name": "authorizedNssai",
       "required": true,
       "type": "array",
-      "items": { "ref": "data-model/AllowedSnssai" },
+      "items": {
+        "_inlined_from": "#/components/schemas/AllowedSnssai",
+        "type": "object",
+        "properties": [
+          { "name": "allowedSnssai", "required": true, "type": "object", "_inlined_from": "#/components/schemas/Snssai" },
+          { "name": "nsiInformationList", "required": false, "type": "array", "items": { "_inlined_from": "#/components/schemas/NsiInformation" } }
+        ]
+      },
       "nullable": false
     }
   ],
-  "dependencies": ["data-model/AllowedSnssai"],
+  "dependencies": [],
   "unresolved_refs": []
 }
 ```
@@ -425,7 +454,7 @@ sources:
 | # | 기준 | 판정 |
 |---|---|---|
 | 1 | agent 가 `default_read_order` 를 따라 토픽을 읽었는가 (plan 의 *Read* 절에 명시) | agent 산출에 read 목록 존재 + 순서가 contract 와 일치 |
-| 2 | `status=draft` 또는 `status=blocked` 토픽을 *구현 대상에 포함하지 않았는가* (기존 토픽의 잘못된 implement) | plan 의 implement 절에 module-decomposition/SelectionEngine (draft) 가 없음. persistence 등 MVP 외 draft 카테고리에 대한 implement 산출 없음 |
+| 2 | `status=draft` 또는 `status=blocked` 토픽을 *구현 대상에 포함하지 않았는가* (기존 토픽의 잘못된 implement) | plan 의 implement 절에 persistence·service-scenarios·behavior-state·failure-policy·configuration·test-matrix·work-plan·cross-nf (MVP 외 카테고리, status=draft) 의 implement 산출 없음. SelectionEngine 은 topic=handoff_ready 이므로 implement 대상에 포함 *가능* (위반 아님) |
 | 3 | yaml 에 *없는* 토픽·산출을 *invent 하지 않았는가* (새 artifact 의 무근거 추가) | plan 의 `produces` 가 yaml 의 tasks[*].produces 와 일치하고, yaml 외 토픽 ID (예 `data-model/Foo`) 가 등장하지 않음 |
 | 4 | plan 에 `read` / `produces` / `acceptance` 가 있고 yaml 의 task schema 와 isomorphic 한가 | plan 의 구조가 §3 task schema 와 1:1 매핑 |
 
@@ -451,6 +480,7 @@ sources:
 - [ ] §1 agent_contract 의 4 block (default_read_order / must_not / may_decide / must_ask_or_block) 정의
 - [ ] §1 agent_contract 위치 결정 (A/B/C) 와 이유 명시
 - [ ] §1 status enum × agent 행동 매핑 표 명시
+- [ ] §1 `status_precedence: topic_over_category` 명시 (카테고리·토픽 status 우선 순위)
 - [ ] §2 AUTO / USER marker 어휘 + frontmatter `generated_sections` manifest 정의
 - [ ] §2 MVP 범위의 marker 적용 위치 표 명시
 - [ ] §2 Data Model JSON 은 marker 대상 아님 (완전 AUTO machine artifact) 명시
@@ -461,6 +491,8 @@ sources:
 - [ ] §4 basic #1 의 schema 검증 방식 (경량 Python validator, jsonschema 의존성 없음) 명시
 - [ ] §5 NSSF MVP 토픽 6 개 + machine_file 2 개 (data-model JSON) 목록 + handoff-v2 yaml 예시 명시
 - [ ] §5 Data Model JSON 산출 형식 + 도구 자리 (`resolve-yaml-refs.py --emit-json`) 명시
+- [ ] §5 JSON schema 해석 정책 — handoff topic 은 `{ "topic": ... }` 참조 + `dependencies` 등록, transitive non-handoff schema 는 `_inlined_from` 으로 inline (`dependencies` 등록 X) 명시
+- [ ] §5 module-decomposition/SelectionEngine 은 카테고리=draft 인데 토픽=handoff_ready (`scope: "NSSelectionGet MVP only"`) — MVP 한정 의도 명시
 - [ ] §5 MVP 외 카테고리는 `status=draft` (deferred_reason 포함) 로 처리. `not_applicable` 은 MVP 에서 사용하지 않음 (구현 정책 결정은 별도 decision record)
 - [ ] §5 category slug 가 상위 spec 과 일관 (특히 `persistence` — `persistence-design` 아님)
 - [ ] §5 `spec_index` 가 spec ref → topic 역방향 lookup, source file 매핑은 별도 `sources:` 블록
@@ -474,13 +506,14 @@ sources:
 | # | 위험 | 임계 / 재평가 시점 |
 |---|---|---|
 | 1 | NSSelection 1 API 가 너무 작아 agent contract 의 한계가 드러나지 않음 | Agent Proof PASS 후에도 다음 사이클 진입 전 NSSelectionPost 같은 *복잡한* API 로 한 번 더 검증 |
-| 2 | basic 8 룰이 너무 느슨해 strict 룰 일부가 hard gate 가 됐어야 함이 사후 드러남 | Agent Proof FAIL 의 원인이 strict 룰 영역이었는지 분석 — 해당 룰을 basic 으로 격상 |
+| 2 | basic 13 룰이 너무 느슨해 strict 룰 일부가 hard gate 가 됐어야 함이 사후 드러남 | Agent Proof FAIL 의 원인이 strict 룰 영역이었는지 분석 — 해당 룰을 basic 으로 격상 |
 | 3 | AUTO/USER marker 의 frontmatter manifest 가 사람이 수동 동기화하기 부담 | MVP 종료 시점에 도구 자동 sync 가 필요한지 (`generated_sections` 자동 산출) 판정 |
 | 4 | agent_contract 가 yaml top-level 에 박혀 NF 추가 시 contract 중복 | NSSF 의 contract 와 다른 NF 의 contract 가 *실제로* 다른지 확인 — 같다면 별도 `agent-contract.yaml` (옵션 B) 재검토 |
 | 5 | Agent Proof 가 본 KB 외 환경 (다른 IDE·다른 모델) 으로 generalize 안 됨 | MVP 종료 후 Claude Code 외 1 환경 (예 codex CLI) 에서 동일 yaml 로 proof 재실행 |
 | 6 | MVP 외 카테고리를 `draft` 로 두면 `handoff_ready` gate 통과 못 함 → `/nf-status` 가 거짓 FAIL | gate 정의에서 `draft` 카테고리는 *해당 카테고리만 FAIL* 로 보고. NF 전체 gate 와는 별도. nf-status.py 갱신 |
-| 7 | data-model JSON 과 markdown 두 산출이 분기 (yaml chain 재해석 차이로) | 둘 다 같은 `resolve-yaml-refs.py` 의 *한 번 resolve* 결과에서 emit. 별개 호출 금지. validator basic #11 (JSON ↔ handoff topic 정합) 이 분기 검출 |
+| 7 | data-model JSON 과 markdown 두 산출이 schema 내용 차원에서 분기 (yaml chain 재해석 차이로) | basic #11 은 `topic_id`/`status` 정합만 검증 — schema 내용 분기는 *검출하지 않음*. divergence 방지는 `resolve-yaml-refs.py` 의 *한 번 resolve* 결과에서 markdown + JSON *동시 emit* 으로 보장. 후속 사이클에서 JSON `source.resolve_hash` 또는 `source.source_hash` (yaml chain 의 정규화 해시) 필드로 검증 가능성 격상 |
 | 8 | `resolve-yaml-refs.py` 확장 (`--emit-json`) 이 markdown emit 동작을 깨뜨림 | MVP 작업 시 markdown emit 회귀 테스트 (NSSF 2 토픽 markdown 출력 비교) 를 step 진입 조건으로 |
+| 9 | MVP 외 카테고리 (`module-decomposition` 등) 가 카테고리 status=draft 인데 *한 토픽만* handoff_ready (SelectionEngine `scope: "NSSelectionGet MVP only"`) — agent 가 카테고리 status 와 토픽 status 어느 쪽 따를지 혼동 | agent_contract `default_read_order` 에서 *토픽 status 가 우선* 임을 명시. 카테고리 status 는 *해당 카테고리에 새 토픽을 더 추가할지* 의 메타 정보. handoff yaml 의 토픽 `scope` 필드가 사람·agent 모두에게 MVP 한정 의도를 알린다 |
 
 ---
 
