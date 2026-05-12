@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 import pathlib
+import sys
 import pytest
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
 
 
 @pytest.fixture
