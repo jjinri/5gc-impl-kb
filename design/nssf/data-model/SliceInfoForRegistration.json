@@ -1,0 +1,407 @@
+{
+  "schema_version": "data-model-v1",
+  "nf": "nssf",
+  "topic_id": "data-model/SliceInfoForRegistration",
+  "status": "canonical",
+  "source": {
+    "spec_refs": [
+      "TS 29.531 §6.1.6.2.4"
+    ],
+    "openapi_refs": [
+      "#/components/schemas/SliceInfoForRegistration"
+    ],
+    "source_yaml": "specs/29.531/TS29531_Nnssf_NSSelection.yaml"
+  },
+  "root_schema": "SliceInfoForRegistration",
+  "fields": [
+    {
+      "name": "subscribedNssai",
+      "required": false,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": [
+          {
+            "name": "subscribedSnssai",
+            "required": true,
+            "type": "object",
+            "properties": [
+              {
+                "name": "sst",
+                "required": true,
+                "type": "integer"
+              },
+              {
+                "name": "sd",
+                "required": false,
+                "type": "string",
+                "pattern": "^[A-Fa-f0-9]{6}$"
+              }
+            ],
+            "_inlined_from": "TS29571_CommonData.yaml#/components/schemas/Snssai"
+          },
+          {
+            "name": "defaultIndication",
+            "required": false,
+            "type": "boolean"
+          },
+          {
+            "name": "subscribedNsSrgList",
+            "required": false,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": [],
+              "_inlined_from": "TS29571_CommonData.yaml#/components/schemas/NsSrg"
+            }
+          }
+        ],
+        "_inlined_from": "#/components/schemas/SubscribedSnssai"
+      }
+    },
+    {
+      "name": "allowedNssaiCurrentAccess",
+      "required": false,
+      "type": "object",
+      "properties": [
+        {
+          "name": "allowedSnssaiList",
+          "required": true,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": [
+              {
+                "name": "allowedSnssai",
+                "required": true,
+                "type": "object",
+                "properties": [
+                  {
+                    "name": "sst",
+                    "required": true,
+                    "type": "integer"
+                  },
+                  {
+                    "name": "sd",
+                    "required": false,
+                    "type": "string",
+                    "pattern": "^[A-Fa-f0-9]{6}$"
+                  }
+                ],
+                "_inlined_from": "TS29571_CommonData.yaml#/components/schemas/Snssai"
+              },
+              {
+                "name": "nsiInformationList",
+                "required": false,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": [
+                    {
+                      "name": "nrfId",
+                      "required": true,
+                      "type": "object",
+                      "properties": [],
+                      "_inlined_from": "TS29571_CommonData.yaml#/components/schemas/Uri"
+                    },
+                    {
+                      "name": "nsiId",
+                      "required": false,
+                      "type": "object",
+                      "properties": [],
+                      "_inlined_from": "#/components/schemas/NsiId"
+                    },
+                    {
+                      "name": "nrfNfMgtUri",
+                      "required": false,
+                      "type": "object",
+                      "properties": [],
+                      "_inlined_from": "TS29571_CommonData.yaml#/components/schemas/Uri"
+                    },
+                    {
+                      "name": "nrfAccessTokenUri",
+                      "required": false,
+                      "type": "object",
+                      "properties": [],
+                      "_inlined_from": "TS29571_CommonData.yaml#/components/schemas/Uri"
+                    },
+                    {
+                      "name": "nrfOauth2Required",
+                      "required": false,
+                      "type": "object",
+                      "properties": [],
+                      "additional_properties": {
+                        "type": "boolean"
+                      }
+                    }
+                  ],
+                  "_inlined_from": "#/components/schemas/NsiInformation"
+                }
+              },
+              {
+                "name": "mappedHomeSnssai",
+                "required": false,
+                "type": "object",
+                "properties": [
+                  {
+                    "name": "sst",
+                    "required": true,
+                    "type": "integer"
+                  },
+                  {
+                    "name": "sd",
+                    "required": false,
+                    "type": "string",
+                    "pattern": "^[A-Fa-f0-9]{6}$"
+                  }
+                ],
+                "_inlined_from": "TS29571_CommonData.yaml#/components/schemas/Snssai"
+              }
+            ],
+            "_inlined_from": "#/components/schemas/AllowedSnssai"
+          }
+        },
+        {
+          "name": "accessType",
+          "required": true,
+          "type": "object",
+          "properties": [],
+          "_inlined_from": "TS29571_CommonData.yaml#/components/schemas/AccessType"
+        }
+      ],
+      "_inlined_from": "#/components/schemas/AllowedNssai"
+    },
+    {
+      "name": "allowedNssaiOtherAccess",
+      "required": false,
+      "type": "object",
+      "properties": [
+        {
+          "name": "allowedSnssaiList",
+          "required": true,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": [
+              {
+                "name": "allowedSnssai",
+                "required": true,
+                "type": "object",
+                "properties": [
+                  {
+                    "name": "sst",
+                    "required": true,
+                    "type": "integer"
+                  },
+                  {
+                    "name": "sd",
+                    "required": false,
+                    "type": "string",
+                    "pattern": "^[A-Fa-f0-9]{6}$"
+                  }
+                ],
+                "_inlined_from": "TS29571_CommonData.yaml#/components/schemas/Snssai"
+              },
+              {
+                "name": "nsiInformationList",
+                "required": false,
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": [
+                    {
+                      "name": "nrfId",
+                      "required": true,
+                      "type": "object",
+                      "properties": [],
+                      "_inlined_from": "TS29571_CommonData.yaml#/components/schemas/Uri"
+                    },
+                    {
+                      "name": "nsiId",
+                      "required": false,
+                      "type": "object",
+                      "properties": [],
+                      "_inlined_from": "#/components/schemas/NsiId"
+                    },
+                    {
+                      "name": "nrfNfMgtUri",
+                      "required": false,
+                      "type": "object",
+                      "properties": [],
+                      "_inlined_from": "TS29571_CommonData.yaml#/components/schemas/Uri"
+                    },
+                    {
+                      "name": "nrfAccessTokenUri",
+                      "required": false,
+                      "type": "object",
+                      "properties": [],
+                      "_inlined_from": "TS29571_CommonData.yaml#/components/schemas/Uri"
+                    },
+                    {
+                      "name": "nrfOauth2Required",
+                      "required": false,
+                      "type": "object",
+                      "properties": [],
+                      "additional_properties": {
+                        "type": "boolean"
+                      }
+                    }
+                  ],
+                  "_inlined_from": "#/components/schemas/NsiInformation"
+                }
+              },
+              {
+                "name": "mappedHomeSnssai",
+                "required": false,
+                "type": "object",
+                "properties": [
+                  {
+                    "name": "sst",
+                    "required": true,
+                    "type": "integer"
+                  },
+                  {
+                    "name": "sd",
+                    "required": false,
+                    "type": "string",
+                    "pattern": "^[A-Fa-f0-9]{6}$"
+                  }
+                ],
+                "_inlined_from": "TS29571_CommonData.yaml#/components/schemas/Snssai"
+              }
+            ],
+            "_inlined_from": "#/components/schemas/AllowedSnssai"
+          }
+        },
+        {
+          "name": "accessType",
+          "required": true,
+          "type": "object",
+          "properties": [],
+          "_inlined_from": "TS29571_CommonData.yaml#/components/schemas/AccessType"
+        }
+      ],
+      "_inlined_from": "#/components/schemas/AllowedNssai"
+    },
+    {
+      "name": "sNssaiForMapping",
+      "required": false,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": [
+          {
+            "name": "sst",
+            "required": true,
+            "type": "integer"
+          },
+          {
+            "name": "sd",
+            "required": false,
+            "type": "string",
+            "pattern": "^[A-Fa-f0-9]{6}$"
+          }
+        ],
+        "_inlined_from": "TS29571_CommonData.yaml#/components/schemas/Snssai"
+      }
+    },
+    {
+      "name": "requestedNssai",
+      "required": false,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": [
+          {
+            "name": "sst",
+            "required": true,
+            "type": "integer"
+          },
+          {
+            "name": "sd",
+            "required": false,
+            "type": "string",
+            "pattern": "^[A-Fa-f0-9]{6}$"
+          }
+        ],
+        "_inlined_from": "TS29571_CommonData.yaml#/components/schemas/Snssai"
+      }
+    },
+    {
+      "name": "defaultConfiguredSnssaiInd",
+      "required": false,
+      "type": "boolean"
+    },
+    {
+      "name": "mappingOfNssai",
+      "required": false,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": [
+          {
+            "name": "servingSnssai",
+            "required": true,
+            "type": "object",
+            "properties": [
+              {
+                "name": "sst",
+                "required": true,
+                "type": "integer"
+              },
+              {
+                "name": "sd",
+                "required": false,
+                "type": "string",
+                "pattern": "^[A-Fa-f0-9]{6}$"
+              }
+            ],
+            "_inlined_from": "TS29571_CommonData.yaml#/components/schemas/Snssai"
+          },
+          {
+            "name": "homeSnssai",
+            "required": true,
+            "type": "object",
+            "properties": [
+              {
+                "name": "sst",
+                "required": true,
+                "type": "integer"
+              },
+              {
+                "name": "sd",
+                "required": false,
+                "type": "string",
+                "pattern": "^[A-Fa-f0-9]{6}$"
+              }
+            ],
+            "_inlined_from": "TS29571_CommonData.yaml#/components/schemas/Snssai"
+          }
+        ],
+        "_inlined_from": "#/components/schemas/MappingOfSnssai"
+      }
+    },
+    {
+      "name": "requestMapping",
+      "required": false,
+      "type": "boolean"
+    },
+    {
+      "name": "ueSupNssrgInd",
+      "required": false,
+      "type": "boolean"
+    },
+    {
+      "name": "suppressNssrgInd",
+      "required": false,
+      "type": "boolean"
+    },
+    {
+      "name": "nsagSupported",
+      "required": false,
+      "type": "boolean"
+    }
+  ],
+  "dependencies": [],
+  "unresolved_refs": []
+}

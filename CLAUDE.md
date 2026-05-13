@@ -46,6 +46,21 @@
 
 ---
 
+## 원격 동기화 — 로컬 main 머지 후 PR 의무
+
+로컬 `main` 에 작업 commits 가 머지된 직후 (worktree·feature 브랜치 FF/no-FF 무관) **원격 `main` 으로 직접 push 하지 않는다**. 다음 절차로 원격 PR 사이클을 거친다.
+
+1. 머지된 commits 를 별도 push 브랜치로 분기. 예 `git switch -c push/<topic>-<yyyymmdd> <merge-commit-sha>` 후 `git push -u origin push/<topic>-<yyyymmdd>`. (worktree branch 가 이미 push 된 경우 그대로 사용 가능.)
+2. `gh pr create --base main --head push/<topic>-<yyyymmdd>` 로 PR 작성. 제목·본문은 머지된 commits 의 *요약 + 이유 + 검증* — 머지 commit 메시지 또는 retro 문서를 그대로 reuse.
+3. 리뷰·CI 후 원격에서 PR squash 또는 merge → 원격 `main` 갱신.
+4. 로컬 `main` 은 `git pull --ff-only origin main` 로 정합. push 브랜치는 머지 확인 후 `git branch -d`.
+
+이유 — 단독 작업자라도 원격 PR 이 *변경 일람 + 사유 + 재현 단계* 의 1급 보존소가 된다. 원격 `main` 직접 push 는 *왜* 의 흔적이 commit log 외 어디에도 남지 않아 후속 작업·롤백·감사가 어렵다.
+
+본 정책은 *예외 없음*. 핫픽스 등 긴급 상황은 사용자가 *명시적으로* "원격 main 직접 push 해" 라고 지시했을 때만 우회.
+
+---
+
 ## 5gc-design ↔ 5gc-dev 책임 경계
 
 | 결정 | 어느 시스템 |
@@ -76,6 +91,7 @@
 │   ├── {nf}/                    # NF 단위 폴더 (nssf, nrf, amf, smf, ...)
 │   │   ├── 3gpp-{ts|tr}-{n}.md
 │   │   ├── _manifest.yaml       # /nf-init 산출 — 의존성 + ready_for_build (gitignored)
+│   │   ├── _handoff_seed.yaml   # /nf-build 가 함께 편집, build-handoff.py 입력 (v2 NF 만)
 │   │   └── _status.yaml         # /nf-status 산출 — acceptance gate (gitignored)
 │   ├── architecture/, interfaces/, security/, slicing/, concepts/, overviews/, other/
 │   └── scripts/                 # 자동화 도구
@@ -178,8 +194,12 @@ NF profile 별 적용 check 는 `design/scripts/nf-status.py` 의 `applies_to` �
 |---|---|---|
 | `draft` | 페이지 골격 형성 | frontmatter_valid |
 | `review_ready` | 사람이 검토 가능한 상태 | + sections_complete + manifest_ready |
-| `handoff_ready` | dev 가 `_handoff.yaml` 만으로 NF 빌드 시작 가능 | + Tier 2 모든 항목 PASS (data_model, api, service_flow, handoff_yaml 포함) |
+| `handoff_ready` | dev (agent or human) 가 `_handoff.yaml` 만으로 NF 빌드 시작 가능 | + Tier 2 모두 PASS. v2 NF 는 `validate_extraction_basic` 가 진실 출처 |
 | `canonical` | 해당 spec 버전의 design 정본 | + schema_implementable + implementation_guidance_quality ≥ 4 |
+
+**Topic-level status enum (handoff-v2 NF 부터).** 카테고리·토픽 status 는 다음 5종 — `canonical` / `handoff_ready` / `draft` / `blocked` / `not_applicable`. spec `2026-05-12-nf-build-restructure-agent-consumable-mvp.md` §1 의 행동 매핑이 진실 출처.
+
+**status_precedence: topic_over_category.** category status 와 topic status 가 다를 때 토픽 status 가 우선. category=draft + topic=handoff_ready (scope 명시) 는 MVP 한정 의도이며 정상. 역방향 (category=handoff_ready + topic=draft) 만 validator basic #5 가 FAIL.
 
 `_status.yaml` 의 모든 FAIL check 는 `to_pass` 에 *다음 액션* 이 적혀있다 — silent FAIL 없음.
 

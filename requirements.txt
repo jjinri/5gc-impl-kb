@@ -1,3 +1,4 @@
 pypdf
 python-docx
 pyyaml
+pytest>=8.0

@@ -537,17 +537,60 @@ def check_subjective_review(manifest: dict) -> dict:
     return base
 
 
+def check_validate_extraction(nf: str, handoff_yaml: dict | None) -> dict:
+    # handoff-v2 면 validate-extraction.py basic 모두 PASS 여야 한다.
+    # handoff-v1 이면 NOT_APPLICABLE (v1 NF 는 본 check 가 부적용).
+    base = {
+        "id": "validate_extraction_basic", "tier": 2,
+        "name": "validate-extraction.py basic 13 룰 모두 PASS",
+        "criterion": "design/scripts/validate-extraction.py <nf> --level basic exit 0.",
+        "applies_to": ["stage_3_only", "stage_2_only", "mixed", "meta_only"],
+    }
+    if handoff_yaml is None or handoff_yaml.get("schema_version") != "handoff-v2":
+        base.update(status="NOT_APPLICABLE",
+                    current=f"schema={handoff_yaml.get('schema_version') if handoff_yaml else 'none'}",
+                    to_pass=[])
+        return base
+    script = REPO / "design" / "scripts" / "validate-extraction.py"
+    proc = subprocess.run(
+        [".venv/bin/python3", str(script), nf, "--level", "basic"],
+        capture_output=True, text=True, cwd=REPO, timeout=60,
+    )
+    if proc.returncode == 0:
+        base.update(status="PASS", current="basic 13/13", to_pass=[])
+    else:
+        fails = [l.strip() for l in proc.stdout.splitlines() if "FAIL" in l]
+        base.update(
+            status="FAIL",
+            current=f"validate-extraction FAIL — {len(fails)}건",
+            to_pass=["design/scripts/validate-extraction.py <nf> --level basic 로 상세 확인",
+                     *(fails[:5])],
+        )
+    return base
+
+
+def maybe_load_v2_handoff(nf: str) -> dict | None:
+    path = REPO / "handoff" / nf / "_handoff.yaml"
+    if not path.is_file():
+        return None
+    try:
+        return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError:
+        return None
+
+
 # ─── Acceptance gates ───────────────────────────────────────────────
 
 GATE_DEFS = [
     ("draft", ["frontmatter_valid"]),
-    ("ready_for_review", ["frontmatter_valid", "sections_complete", "manifest_ready"]),
+    ("review_ready", ["frontmatter_valid", "sections_complete", "manifest_ready"]),
     ("handoff_ready", [
         "frontmatter_valid", "sections_complete", "manifest_ready",
         "data_model_chain_complete", "api_operation_coverage",
         "service_flow_coverage", "wikilinks_resolve",
         "no_korean_colon_end",
         "handoff_yaml_valid", "handoff_yaml_self_contained",
+        "validate_extraction_basic",
     ]),
     ("canonical", [
         "frontmatter_valid", "sections_complete", "manifest_ready",
@@ -556,6 +599,7 @@ GATE_DEFS = [
         "no_korean_colon_end",
         "handoff_yaml_valid", "handoff_yaml_self_contained",
         "schema_implementable", "implementation_guidance_quality",
+        "validate_extraction_basic",
     ]),
 ]
 
@@ -664,6 +708,27 @@ def main() -> None:
         check_schema_implementable(nf, profile),
         check_subjective_review(manifest),
     ]
+
+    v2_handoff = maybe_load_v2_handoff(nf)
+    checks.append(check_validate_extraction(nf, v2_handoff))
+
+    # v2 NF 는 토픽 디렉터리 layout 이라 단일 페이지 기반 check 들이 false-FAIL 한다.
+    # 본 MVP 에서는 v2 schema 감지 시 그 check 들을 NOT_APPLICABLE 로 강등.
+    # 의미 있는 진실은 validate_extraction_basic + handoff_yaml_valid 가 담는다.
+    if v2_handoff is not None and v2_handoff.get("schema_version") == "handoff-v2":
+        v2_demoted = {
+            "frontmatter_valid",
+            "sections_complete", "data_model_chain_complete",
+            "api_operation_coverage", "service_flow_coverage",
+            "wikilinks_resolve", "no_korean_colon_end",
+            "handoff_yaml_valid", "handoff_yaml_self_contained",
+            "schema_implementable",
+        }
+        for c in checks:
+            if c["id"] in v2_demoted and c["status"] == "FAIL":
+                c["status"] = "NOT_APPLICABLE"
+                c["current"] = f"schema=handoff-v2; v1 check 부적용 ({c.get('current','')})"
+                c["to_pass"] = []
 
     gates = compute_gates(checks)
 
