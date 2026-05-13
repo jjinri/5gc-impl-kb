@@ -76,6 +76,7 @@
 │   ├── {nf}/                    # NF 단위 폴더 (nssf, nrf, amf, smf, ...)
 │   │   ├── 3gpp-{ts|tr}-{n}.md
 │   │   ├── _manifest.yaml       # /nf-init 산출 — 의존성 + ready_for_build (gitignored)
+│   │   ├── _handoff_seed.yaml   # /nf-build 가 함께 편집, build-handoff.py 입력 (v2 NF 만)
 │   │   └── _status.yaml         # /nf-status 산출 — acceptance gate (gitignored)
 │   ├── architecture/, interfaces/, security/, slicing/, concepts/, overviews/, other/
 │   └── scripts/                 # 자동화 도구
@@ -178,8 +179,12 @@ NF profile 별 적용 check 는 `design/scripts/nf-status.py` 의 `applies_to` �
 |---|---|---|
 | `draft` | 페이지 골격 형성 | frontmatter_valid |
 | `review_ready` | 사람이 검토 가능한 상태 | + sections_complete + manifest_ready |
-| `handoff_ready` | dev 가 `_handoff.yaml` 만으로 NF 빌드 시작 가능 | + Tier 2 모든 항목 PASS (data_model, api, service_flow, handoff_yaml 포함) |
+| `handoff_ready` | dev (agent or human) 가 `_handoff.yaml` 만으로 NF 빌드 시작 가능 | + Tier 2 모두 PASS. v2 NF 는 `validate_extraction_basic` 가 진실 출처 |
 | `canonical` | 해당 spec 버전의 design 정본 | + schema_implementable + implementation_guidance_quality ≥ 4 |
+
+**Topic-level status enum (handoff-v2 NF 부터).** 카테고리·토픽 status 는 다음 5종 — `canonical` / `handoff_ready` / `draft` / `blocked` / `not_applicable`. spec `2026-05-12-nf-build-restructure-agent-consumable-mvp.md` §1 의 행동 매핑이 진실 출처.
+
+**status_precedence: topic_over_category.** category status 와 topic status 가 다를 때 토픽 status 가 우선. category=draft + topic=handoff_ready (scope 명시) 는 MVP 한정 의도이며 정상. 역방향 (category=handoff_ready + topic=draft) 만 validator basic #5 가 FAIL.
 
 `_status.yaml` 의 모든 FAIL check 는 `to_pass` 에 *다음 액션* 이 적혀있다 — silent FAIL 없음.
 
