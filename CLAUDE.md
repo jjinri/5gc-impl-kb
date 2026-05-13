@@ -1,8 +1,6 @@
 # 5gc-impl-kb — 정책
 
-본 KB 의 *정책 only* 문서. 프로젝트 소개·setup·browsing 은 [`README.md`](./README.md) 가 진실 출처.
-
-> **Inheritance.** 전역 `~/.claude/CLAUDE.md` 의 모든 행동 규칙 (가정 금지·단순성·외과적 변경·테스트 우선·시맨틱 커밋·에러는 추측 말고 읽기 등) 을 그대로 따른다. 이 파일은 그 위에 본 프로젝트 고유 규칙만 추가한다.
+본 KB 의 *정책 only* 문서.
 
 > **Language policy.**
 > - **design 본문(prose) 은 한국어**로 작성한다.
@@ -15,33 +13,6 @@
 > **Note — 전역 §6 (Korean header comments).** 마크다운/YAML 비대상. `design/scripts/*.py` 등 코드 파일에는 적용.
 
 > **CLAUDE.md 유지 정책.** 본 파일은 *정책* 만 — 절차는 `SKILL.md`, 결정의 *역사적 맥락* 이 필요하면 `git log` 가 진실 출처다. 새 항목 추가 전에 *기존 위치에 흡수 가능한지·다른 곳에 더 어울리는지* 검토. 중복·stale 발견 시 즉시 제거. 본 파일이 증식하면 검색·요약·리뷰 비용이 모두 늘어 정책 문서로서의 가치가 떨어진다. 본 파일을 수정할 때는 *순 변화량* 을 의식한다 — 추가만큼 정리.
-
----
-
-## THE FOUR RULES (do not violate)
-
-매 응답에 적용.
-
-1. **No web search.** `WebSearch`/`WebFetch` 로 빈틈을 메우지 않는다. 모든 답은 `specs/` 와 `design/` 에 근거한다.
-2. **Answer from design first.** `design/` 의 7 카테고리 페이지가 진실의 출처. spec 본문은 그 출처의 정당성을 뒷받침할 때 재추출한다.
-3. **If design is insufficient, re-read the source.** `specs/{spec}/{file}` 를 `design/scripts/extract.py`·`design/scripts/resolve-yaml-refs.py` 로 다시 추출하고, 그 결과로 design 페이지를 *재빌드* 한다 (`/nf-build <nf>` 호출).
-4. **If chain ends incomplete, say so explicitly.** `(참조 규격 미등록)` leaf, 누락 mermaid, 비어있는 카테고리는 *침묵하지 않는다* — `/nf-status` 가 FAIL 로 잡고 `to_pass` 로 다음 액션을 알린다. 임의 추정으로 leaf 를 메우지 않는다.
-
----
-
-## 작업 흐름 — NF-centric (3 SKILL 한 사이클)
-
-본 KB 의 모든 신규 작업은 다음 3 SKILL 의 사이클로 표현된다.
-
-| 단계 | SKILL | 책임 |
-|---|---|---|
-| 1. 매니페스트 보강·재생성 | `/nf-init <nf> --primary <spec> [--reset]` | specs/ 의존성 자동 검출. `ready_for_build` 까지 반복 호출. `--reset` 은 기존 산출을 `design/<nf>/_archive/<ts>/` 로 mv 후 manifest 재생성 (백업·재시작 통합) |
-| 2. 페이지 빌드 | `/nf-build <nf> [--<category>]` | 7 카테고리 페이지 생성·갱신 + `handoff/<nf>/_handoff.yaml` 자동 갱신 |
-| 3. 완성도 검사 | `/nf-status <nf>` | acceptance gate 평가, FAIL 마다 `to_pass` 액션 보고 |
-
-각 SKILL 의 절차 *세부* 는 해당 `SKILL.md` 가 진실의 출처. CLAUDE.md 는 *정책* 만 정의하고 절차는 SKILL 로 위임한다. onboarding (Quick start) 은 README 에.
-
-> 새 SKILL 작성·개선 — Anthropic Skill Creator 가이드 (<https://claude.ai/customize/skills>) 또는 설치된 plugin `/skill-creator:skill-creator` 참고. 본 프로젝트의 3 SKILL (nf-init/build/status) 이 *원칙 + 이유 + 예시* 패턴의 모범 — 새 SKILL 도 같은 골격을 따른다.
 
 ---
 
@@ -89,24 +60,17 @@ FF 실패 → squash/rebase 신호 → reset 전환. 본 repo 는 **merge commit
 
 ---
 
-## 5gc-design ↔ 5gc-dev 책임 경계
+## File Naming Convention
 
-| 결정 | 어느 시스템 |
-|---|---|
-| OpenAPI path·schema, error matrix | design |
-| service scenario sequence, cross-NF spec | design |
-| configuration key·default, data model | design |
-| OS·언어·DBMS·배포 (bare/docker/VM) | dev |
-| HTTP 라이브러리·threading model | dev |
-| 테스트 코드·빌드 시스템 (CMake 등) | dev |
+### Original (`specs/`) — 3GPP 원본 보존
 
-한 줄 원칙 — *spec 이 글자로 박혀있으면 design, 사용자가 고르면 dev.*
+```
+specs/{spec-number-with-dot}/{original-3gpp-filename}.{ext}
+```
 
----
-
-## Knowledge depth, not breadth
-
-본 KB 의 가치는 *NF 한 개당 깊이* 에서 나온다. 카테고리별 placeholder 로 페이지 수를 늘리는 것보다 한 NF 의 7 카테고리를 모두 handoff_ready 로 끌어올리는 것이 우선. 그렇게 끌어올린 NF 의 `design/overviews/` 합성 (예 cross-NF 호출 그래프) 이 가장 가치 있는 산출.
+- spec-number 폴더는 점 포함 정식 표기 (`29.531`, `23.501`, `29.503`).
+- 파일명은 3GPP 다운로드 원본 그대로 (`29531-i40.docx`). release/version 인코딩 (`-{letter}{N}{M}`) 이 이미 들어있어 재명명 불필요.
+- 같이 들어있는 OpenAPI yaml (예 `TS29531_Nnssf_NSSelection.yaml`) 도 같은 폴더.
 
 ---
 
