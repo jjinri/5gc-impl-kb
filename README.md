@@ -1,29 +1,28 @@
 # 5gc-impl-kb
 
-3GPP spec 으로부터 LLM agent 자동 파이프라인으로 *NF design deliverable* 을 생산하는 **5gc-design 시스템**. `design/<nf>/3gpp-*.md` (7 카테고리 페이지) 와 `handoff/<nf>/_handoff.yaml` (5gc-dev contract) 가 주요 산출.
+3GPP spec 으로부터 LLM agent 가 NF 개발 입력물을 단계적으로 생산하는 **5gc design-to-dev knowledge base**. 현재 repo 의 핵심 산출은 spec-derived NF contract 이며, 이후 상세 아키텍처 설계와 구현 계획 단계로 이어진다.
 
-```
+```text
 specs/{spec}/{file}.{pdf,docx,doc,yaml}
         │
-        ▼  nf-manifest.py
-   _manifest.yaml  (의존성 + ready_for_build)
+        ▼  spec discovery
+   design/<nf>/_manifest.yaml
         │
-        ▼  nf-build SKILL
-   design/<nf>/3gpp-{ts|tr}-{n}.md   (7 카테고리 페이지)
-   ├── Interface         (URI, transport, auth)
-   ├── API               (operation 매트릭스)
-   ├── Data Model        (chain-resolved 트리)
-   ├── Service Scenarios (mermaid sequenceDiagram)
-   ├── Cross-NF Deps     (호출 그래프)
-   ├── Configuration     (feature, default, timeout)
-   └── Error Handling    (code · cause · 복구)
+        ▼  contract extraction
+   design/<nf>/...                 # 현재 handoff-v2 topic contract artifacts
+   handoff/<nf>/_handoff.yaml      # 현재 machine-readable dev contract
         │
-        ▼  build-handoff.py  (nf-build 내 자동 호출)
-   handoff/<nf>/_handoff.yaml   (5gc-dev contract — self-contained)
+        ▼  contract validation
+   design/<nf>/_status.yaml
         │
-        ▼  nf-status SKILL
-   _status.yaml  (acceptance gate: draft → review_ready → handoff_ready → canonical)
+        ▼  architecture design      # planned
+   design/<nf>/architecture/*
+        │
+        ▼  implementation planning  # planned
+   dev/<nf>/implementation-plan.md
 ```
+
+정확한 lifecycle 용어와 future canonical skill 이름은 [`docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`](./docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md) 를 따른다.
 
 ## Quick start
 
@@ -34,19 +33,26 @@ python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```
 
-의존성은 `requirements.txt` 가 진실 출처 (`pypdf`·`python-docx`·`pyyaml`). 본 repo 의 모든 도구는 `.venv/bin/python3 design/scripts/<name>.py` 형태로 호출하므로 venv 활성화는 불필요. `.doc` (legacy MS Word) 처리가 필요하면 별도로 `sudo apt install libreoffice-core` 또는 `antiword`.
+의존성은 `requirements.txt` 가 진실 출처 (`pypdf`·`python-docx`·`pyyaml`). 본 repo 의 모든 도구는 `.venv/bin/python3 design/scripts/<name>.py` 형태로 호출하므로 venv 활성화는 불필요. `.doc` 처리가 필요하면 별도로 `sudo apt install libreoffice-core` 또는 `antiword`.
 
-## 작업 사이클 — 3 SKILL
+## 사람이 호출하는 lifecycle skill
 
-NF 한 개를 design 에 등록·완성·재시작하는 흐름은 다음 3 SKILL 의 사이클.
+현재 사용 가능한 명령과 미래 canonical 이름을 분리한다. README 는 사용자 trigger 표면만 보여주고, 각 skill 이 내부에서 실행할 script/check 절차는 `.claude/skills/<name>/SKILL.md` 가 맡는다.
 
-- `/nf-init <nf> --primary <spec> [--reset]` — 매니페스트 보강·재생성 (반복). `--reset` 은 기존 산출을 `design/<nf>/_archive/<ts>/` 로 백업 후 manifest 재생성 (백업·재시작 통합).
-- `/nf-build <nf> [--<category>]` — 7 카테고리 페이지 생성·갱신 + `handoff/<nf>/_handoff.yaml` 자동 갱신.
-- `/nf-status <nf>` — acceptance gate 평가, FAIL 마다 다음 액션 보고.
+| 단계 | 현재 사람이 호출하는 skill | 미래 canonical skill | 기능 | 주요 산출물 |
+|---|---|---|---|---|
+| Spec discovery | `/nf-init <nf> --primary <spec>` | `/nf-spec-discover <nf> --primary <spec>` | primary/ref spec 식별, manifest 생성·보강 | `design/<nf>/_manifest.yaml` |
+| Reset + rediscovery | `/nf-init <nf> --primary <spec> --reset` | `/nf-spec-discover <nf> --primary <spec> --reset` | 기존 산출 archive 후 manifest 재생성 | `design/<nf>/_archive/<ts>/`, 새 manifest |
+| Contract extraction | `/nf-build <nf>` | `/nf-contract-build <nf>` | spec-derived contract markdown/json 과 handoff contract 생성 | `design/<nf>/...`, `handoff/<nf>/_handoff.yaml` |
+| Contract validation | `/nf-status <nf>` | `/nf-contract-check <nf>` | contract 가 architecture 설계 입력으로 충분한지 검사 | `design/<nf>/_status.yaml` |
+| Architecture design | 없음 | `/nf-arch-design <nf>` | contract 를 상세 아키텍처로 변환 | `design/<nf>/architecture/*` |
+| Implementation planning | 없음 | `/nf-impl-plan <nf>` | 아키텍처를 구현 작업·테스트 계획으로 분해 | `dev/<nf>/implementation-plan.md`, `tasks.yaml` |
 
-책임 매트릭스 + repo-local agent 정책은 [`CLAUDE.md`](./CLAUDE.md), 절차 세부는 `.claude/skills/<name>/SKILL.md`.
+`nf-reset` 은 별도 skill 이 아니라 `/nf-init --reset` 으로 통합된 destructive option 이다.
 
 ## 더 보기
 
-- [`CLAUDE.md`](./CLAUDE.md) — repo-local agent 정책 (언어·THE FOUR RULES·PR 분기·design↔dev 책임 경계).
-- 디렉터리·파일 명명·NF profile·acceptance gate 등 세부는 각 진실 출처 (`design/scripts/*` docstring, `docs/superpowers/specs/2026-05-12-*`).
+- [`CLAUDE.md`](./CLAUDE.md) — repo-local agent 정책.
+- [`docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`](./docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md) — lifecycle 단계와 skill vocabulary 결정.
+- [`docs/plans/2026-05-13-lifecycle-structure-skill-rename-plan.md`](./docs/plans/2026-05-13-lifecycle-structure-skill-rename-plan.md) — 구조 변경 실행 계획.
+- 세부 schema/gate/tool 동작은 `design/scripts/*` docstring 과 `.claude/skills/*/SKILL.md` 가 진실 출처다.
