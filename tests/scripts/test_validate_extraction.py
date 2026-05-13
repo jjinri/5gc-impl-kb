@@ -128,6 +128,62 @@ def test_rule_4_dangling_cross_ref(tmp_path: pathlib.Path) -> None:
     assert "#4" in out.stdout
 
 
+def test_rule_4_anchor_present_passes(tmp_path: pathlib.Path) -> None:
+    _write_min_nf(tmp_path)
+    # Add an explicit anchor inside error-handling.md, then reference it.
+    eh = tmp_path / "design" / "demo" / "error-handling.md"
+    eh.write_text(
+        eh.read_text(encoding="utf-8")
+        + '\n<a id="op-400"></a>\n## Op 400 — bad request\n',
+        encoding="utf-8",
+    )
+    p = tmp_path / "handoff" / "demo" / "_handoff.yaml"
+    data = yaml.safe_load(p.read_text(encoding="utf-8"))
+    data["topics"]["api/OpA"]["error_refs"] = ["error-handling#op-400"]
+    p.write_text(yaml.safe_dump(data), encoding="utf-8")
+    out = _run(tmp_path, "demo", "--level", "basic")
+    assert out.returncode == 0, out.stdout + out.stderr
+
+
+def test_rule_4_missing_anchor_fails(tmp_path: pathlib.Path) -> None:
+    # error-handling.md exists but the referenced anchor does not. Without
+    # anchor verification, rule_4 used to PASS — that's the bug being fixed.
+    _write_min_nf(tmp_path)
+    p = tmp_path / "handoff" / "demo" / "_handoff.yaml"
+    data = yaml.safe_load(p.read_text(encoding="utf-8"))
+    data["topics"]["api/OpA"]["error_refs"] = ["error-handling#missing-anchor"]
+    p.write_text(yaml.safe_dump(data), encoding="utf-8")
+    out = _run(tmp_path, "demo", "--level", "basic")
+    assert out.returncode != 0, (
+        f"rule #4 must FAIL on missing anchor (got exit 0).\n"
+        f"stdout:\n{out.stdout}\nstderr:\n{out.stderr}"
+    )
+    assert "#4" in out.stdout
+    assert "missing-anchor" in out.stdout
+
+
+def test_rule_4_task_read_anchor_verified(tmp_path: pathlib.Path) -> None:
+    # Anchor verification must also apply to tasks.<id>.read entries.
+    _write_min_nf(tmp_path)
+    p = tmp_path / "handoff" / "demo" / "_handoff.yaml"
+    data = yaml.safe_load(p.read_text(encoding="utf-8"))
+    data["tasks"] = {
+        "demo-task": {
+            "phase": "01",
+            "goal": "demo",
+            "read": ["error-handling#missing-anchor"],
+            "produces": [],
+            "blocked_by": [],
+            "acceptance": [],
+        }
+    }
+    p.write_text(yaml.safe_dump(data), encoding="utf-8")
+    out = _run(tmp_path, "demo", "--level", "basic")
+    assert out.returncode != 0
+    assert "#4" in out.stdout
+    assert "task" in out.stdout and "missing-anchor" in out.stdout
+
+
 def test_rule_5_category_topic_mismatch(tmp_path: pathlib.Path) -> None:
     _write_min_nf(tmp_path)
     p = tmp_path / "handoff" / "demo" / "_handoff.yaml"

@@ -90,22 +90,44 @@ def rule_3_topic_file_exists(nf: str, data: dict) -> list[str]:
     return fails
 
 
-def rule_4_cross_ref(data: dict) -> list[str]:
+def rule_4_cross_ref(nf: str, data: dict) -> list[str]:
     fails = []
     topics = data.get("topics") or {}
     known = set(topics.keys())
+    nf_root = REPO_ROOT / "design" / nf
+    layout = {cid: c.get("layout", "directory") for cid, c in (data.get("categories") or {}).items()}
     fields = ("depends_on", "related", "error_refs")
+
+    def _check(ref: str, ctx: str) -> None:
+        head = ref.split(".", 1)[0].split("#", 1)[0]
+        if head not in known:
+            fails.append(f"#4 cross-reference: {ctx} → {ref!r} (handoff yaml 에 없음)")
+            return
+        if "#" not in ref:
+            return
+        anchor = ref.split("#", 1)[1]
+        try:
+            r = resolve_topic_path(
+                nf_root=nf_root,
+                topic_id=f"{head}#{anchor}",
+                category_layout=layout,
+            )
+        except ValueError:
+            return  # category/layout issue already surfaced by rule #3
+        if r.exists and not r.anchor_found:
+            fails.append(
+                f"#4 cross-reference: {ctx} → {ref!r} "
+                f"(anchor {anchor!r} not in {head!r}; "
+                f'expected `<a id="{anchor}"></a>` or a heading slugging to {anchor!r})'
+            )
+
     for tid, t in topics.items():
         for f in fields:
             for ref in (t.get(f) or []):
-                head = ref.split("#", 1)[0]
-                if head not in known:
-                    fails.append(f"#4 cross-reference: {tid!r}.{f} → {ref!r} (handoff yaml 에 없음)")
+                _check(ref, f"{tid!r}.{f}")
     for task_id, task in (data.get("tasks") or {}).items():
         for ref in (task.get("read") or []):
-            head = ref.split(".", 1)[0].split("#", 1)[0]
-            if head not in known:
-                fails.append(f"#4 cross-reference: task {task_id!r}.read → {ref!r}")
+            _check(ref, f"task {task_id!r}.read")
     return fails
 
 
@@ -292,7 +314,7 @@ def run_basic(nf: str, data: dict) -> tuple[int, int, list[str]]:
         ("#1", rule_1_schema(data)),
         ("#2", rule_2_status_enum(data)),
         ("#3", rule_3_topic_file_exists(nf, data)),
-        ("#4", rule_4_cross_ref(data)),
+        ("#4", rule_4_cross_ref(nf, data)),
         ("#5", rule_5_category_topic_consistency(data)),
         ("#6", rule_6_blocked_na_semantics(data)),
         ("#7", rule_7_marker_unique(nf, data)),
