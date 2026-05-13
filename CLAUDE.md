@@ -21,9 +21,9 @@
 
 NF 개발 단계 이름은 [`docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`](./docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md) 를 따른다.
 
-- `/nf-init` 은 현재 spec discovery skill 이며, reset 은 별도 skill 이 아니라 `/nf-init --reset` 옵션이다.
-- `/nf-build` 는 code build 가 아니라 contract extraction/generation 단계다. 사용자-facing 문서에서는 미래 canonical 이름 `/nf-contract-build` 를 병기한다.
-- `/nf-status` 는 contract validation 단계다. 상세 아키텍처나 구현 검증 status 와 혼동하지 않는다.
+- `/nf-init` 은 현재 spec discovery 호환 skill 이며 canonical wrapper 는 `/nf-spec-discover` 다. reset 은 별도 skill 이 아니라 `--reset` 옵션이다.
+- `/nf-build` 는 code build 가 아니라 contract extraction/generation 단계다. canonical wrapper 는 `/nf-contract-build` 다.
+- `/nf-status` 는 contract validation 호환 skill 이며 canonical wrapper 는 `/nf-contract-check` 다. 상세 아키텍처나 구현 검증 status 와 혼동하지 않는다.
 - user-facing lifecycle skill 이 다음 user-facing lifecycle skill 을 자동 호출하지 않는다. 같은 단계의 필수 script/check 만 내부 실행하고, 다음 단계는 추천으로 보고한다.
 - `handoff_ready` 는 상세 아키텍처 설계를 시작할 수 있는 contract 입력이 충분하다는 뜻이다. 상세 아키텍처와 구현 계획은 별도 단계다.
 

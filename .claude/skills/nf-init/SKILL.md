@@ -7,6 +7,8 @@ allowed-tools: Bash(.venv/bin/python3 design/scripts/nf-manifest.py *) Bash(ls *
 
 # nf-init — NF 매니페스트 생성·보강
 
+> Compatibility alias. Canonical user-facing wrapper is `/nf-spec-discover`. Keep this workflow behavior identical until alias removal is explicitly planned.
+
 ## 입력
 - `<nf>` — `nssf`, `nrf`, `amf` 등 NF 이름 (소문자, design/ 하위 폴더명).
 - `--primary <spec>` — NF 의 주 spec 번호 (점 포함, 예 `29.531`). 필수.
