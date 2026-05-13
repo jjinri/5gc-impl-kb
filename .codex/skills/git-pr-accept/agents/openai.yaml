@@ -1,0 +1,4 @@
+interface:
+  display_name: "Git PR Accept"
+  short_description: "Approve, merge, and close a verified PR."
+  default_prompt: "Use $git-pr-accept to verify the current pull request, approve it, merge it, and confirm it is closed only if there are no blocking findings."

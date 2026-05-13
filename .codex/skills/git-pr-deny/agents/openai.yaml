@@ -1,0 +1,4 @@
+interface:
+  display_name: "Git PR Deny"
+  short_description: "Request PR changes with actionable evidence."
+  default_prompt: "Use $git-pr-deny to inspect the current pull request and post a request-changes review only with evidence-backed blockers."

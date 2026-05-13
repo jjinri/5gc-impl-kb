@@ -18,6 +18,9 @@ design/*/_archive/
 .obsidian/cache
 .obsidian/plugins/*/data.json
 
+# OMX runtime
+.omx/*
+
 # OS
 .DS_Store
 Thumbs.db
