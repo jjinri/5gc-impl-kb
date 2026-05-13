@@ -35,14 +35,13 @@
 
 | 단계 | SKILL | 책임 |
 |---|---|---|
-| 1. 매니페스트 보강 | `/nf-init <nf> --primary <spec>` | specs/ 의존성 자동 검출. `ready_for_build` 까지 반복 호출 |
+| 1. 매니페스트 보강·재생성 | `/nf-init <nf> --primary <spec> [--reset]` | specs/ 의존성 자동 검출. `ready_for_build` 까지 반복 호출. `--reset` 은 기존 산출을 `design/<nf>/_archive/<ts>/` 로 mv 후 manifest 재생성 (백업·재시작 통합) |
 | 2. 페이지 빌드 | `/nf-build <nf> [--<category>]` | 7 카테고리 페이지 생성·갱신 + `handoff/<nf>/_handoff.yaml` 자동 갱신 |
 | 3. 완성도 검사 | `/nf-status <nf>` | acceptance gate 평가, FAIL 마다 `to_pass` 액션 보고 |
-| (선택) 백업·재시작 | `/nf-reset <nf> [--full]` | 현 산출을 `design/<nf>/_archive/<ts>/` 로 mv 후 `/nf-build` 로 fresh 빌드 |
 
 각 SKILL 의 절차 *세부* 는 해당 `SKILL.md` 가 진실의 출처. CLAUDE.md 는 *정책* 만 정의하고 절차는 SKILL 로 위임한다. onboarding (Quick start, Obsidian) 은 README 에.
 
-> 새 SKILL 작성·개선 — Anthropic Skill Creator 가이드 (<https://claude.ai/customize/skills>) 또는 설치된 plugin `/skill-creator:skill-creator` 참고. 본 프로젝트의 4 SKILL (nf-init/build/status/reset) 이 *원칙 + 이유 + 예시* 패턴의 모범 — 새 SKILL 도 같은 골격을 따른다.
+> 새 SKILL 작성·개선 — Anthropic Skill Creator 가이드 (<https://claude.ai/customize/skills>) 또는 설치된 plugin `/skill-creator:skill-creator` 참고. 본 프로젝트의 3 SKILL (nf-init/build/status) 이 *원칙 + 이유 + 예시* 패턴의 모범 — 새 SKILL 도 같은 골격을 따른다.
 
 ---
 
@@ -120,7 +119,8 @@ FF 실패 → squash/rebase 신호 → reset 전환. 본 repo 는 **merge commit
 │   │   ├── 3gpp-{ts|tr}-{n}.md
 │   │   ├── _manifest.yaml       # /nf-init 산출 — 의존성 + ready_for_build (gitignored)
 │   │   ├── _handoff_seed.yaml   # /nf-build 가 함께 편집, build-handoff.py 입력 (v2 NF 만)
-│   │   └── _status.yaml         # /nf-status 산출 — acceptance gate (gitignored)
+│   │   ├── _status.yaml         # /nf-status 산출 — acceptance gate (gitignored)
+│   │   └── _archive/<ts>/       # /nf-init --reset 산출 — 이전 산출 백업 (gitignored)
 │   ├── architecture/, interfaces/, security/, slicing/, concepts/, overviews/, other/
 │   └── scripts/                 # 자동화 도구
 │       ├── extract.py           # .pdf/.doc/.docx → text
@@ -135,10 +135,9 @@ FF 실패 → squash/rebase 신호 → reset 전환. 본 repo 는 **merge commit
 ├── docs/                        # plan, handover, setup
 ├── .claude/
 │   └── skills/
-│       ├── nf-init/SKILL.md     # /nf-init
+│       ├── nf-init/SKILL.md     # /nf-init (--reset 옵션으로 백업·재시작 통합)
 │       ├── nf-build/SKILL.md    # /nf-build
-│       ├── nf-status/SKILL.md   # /nf-status
-│       └── nf-reset/SKILL.md    # /nf-reset (백업 + 재빌드 준비)
+│       └── nf-status/SKILL.md   # /nf-status
 └── .venv/                       # gitignored
 ```
 

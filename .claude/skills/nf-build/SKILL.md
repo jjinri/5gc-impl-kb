@@ -20,7 +20,7 @@ allowed-tools: Bash(.venv/bin/python3 design/scripts/extract.py *) Bash(.venv/bi
 | 매니페스트 생성·보강 | `/nf-init` |
 | 페이지·JSON 빌드·갱신 + handoff yaml emit | `/nf-build` (본 skill) |
 | 페이지 완성도 검사 (gate) | `/nf-status` |
-| 백업·재시작 | `/nf-reset` |
+| 백업·재시작 | `/nf-init <nf> --primary <spec> --reset` |
 
 ## 동작 원칙 (이유 포함)
 
