@@ -7,6 +7,8 @@ allowed-tools: Bash(.venv/bin/python3 design/scripts/nf-status.py *) Bash(cat *)
 
 # nf-status — design 완성도 검사
 
+> Compatibility alias. Canonical user-facing wrapper is `/nf-contract-check`. Interpret `handoff_ready` as contract readiness for architecture design.
+
 ## 입력
 - `<nf>` — NF 이름.
 - `--no-write` — `_status.yaml` 저장 없이 stdout 만. 일회성 점검에 유용.

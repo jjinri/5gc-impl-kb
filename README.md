@@ -37,16 +37,16 @@ python3 -m venv .venv
 
 ## 사람이 호출하는 lifecycle skill
 
-현재 사용 가능한 명령과 미래 canonical 이름을 분리한다. README 는 사용자 trigger 표면만 보여주고, 각 skill 이 내부에서 실행할 script/check 절차는 `.claude/skills/<name>/SKILL.md` 가 맡는다.
+현재 호환 명령과 canonical 이름을 분리한다. `/nf-spec-discover`, `/nf-contract-build`, `/nf-contract-check` 는 현재 wrapper 로 제공되며, 기존 `/nf-init`, `/nf-build`, `/nf-status` 도 호환 alias 로 유지한다. README 는 사용자 trigger 표면만 보여주고, 각 skill 이 내부에서 실행할 script/check 절차는 `.claude/skills/<name>/SKILL.md` 가 맡는다.
 
-| 단계 | 현재 사람이 호출하는 skill | 미래 canonical skill | 기능 | 주요 산출물 |
+| 단계 | 호환 skill | canonical skill | 기능 | 주요 산출물 |
 |---|---|---|---|---|
 | Spec discovery | `/nf-init <nf> --primary <spec>` | `/nf-spec-discover <nf> --primary <spec>` | primary/ref spec 식별, manifest 생성·보강 | `design/<nf>/_manifest.yaml` |
 | Reset + rediscovery | `/nf-init <nf> --primary <spec> --reset` | `/nf-spec-discover <nf> --primary <spec> --reset` | 기존 산출 archive 후 manifest 재생성 | `design/<nf>/_archive/<ts>/`, 새 manifest |
 | Contract extraction | `/nf-build <nf>` | `/nf-contract-build <nf>` | spec-derived contract markdown/json 과 handoff contract 생성 | `design/<nf>/...`, `handoff/<nf>/_handoff.yaml` |
 | Contract validation | `/nf-status <nf>` | `/nf-contract-check <nf>` | contract 가 architecture 설계 입력으로 충분한지 검사 | `design/<nf>/_status.yaml` |
-| Architecture design | 없음 | `/nf-arch-design <nf>` | contract 를 상세 아키텍처로 변환 | `design/<nf>/architecture/*` |
-| Implementation planning | 없음 | `/nf-impl-plan <nf>` | 아키텍처를 구현 작업·테스트 계획으로 분해 | `dev/<nf>/implementation-plan.md`, `tasks.yaml` |
+| Architecture design | 없음 | `/nf-arch-design <nf>` 예정 | contract 를 상세 아키텍처로 변환 | `design/<nf>/architecture/*` |
+| Implementation planning | 없음 | `/nf-impl-plan <nf>` 예정 | 아키텍처를 구현 작업·테스트 계획으로 분해 | `dev/<nf>/implementation-plan.md`, `tasks.yaml` |
 
 `nf-reset` 은 별도 skill 이 아니라 `/nf-init --reset` 으로 통합된 destructive option 이다.
 

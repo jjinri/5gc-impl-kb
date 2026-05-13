@@ -7,6 +7,8 @@ allowed-tools: Bash(.venv/bin/python3 design/scripts/extract.py *) Bash(.venv/bi
 
 # nf-build — 토픽 디렉터리 layout (handoff-v2)
 
+> Compatibility alias. Canonical user-facing wrapper is `/nf-contract-build`. This workflow generates spec-derived NF contract artifacts, not implementation code build artifacts.
+
 ## 입력
 - `<nf>` — NF 이름. `design/<nf>/_manifest.yaml` + `design/<nf>/_handoff_seed.yaml` 가 이미 존재해야 한다.
 - `--<category>` — 부분 빌드. 카테고리 이름 (api, data-model, interface, error-handling, module-decomposition 등). seed.categories 에 등록된 것만.

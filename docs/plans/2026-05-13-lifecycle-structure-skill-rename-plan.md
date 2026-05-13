@@ -565,3 +565,33 @@ Open risks / gaps:
 - Architecture and implementation-plan skills are not created yet.
 Next step:
 - Phase 2: add canonical skill compatibility wrappers for `/nf-contract-build`, `/nf-contract-check`, and future `/nf-spec-discover` while keeping existing `/nf-init`, `/nf-build`, `/nf-status` behavior intact.
+
+## Progress checkpoint — 2026-05-13 Phase 2
+
+Status: ready_for_next_phase
+Current objective: Phase 2 canonical skill compatibility wrappers.
+Completed:
+- Added `.claude/skills/nf-spec-discover/SKILL.md` as the canonical wrapper for `/nf-init` including `--reset`.
+- Added `.claude/skills/nf-contract-build/SKILL.md` as the canonical wrapper for `/nf-build`.
+- Added `.claude/skills/nf-contract-check/SKILL.md` as the canonical wrapper for `/nf-status`.
+- Added compatibility alias notes to existing `/nf-init`, `/nf-build`, and `/nf-status` skill docs.
+- Updated README/CLAUDE/ADR wording from future-only canonical names to available wrapper aliases for the first three lifecycle stages.
+Changed files:
+- `.claude/skills/nf-spec-discover/SKILL.md`
+- `.claude/skills/nf-contract-build/SKILL.md`
+- `.claude/skills/nf-contract-check/SKILL.md`
+- `.claude/skills/nf-init/SKILL.md`
+- `.claude/skills/nf-build/SKILL.md`
+- `.claude/skills/nf-status/SKILL.md`
+- `README.md`
+- `CLAUDE.md`
+- `docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`
+- `docs/plans/2026-05-13-lifecycle-structure-skill-rename-plan.md`
+Validation:
+- Skill frontmatter parse with `yaml.safe_load` → all 6 `.claude/skills/*/SKILL.md` files have `name` and `description`.
+- `git diff --check` → pass.
+Open risks / gaps:
+- Wrappers delegate to existing skill docs, so behavior stays unchanged but depends on future agents following the wrapper instruction.
+- Contract artifact path migration is still not started.
+Next step:
+- Commit/PR Phase 2. Next implementation phase: contract artifact path migration under `design/<nf>/contract/`.

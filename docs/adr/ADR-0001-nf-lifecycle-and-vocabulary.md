@@ -45,3 +45,7 @@ Agent-internal work is the script/tool/check sequence performed inside that skil
 2. Move contract artifacts under `design/<nf>/contract/` after tests are prepared.
 3. Add `/nf-arch-design` and `/nf-impl-plan` skills with templates.
 4. Keep reset integrated into `/nf-init --reset` and future `/nf-spec-discover --reset`.
+
+## Migration notes
+
+- 2026-05-13: Added canonical wrapper skills for `/nf-spec-discover`, `/nf-contract-build`, and `/nf-contract-check`; existing `/nf-init`, `/nf-build`, and `/nf-status` remain compatibility aliases.
