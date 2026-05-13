@@ -468,7 +468,7 @@ def _resolve_to_node(
                 no_docx_fallback, unresolved,
             ),
         }
-    if t == "object" or "properties" in schema:
+    if t == "object" or "properties" in schema or "additionalProperties" in schema:
         return _schema_node(
             schema, current_file, handoff_topic_index, visited,
             no_docx_fallback, unresolved, inlined_from=inlined_from,
@@ -516,6 +516,14 @@ def _schema_node(
             )
             properties.extend(sub.get("properties", []))
     out = {"type": "object", "properties": properties}
+    ap = schema.get("additionalProperties")
+    if ap is True:
+        out["additional_properties"] = {"type": "any"}
+    elif isinstance(ap, dict):
+        out["additional_properties"] = _resolve_to_node(
+            ap, current_file, handoff_topic_index, visited,
+            no_docx_fallback, unresolved,
+        )
     if inlined_from:
         out["_inlined_from"] = inlined_from
     return out

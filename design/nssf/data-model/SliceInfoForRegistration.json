@@ -129,7 +129,10 @@
                       "name": "nrfOauth2Required",
                       "required": false,
                       "type": "object",
-                      "properties": []
+                      "properties": [],
+                      "additional_properties": {
+                        "type": "boolean"
+                      }
                     }
                   ],
                   "_inlined_from": "#/components/schemas/NsiInformation"
@@ -238,7 +241,10 @@
                       "name": "nrfOauth2Required",
                       "required": false,
                       "type": "object",
-                      "properties": []
+                      "properties": [],
+                      "additional_properties": {
+                        "type": "boolean"
+                      }
                     }
                   ],
                   "_inlined_from": "#/components/schemas/NsiInformation"

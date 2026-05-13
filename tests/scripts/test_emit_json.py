@@ -65,3 +65,77 @@ def test_emit_json_handoff_topic_becomes_dependency() -> None:
 def test_emit_json_unresolved_refs_listed() -> None:
     # Provoke an unresolved ref by pointing to a tiny synthetic yaml under tmp.
     pass  # covered indirectly via build-handoff test; placeholder removed in T8
+
+
+def _find_field(fields: list[dict], name: str) -> dict | None:
+    for f in fields:
+        if f.get("name") == name:
+            return f
+    return None
+
+
+def test_emit_json_additional_properties_map_value_preserved() -> None:
+    # AuthorizedNetworkSliceInfo.snssaiInfoRspData is `type: object` with
+    # `additionalProperties.$ref: SnssaiInfo` — a map type. Its value schema
+    # must be preserved on the field as `additional_properties`. Without
+    # this, codegen / dev agents see an empty struct and miss the map shape.
+    payload = _run(
+        str(NSSF_YAML), "AuthorizedNetworkSliceInfo",
+        "--emit-json",
+        "--topic-id", "data-model/AuthorizedNetworkSliceInfo",
+        "--nf", "nssf",
+        "--spec-ref", "TS 29.531 §6.1.6.2.5",
+        "--handoff-topics", "data-model/SliceInfoForRegistration",
+        "--handoff-topics", "data-model/AuthorizedNetworkSliceInfo",
+    )
+    snssai_map = _find_field(payload["fields"], "snssaiInfoRspData")
+    assert snssai_map is not None, "snssaiInfoRspData missing from emitted fields"
+    assert snssai_map.get("type") == "object"
+    ap = snssai_map.get("additional_properties")
+    assert ap is not None, (
+        f"snssaiInfoRspData.additional_properties missing — map value schema dropped. "
+        f"Field payload: {json.dumps(snssai_map, indent=2, ensure_ascii=False)}"
+    )
+    # Value type should be the resolved SnssaiInfo schema (object with properties),
+    # not an empty dict.
+    assert ap.get("type") == "object"
+    assert isinstance(ap.get("properties"), list) and len(ap["properties"]) > 0, (
+        "SnssaiInfo value schema unresolved — properties list empty"
+    )
+
+
+def test_emit_json_additional_properties_primitive_value() -> None:
+    # AllowedNssai inside AuthorizedNetworkSliceInfo contains nrfOauth2Required —
+    # `additionalProperties: {type: boolean}`. The primitive value schema must
+    # also be preserved.
+    payload = _run(
+        str(NSSF_YAML), "AuthorizedNetworkSliceInfo",
+        "--emit-json",
+        "--topic-id", "data-model/AuthorizedNetworkSliceInfo",
+        "--nf", "nssf",
+        "--spec-ref", "TS 29.531 §6.1.6.2.5",
+        "--handoff-topics", "data-model/SliceInfoForRegistration",
+        "--handoff-topics", "data-model/AuthorizedNetworkSliceInfo",
+    )
+    # nrfOauth2Required is nested under allowedNssaiList[].allowedSnssaiList[] —
+    # walk the tree to find it.
+    def _walk_for_field(node: object, target: str) -> dict | None:
+        if isinstance(node, dict):
+            if node.get("name") == target:
+                return node
+            for v in node.values():
+                hit = _walk_for_field(v, target)
+                if hit is not None:
+                    return hit
+        elif isinstance(node, list):
+            for v in node:
+                hit = _walk_for_field(v, target)
+                if hit is not None:
+                    return hit
+        return None
+
+    nrf_map = _walk_for_field(payload["fields"], "nrfOauth2Required")
+    assert nrf_map is not None, "nrfOauth2Required not found in emitted tree"
+    ap = nrf_map.get("additional_properties")
+    assert ap is not None, "nrfOauth2Required.additional_properties dropped"
+    assert ap.get("type") == "boolean", f"expected boolean value type, got {ap}"

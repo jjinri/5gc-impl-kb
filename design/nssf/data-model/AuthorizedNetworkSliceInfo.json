@@ -86,7 +86,10 @@
                         "name": "nrfOauth2Required",
                         "required": false,
                         "type": "object",
-                        "properties": []
+                        "properties": [],
+                        "additional_properties": {
+                          "type": "boolean"
+                        }
                       }
                     ],
                     "_inlined_from": "#/components/schemas/NsiInformation"
@@ -272,7 +275,10 @@
           "name": "nrfOauth2Required",
           "required": false,
           "type": "object",
-          "properties": []
+          "properties": [],
+          "additional_properties": {
+            "type": "boolean"
+          }
         }
       ],
       "_inlined_from": "#/components/schemas/NsiInformation"
@@ -309,7 +315,10 @@
       "name": "nrfOauth2Required",
       "required": false,
       "type": "object",
-      "properties": []
+      "properties": [],
+      "additional_properties": {
+        "type": "boolean"
+      }
     },
     {
       "name": "targetAmfServiceSet",
@@ -551,7 +560,23 @@
       "name": "snssaiInfoRspData",
       "required": false,
       "type": "object",
-      "properties": []
+      "properties": [],
+      "additional_properties": {
+        "type": "object",
+        "properties": [
+          {
+            "name": "nsiIds",
+            "required": false,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": [],
+              "_inlined_from": "#/components/schemas/NsiId"
+            }
+          }
+        ],
+        "_inlined_from": "#/components/schemas/SnssaiInfo"
+      }
     }
   ],
   "dependencies": [],
