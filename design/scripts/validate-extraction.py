@@ -26,6 +26,7 @@ strict (report-only, T6 단계에서는 stub):
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import pathlib
 import sys
@@ -187,6 +188,104 @@ def rule_8_frontmatter_marker_sync(nf: str, data: dict) -> list[str]:
     return fails
 
 
+DATA_MODEL_REQUIRED_KEYS = {
+    "schema_version", "topic_id", "status", "fields", "dependencies", "unresolved_refs",
+}
+
+
+def _data_model_topics(data: dict) -> list[tuple[str, dict]]:
+    return [(tid, t) for tid, t in (data.get("topics") or {}).items()
+            if tid.startswith("data-model/")]
+
+
+def rule_9_machine_file_exists(data: dict) -> list[str]:
+    fails = []
+    for tid, t in _data_model_topics(data):
+        mf = t.get("machine_file")
+        if not mf:
+            fails.append(f"#9 machine_file: topic {tid!r} missing machine_file key")
+            continue
+        path = REPO_ROOT / mf
+        if not path.is_file():
+            fails.append(f"#9 machine_file: {tid!r} → {mf} 부재")
+    return fails
+
+
+def _load_machine(t: dict) -> tuple[dict | None, str | None]:
+    mf = t.get("machine_file")
+    if not mf:
+        return None, "missing machine_file"
+    path = REPO_ROOT / mf
+    if not path.is_file():
+        return None, "file missing"
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as e:
+        return None, f"json parse error: {e}"
+    return data, None
+
+
+def rule_10_json_parse(data: dict) -> list[str]:
+    fails = []
+    for tid, t in _data_model_topics(data):
+        mf = t.get("machine_file")
+        if not mf:
+            continue
+        path = REPO_ROOT / mf
+        if not path.is_file():
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as e:
+            fails.append(f"#10 JSON parse: {tid!r} {e}")
+            continue
+        missing = DATA_MODEL_REQUIRED_KEYS - set(payload.keys())
+        if missing:
+            fails.append(f"#10 JSON shape: {tid!r} missing keys {sorted(missing)}")
+    return fails
+
+
+def rule_11_topic_id_status_match(data: dict) -> list[str]:
+    fails = []
+    for tid, t in _data_model_topics(data):
+        payload, err = _load_machine(t)
+        if payload is None:
+            continue
+        if payload.get("topic_id") != tid:
+            fails.append(f"#11 JSON topic_id: yaml={tid!r} json={payload.get('topic_id')!r}")
+        if payload.get("status") != t.get("status"):
+            fails.append(
+                f"#11 JSON status: {tid!r} yaml={t.get('status')!r} json={payload.get('status')!r}"
+            )
+    return fails
+
+
+def rule_12_unresolved_vs_status(data: dict) -> list[str]:
+    fails = []
+    for tid, t in _data_model_topics(data):
+        payload, err = _load_machine(t)
+        if payload is None:
+            continue
+        if payload.get("unresolved_refs") and t.get("status") in ("canonical", "handoff_ready"):
+            fails.append(
+                f"#12 unresolved_refs vs status: {tid!r} has unresolved but status={t.get('status')!r}"
+            )
+    return fails
+
+
+def rule_13_dependencies_target(data: dict) -> list[str]:
+    fails = []
+    known = set((data.get("topics") or {}).keys())
+    for tid, t in _data_model_topics(data):
+        payload, err = _load_machine(t)
+        if payload is None:
+            continue
+        for dep in (payload.get("dependencies") or []):
+            if dep not in known:
+                fails.append(f"#13 dependencies: {tid!r} → {dep!r} not in handoff topics")
+    return fails
+
+
 def run_basic(nf: str, data: dict) -> tuple[int, int, list[str]]:
     """Return (pass_count, fail_count, failure_messages)."""
     rules = [
@@ -198,6 +297,11 @@ def run_basic(nf: str, data: dict) -> tuple[int, int, list[str]]:
         ("#6", rule_6_blocked_na_semantics(data)),
         ("#7", rule_7_marker_unique(nf, data)),
         ("#8", rule_8_frontmatter_marker_sync(nf, data)),
+        ("#9", rule_9_machine_file_exists(data)),
+        ("#10", rule_10_json_parse(data)),
+        ("#11", rule_11_topic_id_status_match(data)),
+        ("#12", rule_12_unresolved_vs_status(data)),
+        ("#13", rule_13_dependencies_target(data)),
     ]
     failures: list[str] = []
     pass_count = 0

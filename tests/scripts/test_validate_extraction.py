@@ -177,3 +177,57 @@ def test_rule_8_frontmatter_marker_sync(tmp_path: pathlib.Path) -> None:
     out = _run(tmp_path, "demo", "--level", "basic")
     assert out.returncode != 0
     assert "#8" in out.stdout
+
+
+def test_rule_9_missing_machine_file(tmp_path: pathlib.Path) -> None:
+    _write_min_nf(tmp_path)
+    (tmp_path / "design" / "demo" / "data-model" / "S.json").unlink()
+    out = _run(tmp_path, "demo", "--level", "basic")
+    assert out.returncode != 0
+    assert "#9" in out.stdout
+
+
+def test_rule_10_invalid_json(tmp_path: pathlib.Path) -> None:
+    _write_min_nf(tmp_path)
+    (tmp_path / "design" / "demo" / "data-model" / "S.json").write_text("{ not json", encoding="utf-8")
+    out = _run(tmp_path, "demo", "--level", "basic")
+    assert out.returncode != 0
+    assert "#10" in out.stdout
+
+
+def test_rule_11_topic_id_mismatch(tmp_path: pathlib.Path) -> None:
+    _write_min_nf(tmp_path)
+    p = tmp_path / "design" / "demo" / "data-model" / "S.json"
+    p.write_text(
+        '{"schema_version":"data-model-v1","nf":"demo","topic_id":"data-model/OTHER",'
+        '"status":"canonical","fields":[],"dependencies":[],"unresolved_refs":[]}',
+        encoding="utf-8")
+    out = _run(tmp_path, "demo", "--level", "basic")
+    assert out.returncode != 0
+    assert "#11" in out.stdout
+
+
+def test_rule_12_unresolved_with_canonical_status(tmp_path: pathlib.Path) -> None:
+    _write_min_nf(tmp_path)
+    p = tmp_path / "design" / "demo" / "data-model" / "S.json"
+    p.write_text(
+        '{"schema_version":"data-model-v1","nf":"demo","topic_id":"data-model/S",'
+        '"status":"canonical","fields":[],"dependencies":[],'
+        '"unresolved_refs":[{"ref":"#/X","note":"not registered"}]}',
+        encoding="utf-8")
+    out = _run(tmp_path, "demo", "--level", "basic")
+    assert out.returncode != 0
+    assert "#12" in out.stdout
+
+
+def test_rule_13_unknown_dependency(tmp_path: pathlib.Path) -> None:
+    _write_min_nf(tmp_path)
+    p = tmp_path / "design" / "demo" / "data-model" / "S.json"
+    p.write_text(
+        '{"schema_version":"data-model-v1","nf":"demo","topic_id":"data-model/S",'
+        '"status":"canonical","fields":[],"dependencies":["data-model/Ghost"],'
+        '"unresolved_refs":[]}',
+        encoding="utf-8")
+    out = _run(tmp_path, "demo", "--level", "basic")
+    assert out.returncode != 0
+    assert "#13" in out.stdout
