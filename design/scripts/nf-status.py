@@ -717,10 +717,12 @@ def main() -> None:
     # 의미 있는 진실은 validate_extraction_basic + handoff_yaml_valid 가 담는다.
     if v2_handoff is not None and v2_handoff.get("schema_version") == "handoff-v2":
         v2_demoted = {
+            "frontmatter_valid",
             "sections_complete", "data_model_chain_complete",
             "api_operation_coverage", "service_flow_coverage",
             "wikilinks_resolve", "no_korean_colon_end",
-            "handoff_yaml_self_contained", "schema_implementable",
+            "handoff_yaml_valid", "handoff_yaml_self_contained",
+            "schema_implementable",
         }
         for c in checks:
             if c["id"] in v2_demoted and c["status"] == "FAIL":
