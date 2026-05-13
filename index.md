@@ -10,7 +10,7 @@
 
 > 시작점. TS 29.531 등 NSSF 관련 spec 시리즈를 정리.
 
-- [TS 29.531 — Network Slice Selection Services (NSSF)](./design/nssf/3gpp-ts-29531.md) — Nnssf_NSSelection v2 + Nnssf_NSSAIAvailability v1, docx V19.6.0, status `draft`.
+_(아직 페이지 없음 — v1 layout 은 `design/nssf/_archive/` 로 이주, handoff-v2 토픽 layout 으로 재빌드 중.)_
 
 ---
 
