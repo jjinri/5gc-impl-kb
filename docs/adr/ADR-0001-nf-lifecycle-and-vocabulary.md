@@ -13,9 +13,9 @@ A separate architecture-design step is required between contract extraction and 
 
 ## Decision
 
-Define the lifecycle in explicit stages and name future user-triggered skills by lifecycle responsibility.
+Define the lifecycle in explicit stages and name canonical user-triggered skills by lifecycle responsibility.
 
-| Stage | User-triggered skill today | Future canonical skill | Meaning |
+| Stage | Compatibility skill | Canonical skill | Meaning |
 |---|---|---|---|
 | Spec discovery | `/nf-init <nf> --primary <spec>` | `/nf-spec-discover <nf> --primary <spec>` | Identify primary/ref specs and create or refresh the manifest. |
 | Reset + rediscovery | `/nf-init <nf> --primary <spec> --reset` | `/nf-spec-discover <nf> --primary <spec> --reset` | Archive existing contract artifacts, then recreate the manifest. |
@@ -36,16 +36,17 @@ Agent-internal work is the script/tool/check sequence performed inside that skil
 
 - Documentation should describe `/nf-build` as contract generation, not code build.
 - `handoff_ready` means the contract is ready to start architecture design, not that coding can start without architecture work.
-- `design/<nf>/contract/`, `design/<nf>/architecture/`, `handoff/<nf>/contract.yaml`, and `dev/<nf>/implementation-plan.md` are the target structure for later phases.
-- Existing commands remain compatibility aliases until the corresponding canonical skills exist.
+- `design/<nf>/contract/` is the current spec-derived contract location. `design/<nf>/architecture/`, `handoff/<nf>/contract.yaml`, and `dev/<nf>/implementation-plan.md` remain target structure for later phases.
+- Existing commands remain compatibility aliases until alias removal is explicitly planned.
 
 ## Follow-ups
 
-1. Add canonical skill wrappers for `/nf-contract-build` and `/nf-contract-check`.
-2. Move contract artifacts under `design/<nf>/contract/` after tests are prepared.
-3. Add `/nf-arch-design` and `/nf-impl-plan` skills with templates.
-4. Keep reset integrated into `/nf-init --reset` and future `/nf-spec-discover --reset`.
+1. Add `/nf-arch-design` and `/nf-impl-plan` skills with templates.
+2. Rename `handoff/<nf>/_handoff.yaml` to `handoff/<nf>/contract.yaml` in a compatibility-aware phase.
+3. Consider `_handoff_seed.yaml` → `_contract_seed.yaml` and `_status.yaml` → `_contract_status.yaml` after script/test compatibility is prepared.
+4. Keep reset integrated into `/nf-init --reset` and `/nf-spec-discover --reset`.
 
 ## Migration notes
 
 - 2026-05-13: Added canonical wrapper skills for `/nf-spec-discover`, `/nf-contract-build`, and `/nf-contract-check`; existing `/nf-init`, `/nf-build`, and `/nf-status` remain compatibility aliases.
+- 2026-05-13: Moved NSSF topic contract markdown/json artifacts under `design/nssf/contract/`; kept `_handoff_seed.yaml`, `_status.yaml`, and `handoff/nssf/_handoff.yaml` names for compatibility.

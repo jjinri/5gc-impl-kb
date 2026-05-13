@@ -15,21 +15,21 @@ def _write_min_nf(tmp_path: pathlib.Path) -> pathlib.Path:
     """Create a minimal valid v2 yaml + topic files. Return repo-like root."""
     root = tmp_path
     nf = root / "design" / "demo"
-    (nf / "api").mkdir(parents=True)
-    (nf / "data-model").mkdir(parents=True)
-    (nf / "interface.md").write_text(
+    (nf / "contract" / "api").mkdir(parents=True)
+    (nf / "contract" / "data-model").mkdir(parents=True)
+    (nf / "contract" / "interface.md").write_text(
         "---\nid: interface\nstatus: handoff_ready\n"
         "generated_sections: []\nuser_sections: []\n---\n", encoding="utf-8")
-    (nf / "error-handling.md").write_text(
+    (nf / "contract" / "error-handling.md").write_text(
         "---\nid: error-handling\nstatus: handoff_ready\n"
         "generated_sections: []\nuser_sections: []\n---\n", encoding="utf-8")
-    (nf / "api" / "OpA.md").write_text(
+    (nf / "contract" / "api" / "OpA.md").write_text(
         "---\nid: api/OpA\nstatus: handoff_ready\n"
         "generated_sections: []\nuser_sections: []\n---\n", encoding="utf-8")
-    (nf / "data-model" / "S.md").write_text(
+    (nf / "contract" / "data-model" / "S.md").write_text(
         "---\nid: data-model/S\nstatus: canonical\n"
         "generated_sections: []\nuser_sections: []\n---\n", encoding="utf-8")
-    (nf / "data-model" / "S.json").write_text(
+    (nf / "contract" / "data-model" / "S.json").write_text(
         '{"schema_version":"data-model-v1","nf":"demo","topic_id":"data-model/S",'
         '"status":"canonical","fields":[],"dependencies":[],"unresolved_refs":[]}',
         encoding="utf-8")
@@ -60,8 +60,8 @@ def _write_min_nf(tmp_path: pathlib.Path) -> pathlib.Path:
             },
             "data-model/S": {
                 "status": "canonical",
-                "file": "design/demo/data-model/S.md",
-                "machine_file": "design/demo/data-model/S.json",
+                "file": "design/demo/contract/data-model/S.md",
+                "machine_file": "design/demo/contract/data-model/S.json",
                 "spec_refs": [],
             },
         },
@@ -111,7 +111,7 @@ def test_rule_2_invalid_status_enum(tmp_path: pathlib.Path) -> None:
 
 def test_rule_3_missing_topic_file(tmp_path: pathlib.Path) -> None:
     _write_min_nf(tmp_path)
-    (tmp_path / "design" / "demo" / "api" / "OpA.md").unlink()
+    (tmp_path / "design" / "demo" / "contract" / "api" / "OpA.md").unlink()
     out = _run(tmp_path, "demo", "--level", "basic")
     assert out.returncode != 0
     assert "#3" in out.stdout
@@ -131,7 +131,7 @@ def test_rule_4_dangling_cross_ref(tmp_path: pathlib.Path) -> None:
 def test_rule_4_anchor_present_passes(tmp_path: pathlib.Path) -> None:
     _write_min_nf(tmp_path)
     # Add an explicit anchor inside error-handling.md, then reference it.
-    eh = tmp_path / "design" / "demo" / "error-handling.md"
+    eh = tmp_path / "design" / "demo" / "contract" / "error-handling.md"
     eh.write_text(
         eh.read_text(encoding="utf-8")
         + '\n<a id="op-400"></a>\n## Op 400 — bad request\n',
@@ -208,7 +208,7 @@ def test_rule_6_blocked_needs_reason(tmp_path: pathlib.Path) -> None:
 
 def test_rule_7_duplicate_marker(tmp_path: pathlib.Path) -> None:
     _write_min_nf(tmp_path)
-    p = tmp_path / "design" / "demo" / "api" / "OpA.md"
+    p = tmp_path / "design" / "demo" / "contract" / "api" / "OpA.md"
     p.write_text(
         "---\nid: api/OpA\nstatus: handoff_ready\n"
         "generated_sections: [foo]\nuser_sections: []\n---\n"
@@ -223,7 +223,7 @@ def test_rule_7_duplicate_marker(tmp_path: pathlib.Path) -> None:
 
 def test_rule_8_frontmatter_marker_sync(tmp_path: pathlib.Path) -> None:
     _write_min_nf(tmp_path)
-    p = tmp_path / "design" / "demo" / "api" / "OpA.md"
+    p = tmp_path / "design" / "demo" / "contract" / "api" / "OpA.md"
     p.write_text(
         "---\nid: api/OpA\nstatus: handoff_ready\n"
         "generated_sections: [foo]\nuser_sections: []\n---\n"
@@ -237,7 +237,7 @@ def test_rule_8_frontmatter_marker_sync(tmp_path: pathlib.Path) -> None:
 
 def test_rule_9_missing_machine_file(tmp_path: pathlib.Path) -> None:
     _write_min_nf(tmp_path)
-    (tmp_path / "design" / "demo" / "data-model" / "S.json").unlink()
+    (tmp_path / "design" / "demo" / "contract" / "data-model" / "S.json").unlink()
     out = _run(tmp_path, "demo", "--level", "basic")
     assert out.returncode != 0
     assert "#9" in out.stdout
@@ -245,7 +245,7 @@ def test_rule_9_missing_machine_file(tmp_path: pathlib.Path) -> None:
 
 def test_rule_10_invalid_json(tmp_path: pathlib.Path) -> None:
     _write_min_nf(tmp_path)
-    (tmp_path / "design" / "demo" / "data-model" / "S.json").write_text("{ not json", encoding="utf-8")
+    (tmp_path / "design" / "demo" / "contract" / "data-model" / "S.json").write_text("{ not json", encoding="utf-8")
     out = _run(tmp_path, "demo", "--level", "basic")
     assert out.returncode != 0
     assert "#10" in out.stdout
@@ -253,7 +253,7 @@ def test_rule_10_invalid_json(tmp_path: pathlib.Path) -> None:
 
 def test_rule_11_topic_id_mismatch(tmp_path: pathlib.Path) -> None:
     _write_min_nf(tmp_path)
-    p = tmp_path / "design" / "demo" / "data-model" / "S.json"
+    p = tmp_path / "design" / "demo" / "contract" / "data-model" / "S.json"
     p.write_text(
         '{"schema_version":"data-model-v1","nf":"demo","topic_id":"data-model/OTHER",'
         '"status":"canonical","fields":[],"dependencies":[],"unresolved_refs":[]}',
@@ -265,7 +265,7 @@ def test_rule_11_topic_id_mismatch(tmp_path: pathlib.Path) -> None:
 
 def test_rule_12_unresolved_with_canonical_status(tmp_path: pathlib.Path) -> None:
     _write_min_nf(tmp_path)
-    p = tmp_path / "design" / "demo" / "data-model" / "S.json"
+    p = tmp_path / "design" / "demo" / "contract" / "data-model" / "S.json"
     p.write_text(
         '{"schema_version":"data-model-v1","nf":"demo","topic_id":"data-model/S",'
         '"status":"canonical","fields":[],"dependencies":[],'
@@ -278,7 +278,7 @@ def test_rule_12_unresolved_with_canonical_status(tmp_path: pathlib.Path) -> Non
 
 def test_rule_13_unknown_dependency(tmp_path: pathlib.Path) -> None:
     _write_min_nf(tmp_path)
-    p = tmp_path / "design" / "demo" / "data-model" / "S.json"
+    p = tmp_path / "design" / "demo" / "contract" / "data-model" / "S.json"
     p.write_text(
         '{"schema_version":"data-model-v1","nf":"demo","topic_id":"data-model/S",'
         '"status":"canonical","fields":[],"dependencies":["data-model/Ghost"],'

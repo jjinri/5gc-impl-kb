@@ -30,7 +30,7 @@ NF 개발 단계 이름은 [`docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`](
 ## Source-of-truth policy
 
 - Spec 원문은 `specs/` 가 보존한다.
-- Spec-derived contract 는 현재 `design/<nf>/` 와 `handoff/<nf>/_handoff.yaml` 이 보존한다. 목표 구조는 plan 에 따라 `design/<nf>/contract/` 와 `handoff/<nf>/contract.yaml` 로 이행한다.
+- Spec-derived contract 는 현재 `design/<nf>/contract/` 와 `handoff/<nf>/_handoff.yaml` 이 보존한다. `handoff/<nf>/contract.yaml` rename 은 plan 의 후속 phase 로 이행한다.
 - Architecture design 은 목표 구조상 `design/<nf>/architecture/` 에 둔다.
 - Implementation planning 은 목표 구조상 `dev/<nf>/` 에 둔다.
 - `.omx/` 는 runtime/state 영역이며 cleanup·구조 변경 대상이 아니다.

@@ -56,7 +56,7 @@ allowed-tools: Bash(.venv/bin/python3 design/scripts/nf-manifest.py *) Bash(ls *
 - `ts=$(date '+%Y%m%d-%H%M%S')`.
 - `archive_dir=design/<nf>/_archive/<ts>/`.
 - `mkdir -p <archive_dir>`.
-- **mv 대상 (블랙리스트 패턴)** — `design/<nf>/` 안의 모든 파일·디렉터리 중 `_archive` 만 보존, 나머지 모두 mv. 즉 `_manifest.yaml`·`_handoff_seed.yaml`·`_status.yaml`·페이지 (`*.md`)·토픽 디렉터리 (`api/`, `data-model/`, `module-decomposition/` 등) 모두 archive 로 이동. 명시 화이트리스트 (예 `3gpp-*.md` 만) 는 handoff-v2 topic layout 에서 drift 위험 — 블랙리스트가 안전.
+- **mv 대상 (블랙리스트 패턴)** — `design/<nf>/` 안의 모든 파일·디렉터리 중 `_archive` 만 보존, 나머지 모두 mv. 즉 `_manifest.yaml`·`_handoff_seed.yaml`·`_status.yaml`·페이지 (`*.md`)·토픽 디렉터리 (`contract/`, `module-decomposition/` 등) 모두 archive 로 이동. 명시 화이트리스트 (예 `3gpp-*.md` 만) 는 handoff-v2 topic layout 에서 drift 위험 — 블랙리스트가 안전.
   ```bash
   find design/<nf>/ -mindepth 1 -maxdepth 1 ! -name _archive -exec git mv -k {} <archive_dir>/ \;
   ```
@@ -117,7 +117,7 @@ allowed-tools: Bash(.venv/bin/python3 design/scripts/nf-manifest.py *) Bash(ls *
         find design/nssf/ -mindepth 1 -maxdepth 1 ! -name _archive -exec git mv -k {} ... \;
         mv handoff/nssf/_handoff.yaml design/nssf/_archive/20260513-153000/_handoff.yaml
         design/scripts/nf-manifest.py nssf --primary 29.531 --write
-보고:   "archive — design/nssf/_archive/20260513-153000/ (mv 8 entries: api/, data-model/, module-decomposition/, interface.md, error-handling.md, _manifest.yaml, _handoff_seed.yaml, _status.yaml + handoff/_handoff.yaml).
+보고:   "archive — design/nssf/_archive/20260513-153000/ (mv entries: contract/, module-decomposition/, _manifest.yaml, _handoff_seed.yaml, _status.yaml + handoff/_handoff.yaml).
         manifest_completeness 11/11. ready_for_build=true.
         다음 — /nf-build nssf 로 fresh 빌드."
 ```
