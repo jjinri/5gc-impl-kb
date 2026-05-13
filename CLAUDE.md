@@ -53,11 +53,30 @@
 1. 머지된 commits 를 별도 push 브랜치로 분기. 예 `git switch -c push/<topic>-<yyyymmdd> <merge-commit-sha>` 후 `git push -u origin push/<topic>-<yyyymmdd>`. (worktree branch 가 이미 push 된 경우 그대로 사용 가능.)
 2. `gh pr create --base main --head push/<topic>-<yyyymmdd>` 로 PR 작성. 제목·본문은 머지된 commits 의 *요약 + 이유 + 검증* — 머지 commit 메시지 또는 retro 문서를 그대로 reuse.
 3. 리뷰·CI 후 원격에서 PR squash 또는 merge → 원격 `main` 갱신.
-4. 로컬 `main` 은 `git pull --ff-only origin main` 로 정합. push 브랜치는 머지 확인 후 `git branch -d`.
+4. 로컬 `main` 은 `git pull --ff-only origin main` 로 정합. push 브랜치는 머지 확인 후 `git branch -d` + `git push origin --delete <branch>`.
 
 이유 — 단독 작업자라도 원격 PR 이 *변경 일람 + 사유 + 재현 단계* 의 1급 보존소가 된다. 원격 `main` 직접 push 는 *왜* 의 흔적이 commit log 외 어디에도 남지 않아 후속 작업·롤백·감사가 어렵다.
 
 본 정책은 *예외 없음*. 핫픽스 등 긴급 상황은 사용자가 *명시적으로* "원격 main 직접 push 해" 라고 지시했을 때만 우회.
+
+### 머지 후 동기화 처치 — 머지 방식별 명령
+
+| GitHub 머지 방식 | 원격 main 변화 | 로컬 main 상태 | 동기화 명령 |
+|---|---|---|---|
+| **Merge commit** | PR commits + 1 merge commit, SHA 보존 | strict ancestor | `git pull --ff-only origin main` |
+| **Squash** | 1 신규 commit, SHA 다름 | *divergence* (로컬에 squash 안된 PR commits 잔존) | `git fetch origin && git reset --hard origin/main` |
+| **Rebase** | PR commits 가 새 SHA 로 cherry-pick | *divergence* | `git fetch origin && git reset --hard origin/main` |
+
+FF 시도가 실패하면 머지 방식이 squash/rebase 라는 신호 — `reset --hard origin/main` 로 전환. *단독 작업자 + origin 이 진실 출처* 라는 본 repo 의 가정 위에서만 안전.
+
+본 repo 의 현 머지 방식은 **merge commit** — FF 동기화로 충분 (PR #1 검증 완료).
+
+### 이슈 방지 운영 규칙 (divergence 자체를 봉쇄)
+
+1. **로컬 `main` 에 직접 commit 하지 않는다.** 모든 변경은 worktree branch 또는 `push/<topic>-<date>` branch 로. 로컬 main 의 HEAD 는 *오직* PR 머지 결과 (또는 그 머지의 ancestor) 여야 한다 — 이 invariant 가 깨지지 않으면 divergence 가 발생할 경로 자체가 없다.
+2. **PR 머지 직후 즉시 동기화.** 머지 commit 위에 새 작업이 쌓이기 전 `git pull --ff-only` (또는 reset) + 로컬·원격 push branch 삭제로 마무리. 미루면 다음 사이클의 작업 분기점이 stale 해진다.
+3. **GitHub repo setting `Automatically delete head branches` ON 권장.** OFF 시 매 PR 머지 후 `git push origin --delete <branch>` 수동 필요 — 본 repo 는 현재 OFF.
+4. **머지 방식 단일 통일.** 본 repo 는 merge commit 사용. 향후 squash 로 바꿀 경우 위 동기화 처치도 reset 방식으로 일괄 전환 — 혼용 금지 (혼용은 사용자 인지 부담 증가 + 잘못된 명령 선택 위험).
 
 ---
 
