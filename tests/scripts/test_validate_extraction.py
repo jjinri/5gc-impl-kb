@@ -148,3 +148,32 @@ def test_rule_6_blocked_needs_reason(tmp_path: pathlib.Path) -> None:
     out = _run(tmp_path, "demo", "--level", "basic")
     assert out.returncode != 0
     assert "#6" in out.stdout
+
+
+def test_rule_7_duplicate_marker(tmp_path: pathlib.Path) -> None:
+    _write_min_nf(tmp_path)
+    p = tmp_path / "design" / "demo" / "api" / "OpA.md"
+    p.write_text(
+        "---\nid: api/OpA\nstatus: handoff_ready\n"
+        "generated_sections: [foo]\nuser_sections: []\n---\n"
+        "<!-- AUTO:foo:start -->\nA\n<!-- AUTO:foo:end -->\n"
+        "<!-- AUTO:foo:start -->\nB\n<!-- AUTO:foo:end -->\n",
+        encoding="utf-8",
+    )
+    out = _run(tmp_path, "demo", "--level", "basic")
+    assert out.returncode != 0
+    assert "#7" in out.stdout
+
+
+def test_rule_8_frontmatter_marker_sync(tmp_path: pathlib.Path) -> None:
+    _write_min_nf(tmp_path)
+    p = tmp_path / "design" / "demo" / "api" / "OpA.md"
+    p.write_text(
+        "---\nid: api/OpA\nstatus: handoff_ready\n"
+        "generated_sections: [foo]\nuser_sections: []\n---\n"
+        "no markers here\n",
+        encoding="utf-8",
+    )
+    out = _run(tmp_path, "demo", "--level", "basic")
+    assert out.returncode != 0
+    assert "#8" in out.stdout

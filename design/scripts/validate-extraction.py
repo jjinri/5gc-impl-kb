@@ -42,6 +42,7 @@ REPO_ROOT = pathlib.Path(
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 
 from lib.path_resolution import resolve_topic_path, parse_topic_ref  # noqa: E402
+from lib.marker_parser import extract_markers, duplicate_marker_ids, sync_diff  # noqa: E402
 
 
 VALID_STATUS = {"canonical", "handoff_ready", "draft", "blocked", "not_applicable"}
@@ -131,6 +132,61 @@ def rule_6_blocked_na_semantics(data: dict) -> list[str]:
     return fails
 
 
+def _read_topic_md(nf: str, data: dict, topic_id: str) -> tuple[dict, str] | None:
+    layout = {cid: c.get("layout", "directory") for cid, c in (data.get("categories") or {}).items()}
+    nf_root = REPO_ROOT / "design" / nf
+    try:
+        r = resolve_topic_path(nf_root=nf_root, topic_id=topic_id, category_layout=layout)
+    except ValueError:
+        return None
+    if not r.exists:
+        return None
+    text = r.path.read_text(encoding="utf-8")
+    if not text.startswith("---"):
+        return {}, text
+    end = text.find("\n---", 3)
+    if end < 0:
+        return {}, text
+    try:
+        fm = yaml.safe_load(text[3:end]) or {}
+    except yaml.YAMLError:
+        fm = {}
+    return fm, text[end + 4:]
+
+
+def rule_7_marker_unique(nf: str, data: dict) -> list[str]:
+    fails = []
+    for tid in (data.get("topics") or {}):
+        loaded = _read_topic_md(nf, data, tid)
+        if loaded is None:
+            continue
+        _, body = loaded
+        dups = duplicate_marker_ids(body)
+        for kind, mid in dups:
+            fails.append(f"#7 marker unique: {tid!r} duplicates {kind}:{mid}")
+    return fails
+
+
+def rule_8_frontmatter_marker_sync(nf: str, data: dict) -> list[str]:
+    fails = []
+    for tid in (data.get("topics") or {}):
+        loaded = _read_topic_md(nf, data, tid)
+        if loaded is None:
+            continue
+        fm, body = loaded
+        diff = sync_diff(fm=fm, markers=extract_markers(body))
+        if any([diff.frontmatter_only_auto, diff.body_only_auto,
+                diff.frontmatter_only_user, diff.body_only_user]):
+            fails.append(
+                f"#8 frontmatter↔marker sync {tid!r}: "
+                f"fm_only_auto={diff.frontmatter_only_auto}, "
+                f"body_only_auto={diff.body_only_auto}, "
+                f"fm_only_user={diff.frontmatter_only_user}, "
+                f"body_only_user={diff.body_only_user}"
+            )
+    return fails
+
+
 def run_basic(nf: str, data: dict) -> tuple[int, int, list[str]]:
     """Return (pass_count, fail_count, failure_messages)."""
     rules = [
@@ -140,6 +196,8 @@ def run_basic(nf: str, data: dict) -> tuple[int, int, list[str]]:
         ("#4", rule_4_cross_ref(data)),
         ("#5", rule_5_category_topic_consistency(data)),
         ("#6", rule_6_blocked_na_semantics(data)),
+        ("#7", rule_7_marker_unique(nf, data)),
+        ("#8", rule_8_frontmatter_marker_sync(nf, data)),
     ]
     failures: list[str] = []
     pass_count = 0
