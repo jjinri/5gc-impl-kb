@@ -36,14 +36,13 @@ python3 -m venv .venv
 
 의존성은 `requirements.txt` 가 진실 출처 (`pypdf`·`python-docx`·`pyyaml`). 본 repo 의 모든 도구는 `.venv/bin/python3 design/scripts/<name>.py` 형태로 호출하므로 venv 활성화는 불필요. `.doc` (legacy MS Word) 처리가 필요하면 별도로 `sudo apt install libreoffice-core` 또는 `antiword`.
 
-## 작업 사이클 — 4 SKILL
+## 작업 사이클 — 3 SKILL
 
-NF 한 개를 design 에 등록·완성·재시작하는 흐름은 다음 4 SKILL 의 사이클.
+NF 한 개를 design 에 등록·완성·재시작하는 흐름은 다음 3 SKILL 의 사이클.
 
-- `/nf-init <nf> --primary <spec>` — 매니페스트 보강 (반복).
+- `/nf-init <nf> --primary <spec> [--reset]` — 매니페스트 보강·재생성 (반복). `--reset` 은 기존 산출을 `design/<nf>/_archive/<ts>/` 로 백업 후 manifest 재생성 (백업·재시작 통합).
 - `/nf-build <nf> [--<category>]` — 7 카테고리 페이지 생성·갱신 + `handoff/<nf>/_handoff.yaml` 자동 갱신.
 - `/nf-status <nf>` — acceptance gate 평가, FAIL 마다 다음 액션 보고.
-- `/nf-reset <nf> [--full]` — 백업 후 재시작.
 
 책임 매트릭스 + 정책의 진실 출처는 [`CLAUDE.md`](./CLAUDE.md) "작업 흐름" 섹션, 절차 세부는 `.claude/skills/<name>/SKILL.md`.
 
