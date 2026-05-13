@@ -1,0 +1,157 @@
+schema_version: handoff-v2
+nf: nssf
+generated_at: '2026-05-13T02:34:27.090306Z'
+agent_contract:
+  status_precedence: topic_over_category
+  default_read_order:
+  - handoff/<nf>/_handoff.yaml
+  - handoff/<nf>/_handoff.yaml#categories
+  - design/<nf>/<topic>/<id>.md (target)
+  - design/<nf>/<topic>/<id>.json (target machine)
+  - design/<nf>/<topic>/<dep>.md (depends_on)
+  - design/<nf>/error-handling.md (error_refs)
+  - design/<nf>/<topic>/<related>.md (related)
+  must_not:
+  - status 가 draft 인 토픽으로 구현 시작
+  - status 가 blocked 인 토픽으로 구현 시작
+  - status 가 not_applicable 인 토픽을 생성
+  - spec_refs / Implementation Notes 에 근거 없는 행동·자료형·정책 invent
+  - agent_contract 외부 (design/<nf>/_archive/) 의 자료를 현행 contract 로 인용
+  may_decide:
+  - 내부 패키지/모듈 이름 (design 산출이 라이브러리 비종속)
+  - 프레임워크 종속 handler 구조 (예 router 등록 방식)
+  - 테스트 프레임워크 매핑 (Test Matrix 의 케이스 → 실제 test runner)
+  - 로깅 라이브러리 선택 (Configuration 의 관측 키 충족 한)
+  must_ask_or_block:
+  - 필수 정책 값 부재 (timeout/retry/idempotency 미정)
+  - OpenAPI chain leaf 가 '(참조 규격 미등록)' 인데 구현이 필요
+  - '역방향 status 불일치 (category=handoff_ready 인데 산하 topic=draft) — basic #5 영역'
+  - depends_on 의 target 토픽이 yaml 에 부재
+  - Cross-NF 호출의 상대 NF op 가 아직 미정의
+categories:
+  interface:
+    status: handoff_ready
+    layout: single-file
+  error-handling:
+    status: handoff_ready
+    layout: single-file
+  api:
+    status: handoff_ready
+    layout: directory
+  data-model:
+    status: handoff_ready
+    layout: directory
+  module-decomposition:
+    status: draft
+    layout: directory
+  service-scenarios:
+    status: draft
+    layout: directory
+  behavior-state:
+    status: draft
+    layout: directory
+  failure-policy:
+    status: draft
+    layout: single-file
+  configuration:
+    status: draft
+    layout: single-file
+  persistence:
+    status: draft
+    layout: single-file
+    deferred_reason: NSSelectionGet MVP 범위 밖. stateless 여부는 별도 decision record 로 후속
+      사이클에서 처리.
+  test-matrix:
+    status: draft
+    layout: single-file
+  work-plan:
+    status: draft
+    layout: single-file
+  cross-nf:
+    status: draft
+    layout: single-file
+topics:
+  interface:
+    status: handoff_ready
+    spec_refs:
+    - TS 29.531 §6.1.1
+    - TS 29.531 §6.1.5
+    file: design/nssf/interface.md
+  error-handling:
+    status: handoff_ready
+    spec_refs:
+    - TS 29.531 §6.1.7
+    file: design/nssf/error-handling.md
+  api/NSSelectionGet:
+    status: handoff_ready
+    file: design/nssf/api/NSSelectionGet.md
+    depends_on:
+    - data-model/SliceInfoForRegistration
+    - data-model/AuthorizedNetworkSliceInfo
+    related:
+    - interface
+    error_refs:
+    - error-handling#nsselection-400
+    - error-handling#nsselection-403
+    - error-handling#nsselection-404
+    spec_refs:
+    - TS 29.531 §5.2.2.2.1
+  data-model/SliceInfoForRegistration:
+    status: canonical
+    file: design/nssf/data-model/SliceInfoForRegistration.md
+    machine_file: design/nssf/data-model/SliceInfoForRegistration.json
+    spec_refs:
+    - TS 29.531 §6.1.6.2.4
+  data-model/AuthorizedNetworkSliceInfo:
+    status: canonical
+    file: design/nssf/data-model/AuthorizedNetworkSliceInfo.md
+    machine_file: design/nssf/data-model/AuthorizedNetworkSliceInfo.json
+    spec_refs:
+    - TS 29.531 §6.1.6.2.5
+  module-decomposition/SelectionEngine:
+    status: handoff_ready
+    scope: NSSelectionGet MVP only
+    file: design/nssf/module-decomposition/SelectionEngine.md
+    spec_refs: []
+tasks:
+  nssf-api-nsselection-get:
+    phase: 02-api-implementation
+    goal: Implement NSSelectionGet handler
+    read:
+    - api/NSSelectionGet
+    - data-model/SliceInfoForRegistration
+    - data-model/AuthorizedNetworkSliceInfo
+    - module-decomposition/SelectionEngine
+    - interface
+    - error-handling#nsselection-400
+    - error-handling#nsselection-403
+    - error-handling#nsselection-404
+    produces:
+    - <impl>/api/nsselection.*
+    - <test>/test_nsselection.*
+    blocked_by:
+    - api/NSSelectionGet.status not in [canonical, handoff_ready]
+    - data-model/SliceInfoForRegistration.status not in [canonical, handoff_ready]
+    - data-model/AuthorizedNetworkSliceInfo.status not in [canonical, handoff_ready]
+    acceptance:
+    - handles 200/400/403/404 responses per error-handling matrix
+    - preserves idempotency policy (GET, no side effects)
+    - request body schema matches data-model/SliceInfoForRegistration JSON
+    - response body schema matches data-model/AuthorizedNetworkSliceInfo JSON
+    - negative test exists for each error cause (INVALID_QUERY_PARAM, UNAUTHORIZED_NSSAI,
+      NSSAI_NOT_AVAILABLE)
+spec_index:
+  TS 29.531 §5.2.2.2.1:
+  - api/NSSelectionGet
+  TS 29.531 §6.1.1:
+  - interface
+  TS 29.531 §6.1.5:
+  - interface
+  TS 29.531 §6.1.6.2.4:
+  - data-model/SliceInfoForRegistration
+  TS 29.531 §6.1.6.2.5:
+  - data-model/AuthorizedNetworkSliceInfo
+  TS 29.531 §6.1.7:
+  - error-handling
+sources:
+  TS 29.531: specs/29.531/29531-j60.docx
