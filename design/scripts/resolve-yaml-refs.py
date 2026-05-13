@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import json
 import pathlib
 import re
 import shutil
@@ -421,6 +422,170 @@ def render(
     return out
 
 
+def _resolve_to_node(
+    schema: dict,
+    current_file: pathlib.Path,
+    handoff_topic_index: dict[str, str],
+    visited: set[tuple[str, str]],
+    no_docx_fallback: bool,
+    unresolved: list[dict],
+    inlined_from: str | None = None,
+) -> dict:
+    """schema dict → JSON node. handoff topic 은 { "topic": "<id>" }, 그 외는 inline."""
+    if schema is None:
+        return {"type": "unknown"}
+    if "$ref" in schema:
+        rr = resolve_ref(schema["$ref"], current_file, no_docx_fallback)
+        ref_name = rr.schema_name
+        topic_id = handoff_topic_index.get(ref_name)
+        if topic_id:
+            return {"topic": topic_id}
+        if rr.schema is None:
+            unresolved.append({"ref": schema["$ref"], "note": rr.note or ""})
+            return {
+                "type": "unknown",
+                "_inlined_from": schema["$ref"],
+                "_unresolved": True,
+            }
+        key = (str(rr.file or current_file), ref_name)
+        if key in visited:
+            return {"type": "object", "_cycle": ref_name}
+        visited2 = visited | {key}
+        node = _schema_node(
+            rr.schema, rr.file or current_file, handoff_topic_index,
+            visited2, no_docx_fallback, unresolved,
+            inlined_from=schema["$ref"],
+        )
+        return node
+
+    t = schema.get("type")
+    if t == "array":
+        items = schema.get("items") or {}
+        return {
+            "type": "array",
+            "items": _resolve_to_node(
+                items, current_file, handoff_topic_index, visited,
+                no_docx_fallback, unresolved,
+            ),
+        }
+    if t == "object" or "properties" in schema:
+        return _schema_node(
+            schema, current_file, handoff_topic_index, visited,
+            no_docx_fallback, unresolved, inlined_from=inlined_from,
+        )
+    out: dict = {}
+    if t:
+        out["type"] = t
+    for k in ("format", "pattern", "enum", "nullable"):
+        if k in schema:
+            out[k] = schema[k]
+    if not out:
+        out["type"] = "object"
+    if inlined_from:
+        out["_inlined_from"] = inlined_from
+    return out
+
+
+def _schema_node(
+    schema: dict,
+    current_file: pathlib.Path,
+    handoff_topic_index: dict[str, str],
+    visited: set[tuple[str, str]],
+    no_docx_fallback: bool,
+    unresolved: list[dict],
+    inlined_from: str | None = None,
+) -> dict:
+    required = set(schema.get("required") or [])
+    properties = []
+    for pname, pschema in (schema.get("properties") or {}).items():
+        node = _resolve_to_node(
+            pschema, current_file, handoff_topic_index, visited,
+            no_docx_fallback, unresolved,
+        )
+        entry = {
+            "name": pname,
+            "required": pname in required,
+        }
+        entry.update(node)
+        properties.append(entry)
+    for arm in (schema.get("allOf") or []):
+        if isinstance(arm, dict) and (arm.get("properties") or arm.get("required")):
+            sub = _schema_node(
+                arm, current_file, handoff_topic_index, visited,
+                no_docx_fallback, unresolved,
+            )
+            properties.extend(sub.get("properties", []))
+    out = {"type": "object", "properties": properties}
+    if inlined_from:
+        out["_inlined_from"] = inlined_from
+    return out
+
+
+def emit_json(
+    *,
+    yaml_path: pathlib.Path,
+    root_schema_name: str,
+    topic_id: str,
+    nf: str,
+    spec_refs: list[str],
+    status: str,
+    handoff_topics: list[str],
+    no_docx_fallback: bool = False,
+) -> dict:
+    doc = cached_yaml(yaml_path)
+    schemas = (doc.get("components") or {}).get("schemas") or {}
+    root_schema = schemas.get(root_schema_name)
+    if root_schema is None:
+        raise SystemExit(f"[emit-json] root schema {root_schema_name!r} not in {yaml_path.name}")
+
+    # handoff_topic_index — schema name → topic id (for those schemas that ARE
+    # handoff topics). Root itself is excluded — its own tree is what we emit.
+    index: dict[str, str] = {}
+    for tid in handoff_topics:
+        if "/" in tid:
+            name = tid.split("/", 1)[1]
+            if name != root_schema_name:
+                index[name] = tid
+
+    unresolved: list[dict] = []
+    visited: set[tuple[str, str]] = {(str(yaml_path), root_schema_name)}
+    body = _schema_node(
+        root_schema, yaml_path, index, visited, no_docx_fallback, unresolved,
+    )
+
+    dependencies: set[str] = set()
+
+    def _walk(node: object) -> None:
+        if isinstance(node, dict):
+            if "topic" in node and isinstance(node["topic"], str):
+                dependencies.add(node["topic"])
+            for v in node.values():
+                _walk(v)
+        elif isinstance(node, list):
+            for v in node:
+                _walk(v)
+
+    _walk(body)
+
+    return {
+        "schema_version": "data-model-v1",
+        "nf": nf,
+        "topic_id": topic_id,
+        "status": status,
+        "source": {
+            "spec_refs": spec_refs,
+            "openapi_refs": [f"#/components/schemas/{root_schema_name}"],
+            "source_yaml": str(yaml_path.relative_to(REPO_ROOT))
+                if yaml_path.is_absolute() and yaml_path.is_relative_to(REPO_ROOT)
+                else str(yaml_path),
+        },
+        "root_schema": root_schema_name,
+        "fields": body.get("properties", []),
+        "dependencies": sorted(dependencies),
+        "unresolved_refs": unresolved,
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("yaml_path", type=pathlib.Path)
@@ -429,6 +594,13 @@ def main() -> None:
     parser.add_argument("--depth", type=int, default=8)
     parser.add_argument("--external-depth", type=int, default=2)
     parser.add_argument("--no-docx-fallback", action="store_true")
+    parser.add_argument("--emit-json", action="store_true",
+                        help="JSON machine artifact 으로 stdout 출력 (markdown 트리 대신)")
+    parser.add_argument("--topic-id", default="")
+    parser.add_argument("--nf", default="")
+    parser.add_argument("--spec-ref", action="append", default=[])
+    parser.add_argument("--status", default="canonical")
+    parser.add_argument("--handoff-topics", action="append", default=[])
     args = parser.parse_args()
 
     yaml_path = args.yaml_path.resolve()
@@ -445,6 +617,22 @@ def main() -> None:
 
     spec_match = TS_FILENAME_RE.match(yaml_path.name)
     cur_spec = f"{spec_match.group(1)}.{spec_match.group(2)}" if spec_match else "?"
+
+    if args.emit_json:
+        if not args.schemas or not args.topic_id or not args.nf:
+            sys.exit("[emit-json] requires <schema>, --topic-id, --nf")
+        payload = emit_json(
+            yaml_path=yaml_path,
+            root_schema_name=args.schemas[0],
+            topic_id=args.topic_id,
+            nf=args.nf,
+            spec_refs=args.spec_ref,
+            status=args.status,
+            handoff_topics=args.handoff_topics,
+            no_docx_fallback=args.no_docx_fallback,
+        )
+        print(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
 
     print("```text")
     print(f"# {yaml_path.name}  [TS {cur_spec}]")
