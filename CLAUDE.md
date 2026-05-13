@@ -5,7 +5,7 @@
 > **Inheritance.** 전역 `~/.claude/CLAUDE.md` 의 모든 행동 규칙 (가정 금지·단순성·외과적 변경·테스트 우선·시맨틱 커밋·에러는 추측 말고 읽기 등) 을 그대로 따른다. 이 파일은 그 위에 본 프로젝트 고유 규칙만 추가한다.
 
 > **Language policy.**
-> - **design 본문(prose)·`index.md` 설명문은 한국어**로 작성한다.
+> - **design 본문(prose) 은 한국어**로 작성한다.
 > - YAML frontmatter, 섹션 헤더(`## Interface` 등), 3GPP 용어·약어(NSSF, AMF, SUCI, S-NSSAI 등) 는 영어 원문 유지.
 > - 스펙 정의 문구는 영어 원문 인용 + 한국어 해설 병기.
 > - 대화·커밋 메시지는 한국어 그대로.
@@ -36,7 +36,7 @@
 | 단계 | SKILL | 책임 |
 |---|---|---|
 | 1. 매니페스트 보강 | `/nf-init <nf> --primary <spec>` | specs/ 의존성 자동 검출. `ready_for_build` 까지 반복 호출 |
-| 2. 페이지 빌드 | `/nf-build <nf> [--<category>]` | 7 카테고리 페이지 생성·갱신 + `index.md` 항목 갱신 + `handoff/<nf>/_handoff.yaml` 자동 갱신 |
+| 2. 페이지 빌드 | `/nf-build <nf> [--<category>]` | 7 카테고리 페이지 생성·갱신 + `handoff/<nf>/_handoff.yaml` 자동 갱신 |
 | 3. 완성도 검사 | `/nf-status <nf>` | acceptance gate 평가, FAIL 마다 `to_pass` 액션 보고 |
 | (선택) 백업·재시작 | `/nf-reset <nf> [--full]` | 현 산출을 `design/<nf>/_archive/<ts>/` 로 mv 후 `/nf-build` 로 fresh 빌드 |
 
@@ -112,7 +112,6 @@ FF 실패 → squash/rebase 신호 → reset 전환. 본 repo 는 **merge commit
 ├── CLAUDE.md                    # 본 파일 — 정책
 ├── README.md                    # 프로젝트 소개·setup·browsing
 ├── requirements.txt             # python 의존성
-├── index.md                     # 페이지 카탈로그
 ├── specs/                       # 3GPP 원본 (.pdf / .doc / .docx / .yaml, cp only — symlink 금지)
 │   └── {spec-number-with-dot}/
 │       └── _extracted/          # spec-split.py 산출 — § 단위 .md (캐시, commit)

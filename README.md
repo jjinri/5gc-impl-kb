@@ -56,4 +56,3 @@ NF 한 개를 design 에 등록·완성·재시작하는 흐름은 다음 4 SKIL
 ## 더 보기
 
 - [`CLAUDE.md`](./CLAUDE.md) — 디렉터리 규칙·언어 정책·THE FOUR RULES·acceptance gate 등 *정책* 의 진실 출처.
-- [`index.md`](./index.md) — KB 페이지 카탈로그 (NF 별 인덱스).
