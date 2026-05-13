@@ -55,12 +55,19 @@ def resolve_topic_path(
     if ref.category not in category_layout:
         raise ValueError(f"unknown category {ref.category!r}")
     layout = category_layout[ref.category]
+    contract_root = nf_root / "contract"
     if layout == "directory":
-        path = nf_root / ref.category / f"{ref.topic}.md"
+        preferred = contract_root / ref.category / f"{ref.topic}.md"
+        legacy = nf_root / ref.category / f"{ref.topic}.md"
     elif layout == "single-file":
-        path = nf_root / f"{ref.category}.md"
+        preferred = contract_root / f"{ref.category}.md"
+        legacy = nf_root / f"{ref.category}.md"
     else:
         raise ValueError(f"unknown layout {layout!r}")
+    if preferred.is_file() or (contract_root.is_dir() and not legacy.is_file()):
+        path = preferred
+    else:
+        path = legacy
     exists = path.is_file()
     anchor_found = True
     if ref.anchor and exists:

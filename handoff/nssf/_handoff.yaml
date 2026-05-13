@@ -1,16 +1,16 @@
 schema_version: handoff-v2
 nf: nssf
-generated_at: '2026-05-13T02:34:27.090306Z'
+generated_at: '2026-05-13T09:07:09.123539Z'
 agent_contract:
   status_precedence: topic_over_category
   default_read_order:
   - handoff/<nf>/_handoff.yaml
   - handoff/<nf>/_handoff.yaml#categories
-  - design/<nf>/<topic>/<id>.md (target)
-  - design/<nf>/<topic>/<id>.json (target machine)
-  - design/<nf>/<topic>/<dep>.md (depends_on)
-  - design/<nf>/error-handling.md (error_refs)
-  - design/<nf>/<topic>/<related>.md (related)
+  - design/<nf>/contract/<topic>/<id>.md (target)
+  - design/<nf>/contract/<topic>/<id>.json (target machine)
+  - design/<nf>/contract/<topic>/<dep>.md (depends_on)
+  - design/<nf>/contract/error-handling.md (error_refs)
+  - design/<nf>/contract/<topic>/<related>.md (related)
   must_not:
   - status 가 draft 인 토픽으로 구현 시작
   - status 가 blocked 인 토픽으로 구현 시작
@@ -76,15 +76,15 @@ topics:
     spec_refs:
     - TS 29.531 §6.1.1
     - TS 29.531 §6.1.5
-    file: design/nssf/interface.md
+    file: design/nssf/contract/interface.md
   error-handling:
     status: handoff_ready
     spec_refs:
     - TS 29.531 §6.1.7
-    file: design/nssf/error-handling.md
+    file: design/nssf/contract/error-handling.md
   api/NSSelectionGet:
     status: handoff_ready
-    file: design/nssf/api/NSSelectionGet.md
+    file: design/nssf/contract/api/NSSelectionGet.md
     depends_on:
     - data-model/SliceInfoForRegistration
     - data-model/AuthorizedNetworkSliceInfo
@@ -98,14 +98,14 @@ topics:
     - TS 29.531 §5.2.2.2.1
   data-model/SliceInfoForRegistration:
     status: canonical
-    file: design/nssf/data-model/SliceInfoForRegistration.md
-    machine_file: design/nssf/data-model/SliceInfoForRegistration.json
+    file: design/nssf/contract/data-model/SliceInfoForRegistration.md
+    machine_file: design/nssf/contract/data-model/SliceInfoForRegistration.json
     spec_refs:
     - TS 29.531 §6.1.6.2.4
   data-model/AuthorizedNetworkSliceInfo:
     status: canonical
-    file: design/nssf/data-model/AuthorizedNetworkSliceInfo.md
-    machine_file: design/nssf/data-model/AuthorizedNetworkSliceInfo.json
+    file: design/nssf/contract/data-model/AuthorizedNetworkSliceInfo.md
+    machine_file: design/nssf/contract/data-model/AuthorizedNetworkSliceInfo.json
     spec_refs:
     - TS 29.531 §6.1.6.2.5
   module-decomposition/SelectionEngine:

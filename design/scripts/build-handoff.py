@@ -35,11 +35,11 @@ AGENT_CONTRACT = {
     "default_read_order": [
         "handoff/<nf>/_handoff.yaml",
         "handoff/<nf>/_handoff.yaml#categories",
-        "design/<nf>/<topic>/<id>.md (target)",
-        "design/<nf>/<topic>/<id>.json (target machine)",
-        "design/<nf>/<topic>/<dep>.md (depends_on)",
-        "design/<nf>/error-handling.md (error_refs)",
-        "design/<nf>/<topic>/<related>.md (related)",
+        "design/<nf>/contract/<topic>/<id>.md (target)",
+        "design/<nf>/contract/<topic>/<id>.json (target machine)",
+        "design/<nf>/contract/<topic>/<dep>.md (depends_on)",
+        "design/<nf>/contract/error-handling.md (error_refs)",
+        "design/<nf>/contract/<topic>/<related>.md (related)",
     ],
     "must_not": [
         "status 가 draft 인 토픽으로 구현 시작",

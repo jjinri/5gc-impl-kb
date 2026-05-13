@@ -25,6 +25,20 @@ def test_directory_layout(tmp_path: pathlib.Path) -> None:
     assert r.anchor is None
 
 
+def test_directory_layout_prefers_contract_root(tmp_path: pathlib.Path) -> None:
+    nf = tmp_path / "design" / "nssf"
+    (nf / "contract" / "api").mkdir(parents=True)
+    f = nf / "contract" / "api" / "NSSelectionGet.md"
+    f.write_text("# NSSelectionGet\n", encoding="utf-8")
+
+    r = resolve_topic_path(
+        nf_root=nf, topic_id="api/NSSelectionGet",
+        category_layout={"api": "directory"},
+    )
+    assert r.exists is True
+    assert r.path == f
+
+
 def test_single_file_layout(tmp_path: pathlib.Path) -> None:
     nf = tmp_path / "design" / "nssf"
     nf.mkdir(parents=True)
@@ -34,6 +48,35 @@ def test_single_file_layout(tmp_path: pathlib.Path) -> None:
     r = resolve_topic_path(
         nf_root=nf, topic_id="interface",
         category_layout={"interface": "single-file"},
+    )
+    assert r.exists is True
+    assert r.path == f
+
+
+def test_single_file_layout_prefers_contract_root(tmp_path: pathlib.Path) -> None:
+    nf = tmp_path / "design" / "nssf"
+    (nf / "contract").mkdir(parents=True)
+    f = nf / "contract" / "interface.md"
+    f.write_text("# Interface\n", encoding="utf-8")
+
+    r = resolve_topic_path(
+        nf_root=nf, topic_id="interface",
+        category_layout={"interface": "single-file"},
+    )
+    assert r.exists is True
+    assert r.path == f
+
+
+def test_contract_root_keeps_existing_legacy_topic(tmp_path: pathlib.Path) -> None:
+    nf = tmp_path / "design" / "nssf"
+    (nf / "contract").mkdir(parents=True)
+    (nf / "module-decomposition").mkdir()
+    f = nf / "module-decomposition" / "SelectionEngine.md"
+    f.write_text("# SelectionEngine\n", encoding="utf-8")
+
+    r = resolve_topic_path(
+        nf_root=nf, topic_id="module-decomposition/SelectionEngine",
+        category_layout={"module-decomposition": "directory"},
     )
     assert r.exists is True
     assert r.path == f

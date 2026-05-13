@@ -46,16 +46,16 @@ topics:
   interface:
     status: handoff_ready
     spec_refs: ["TS 29.531 §6.1.1", "TS 29.531 §6.1.5"]
-    file: design/nssf/interface.md
+    file: design/nssf/contract/interface.md
 
   error-handling:
     status: handoff_ready
     spec_refs: ["TS 29.531 §6.1.7"]
-    file: design/nssf/error-handling.md
+    file: design/nssf/contract/error-handling.md
 
   api/NSSelectionGet:
     status: handoff_ready
-    file: design/nssf/api/NSSelectionGet.md
+    file: design/nssf/contract/api/NSSelectionGet.md
     depends_on:
       - data-model/SliceInfoForRegistration
       - data-model/AuthorizedNetworkSliceInfo
@@ -69,14 +69,14 @@ topics:
 
   data-model/SliceInfoForRegistration:
     status: canonical
-    file: design/nssf/data-model/SliceInfoForRegistration.md
-    machine_file: design/nssf/data-model/SliceInfoForRegistration.json
+    file: design/nssf/contract/data-model/SliceInfoForRegistration.md
+    machine_file: design/nssf/contract/data-model/SliceInfoForRegistration.json
     spec_refs: ["TS 29.531 §6.1.6.2.4"]
 
   data-model/AuthorizedNetworkSliceInfo:
     status: canonical
-    file: design/nssf/data-model/AuthorizedNetworkSliceInfo.md
-    machine_file: design/nssf/data-model/AuthorizedNetworkSliceInfo.json
+    file: design/nssf/contract/data-model/AuthorizedNetworkSliceInfo.md
+    machine_file: design/nssf/contract/data-model/AuthorizedNetworkSliceInfo.json
     spec_refs: ["TS 29.531 §6.1.6.2.5"]
 
   module-decomposition/SelectionEngine:

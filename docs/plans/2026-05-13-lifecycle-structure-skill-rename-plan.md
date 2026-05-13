@@ -595,3 +595,31 @@ Open risks / gaps:
 - Contract artifact path migration is still not started.
 Next step:
 - Commit/PR Phase 2. Next implementation phase: contract artifact path migration under `design/<nf>/contract/`.
+
+## Progress checkpoint — 2026-05-13 Phase 3
+
+Status: ready_for_review
+Current objective: Move spec-derived NSSF contract artifacts under `design/nssf/contract/` while preserving current seed/status/handoff filenames for compatibility.
+Completed:
+- Moved NSSF `interface.md`, `error-handling.md`, `api/`, and `data-model/` artifacts into `design/nssf/contract/` using `git mv`.
+- Updated `design/nssf/_handoff_seed.yaml` paths and regenerated `handoff/nssf/_handoff.yaml`.
+- Updated `path_resolution.py` so contract categories prefer `design/<nf>/contract/` while legacy paths remain readable for compatibility.
+- Updated `build-handoff.py` agent read-order guidance to point at contract paths.
+- Updated tests to exercise contract-root topic resolution and contract-root fixture paths.
+- Updated README/CLAUDE/ADR/skill docs to describe contract-root outputs.
+Compatibility deliberately preserved:
+- `design/<nf>/_handoff_seed.yaml` not renamed yet.
+- `design/<nf>/_status.yaml` not renamed yet.
+- `handoff/<nf>/_handoff.yaml` not renamed yet.
+- `design/<nf>/module-decomposition/` left in place until the architecture-design phase decides its final structure.
+Validation:
+- `.venv/bin/python3 design/scripts/build-handoff.py nssf` → wrote `handoff/nssf/_handoff.yaml`, categories=13 topics=6 tasks=1.
+- `.venv/bin/python3 design/scripts/validate-extraction.py nssf --level basic` → basic 13/13 PASS.
+- `.venv/bin/python3 design/scripts/nf-status.py nssf --no-write` → handoff_ready PASS; canonical blocked only by `implementation_guidance_quality` NOT_RUN baseline.
+- `pytest tests/scripts` → 40 passed.
+Open risks / gaps:
+- Handoff filename rename remains pending and should be a separate compatibility-aware phase.
+- Seed/status filename rename remains pending.
+- `module-decomposition` still needs architecture-phase migration or reinterpretation.
+Next step:
+- Review/merge Phase 3, then introduce architecture-design skill/templates.

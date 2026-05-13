@@ -23,21 +23,21 @@ def _run_build(nf: str, cwd: pathlib.Path) -> pathlib.Path:
 
 def _seed(tmp_path: pathlib.Path) -> pathlib.Path:
     nf = tmp_path / "design" / "demo"
-    (nf / "api").mkdir(parents=True)
-    (nf / "data-model").mkdir(parents=True)
-    (nf / "interface.md").write_text(
+    (nf / "contract" / "api").mkdir(parents=True)
+    (nf / "contract" / "data-model").mkdir(parents=True)
+    (nf / "contract" / "interface.md").write_text(
         "---\nid: interface\nstatus: handoff_ready\ngenerated_sections: []\n"
         "user_sections: []\n---\n# Interface\n", encoding="utf-8")
-    (nf / "error-handling.md").write_text(
+    (nf / "contract" / "error-handling.md").write_text(
         "---\nid: error-handling\nstatus: handoff_ready\ngenerated_sections: []\n"
         "user_sections: []\n---\n# Error\n", encoding="utf-8")
-    (nf / "api" / "OpA.md").write_text(
+    (nf / "contract" / "api" / "OpA.md").write_text(
         "---\nid: api/OpA\nstatus: handoff_ready\ngenerated_sections: []\n"
         "user_sections: []\n---\n# OpA\n", encoding="utf-8")
-    (nf / "data-model" / "S.md").write_text(
+    (nf / "contract" / "data-model" / "S.md").write_text(
         "---\nid: data-model/S\nstatus: canonical\ngenerated_sections: []\n"
         "user_sections: []\n---\n# S\n", encoding="utf-8")
-    (nf / "data-model" / "S.json").write_text("{}", encoding="utf-8")
+    (nf / "contract" / "data-model" / "S.json").write_text("{}", encoding="utf-8")
     seed = nf / "_handoff_seed.yaml"
     seed.write_text(
         yaml.safe_dump({
@@ -60,8 +60,8 @@ def _seed(tmp_path: pathlib.Path) -> pathlib.Path:
                 },
                 "data-model/S": {
                     "status": "canonical",
-                    "file": "design/demo/data-model/S.md",
-                    "machine_file": "design/demo/data-model/S.json",
+                    "file": "design/demo/contract/data-model/S.md",
+                    "machine_file": "design/demo/contract/data-model/S.json",
                     "spec_refs": ["TS X §3"],
                 },
             },
