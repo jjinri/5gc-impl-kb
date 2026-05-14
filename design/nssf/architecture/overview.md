@@ -3,7 +3,6 @@ nf: nssf
 stage: architecture-design
 status: draft
 source_contract: handoff/nssf/contract.yaml
-contract_status: design/nssf/_contract_status.yaml
 generated_date: 2026-05-14
 ---
 
@@ -11,48 +10,55 @@ generated_date: 2026-05-14
 
 ## Purpose
 
-이 문서는 handoff-ready NSSF contract 를 상세 아키텍처 설계로 변환한다.
-구현 언어, 런타임, DBMS, 배포 방식, 라이브러리 선택은 dev 단계 결정으로 남긴다.
+본 문서는 full NSSF contract 를 architecture 책임으로 변환한다 — *어떤 모듈* 이 *어떤 책임* 을 *어떤 경계* 로 가지는지 정의한다. 구현 언어·런타임·DBMS·배포·라이브러리 선택은 dev 단계의 책임이다.
 
-## Source contract
+## Inputs (contract)
 
-- Contract handoff: `handoff/nssf/contract.yaml`
-- Contract status: `design/nssf/_contract_status.yaml`
-- Contract artifacts: `design/nssf/contract/`
+- `handoff/nssf/contract.yaml` (handoff-v2, 25 topics).
+- API topics 8 — `api/NSSelectionGet`, `api/NSSAIAvailability{Put,Patch,Delete,Post,Unsubscribe,SubModifyPatch,Options}`.
+- 핵심 data-model topics — `data-model/{SliceInfoForRegistration, AuthorizedNetworkSliceInfo, NssaiAvailabilityInfo, AuthorizedNssaiAvailabilityInfo, NssfEventSubscriptionCreateData, NssfEventSubscriptionCreatedData, Snssai, Tai, PlmnId, NFType, PatchDocument, ...}`.
+- 공통 topics — `interface`, `error-handling`.
 
-## Spec-derived constraints
+## Boundaries
 
-- NSSF MVP 범위는 `NSSelectionGet` 하나의 GET operation 이다.
-- API path 는 `/network-slice-information` 이며 base URL 은 `{apiRoot}/nnssf-nsselection/<apiVersion>` 이다.
-- 인증 scope 는 `nnssf-nsselection` 이고 OAuth 2.0 client credentials 흐름을 따른다.
-- 정상 응답은 `AuthorizedNetworkSliceInfo` 이고 주요 요청 입력은 `SliceInfoForRegistration` 이다.
-- 오류 응답은 `application/problem+json` 과 ProblemDetails shape 를 보존해야 한다.
-- 주요 error cause 는 `INVALID_QUERY_PARAM`, `UNAUTHORIZED_NSSAI`, `NSSAI_NOT_AVAILABLE`, `SYSTEM_FAILURE` 이다.
-- SBI transport 는 HTTP/2 over TLS 와 `3gpp-Sbi-*` header 전달을 전제로 한다.
+본 architecture 가 다루는 것.
 
-## Architecture scope
+- 두 SBI service (Nnssf_NSSelection · Nnssf_NSSAIAvailability) 의 8 operation 모두.
+- inbound request 처리 (request validation, slice selection / availability CRUD, subscription lifecycle).
+- outbound notification client (NSSF → AMF callback, correlation, retry).
+- ProblemDetails 매핑, 공통 SBI header 처리.
+- module 분해 (SelectionEngine, AvailabilityEngine, SubscriptionStore, NotificationDispatcher).
 
-이번 architecture pass 는 registration path 의 NSSelectionGet 처리, request validation, slice selection core, ProblemDetails mapping, external NF boundary 를 다룬다.
-PDU session path, NSSAIAvailability service, 실제 NRF/UDM client 구현, deployment topology 는 후속 단계로 남긴다.
+본 architecture 가 다루지 않는 것.
 
-## Implementation choices
+- 구현 언어·런타임·DBMS·HTTP 라이브러리 선택 (dev 단계).
+- 33.501·38.413 spec 깊이 (운영 결정 보류, `_manifest.yaml` `manual_overrides.exclude` 참고).
+- 배포 토폴로지·service mesh / sidecar 선택.
 
-| decision | status | owner | note |
-| --- | --- | --- | --- |
-| language/runtime | TBD | dev | contract 에서 결정하지 않는다. |
-| persistence backend | TBD | dev | NSSF 자체 영속 상태가 필요한지 dev 단계에서 확정한다. |
-| HTTP/SBI framework | TBD | dev | HTTP/2, TLS, JSON, ProblemDetails shape 를 보존해야 한다. |
-| deployment topology | TBD | dev | service mesh 또는 NF 내장 TLS 모두 가능하다. |
+## Decisions
 
-## Output map
+| decision | 내용 |
+|---|---|
+| Scope | NSSF 의 두 service 전체. 단일 op 가정은 폐기. |
+| Modules | SelectionEngine, AvailabilityEngine, SubscriptionStore, NotificationDispatcher 4 모듈. |
+| Outbound client | NotificationDispatcher 가 outbound HTTP/2 client 보유. OAuth2 client credentials 는 *config 옵션* (enable / disable). correlation-id 추적은 필수. |
+| Persistence | SubscriptionStore 가 subscription lifecycle persistence 책임. backend 후보 (in-memory / file / external KV) 는 `state-persistence.md` 의 `## Open Questions` 에 정리. |
 
-| file | purpose |
-| --- | --- |
-| `module-boundaries.md` | logical module responsibility and seams |
-| `request-flow.md` | request processing sequence |
-| `runtime-model.md` | concurrency and runtime boundary constraints |
-| `state-persistence.md` | state ownership and persistence requirements |
-| `configuration-strategy.md` | config keys and policy boundaries |
-| `error-propagation.md` | error mapping and recovery behavior |
-| `observability.md` | logs, metrics, traces, audit points |
-| `test-strategy.md` | architecture-level test seams |
+## Open Questions
+
+- SBI security profile (TLS version·cipher·mutual auth) 의 깊이 — 33.501 cp 결정 보류 상태에서 어떤 default 를 architecture 가 *권고* 할지.
+- AMF reallocation via RAN 지원 — 38.413 §8.6.5 미구현 결정이 확정되기 전 architecture 가 hooking 자리를 둘지.
+- SubscriptionStore backend 의 default — in-memory 가 본 architecture 의 default 권고가 될지, 결정 자체를 dev 단계로 미룰지.
+
+## References
+
+- [[module-boundaries]] — 4 module 책임·seam.
+- [[request-flow]] — 8 operation + Notify outbound 시퀀스.
+- [[runtime-model]] — request-response + notification dispatcher long-lived state.
+- [[state-persistence]] — subscription persistence.
+- [[configuration-strategy]] — config keys + OAuth2 옵션.
+- [[error-propagation]] — 8 operation ProblemDetails 매핑.
+- [[observability]] — log·metric·trace + correlation-id 전파.
+- [[test-strategy]] — architecture seam test.
+- `decisions/ADR-0001-architecture-baseline.md`.
+- `_manifest.yaml` `manual_overrides.exclude` — 33.501·38.413 보류 사유.
