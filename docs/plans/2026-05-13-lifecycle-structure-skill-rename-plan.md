@@ -623,3 +623,42 @@ Open risks / gaps:
 - `module-decomposition` still needs architecture-phase migration or reinterpretation.
 Next step:
 - Review/merge Phase 3, then introduce architecture-design skill/templates.
+
+## Progress checkpoint — 2026-05-14 Phase 4
+
+Status: ready_for_review
+Current objective: Phase 4 architecture-design skill and initial NSSF architecture templates.
+Completed:
+- Added `.claude/skills/nf-arch-design/SKILL.md` as the canonical architecture design lifecycle skill.
+- Added reusable architecture templates under `.claude/skills/nf-arch-design/templates/architecture/`.
+- Created initial NSSF architecture draft documents under `design/nssf/architecture/` from the template set.
+- Populated NSSF architecture docs with contract-derived constraints for NSSelectionGet, data model boundaries, error propagation, runtime/state/config/observability/test seams.
+- Kept implementation choices explicit as `TBD` and left OS/language/DB/framework/deployment decisions to later dev stages.
+- Updated README, CLAUDE, and ADR wording so `/nf-arch-design` is now available rather than planned.
+Compatibility deliberately preserved:
+- `handoff/nssf/_handoff.yaml` remains the current source contract path until the handoff filename rename phase.
+- `design/nssf/_handoff_seed.yaml` and `design/nssf/_status.yaml` remain unchanged.
+- `design/nssf/module-decomposition/` remains in place and was not used as the architecture input source.
+Changed files:
+- `.claude/skills/nf-arch-design/SKILL.md`
+- `.claude/skills/nf-arch-design/templates/architecture/*.md`
+- `.claude/skills/nf-arch-design/templates/architecture/decisions/ADR-0001-architecture-baseline.md`
+- `design/nssf/architecture/*.md`
+- `design/nssf/architecture/decisions/ADR-0001-architecture-baseline.md`
+- `README.md`
+- `CLAUDE.md`
+- `docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`
+- `docs/plans/2026-05-13-lifecycle-structure-skill-rename-plan.md`
+Validation:
+- `python3` skill/frontmatter + required architecture file check → pass.
+- `git diff --check` → pass.
+- `.venv/bin/python3 design/scripts/validate-extraction.py nssf --level basic` → basic 13/13 PASS.
+- `.venv/bin/python3 design/scripts/nf-status.py nssf --no-write` → handoff_ready PASS; canonical remains blocked only by baseline `implementation_guidance_quality` NOT_RUN.
+- `pytest tests/scripts` → 40 passed.
+- stale planned-wording grep for `/nf-arch-design` → 0 matches.
+Open risks / gaps:
+- `/nf-impl-plan` remains planned and not implemented.
+- Handoff filename rename remains pending and should be separate.
+- Legacy `module-decomposition` migration remains pending.
+Next step:
+- Commit and open a Phase 4 PR, then implement `/nf-impl-plan` in the next phase.
