@@ -1,0 +1,21 @@
+schema_version: impl-plan-v1
+nf: {{nf}}
+stage: implementation-planning
+status: draft
+source_architecture: {{architecture_root}}
+source_contract: {{contract_path}}
+generated_date: {{generated_date}}
+
+tasks:
+  - id: {{nf}}-todo-001
+    title: TODO
+    type: implementation
+    status: planned
+    owner: dev
+    depends_on: []
+    trace_to:
+      - {{architecture_root}}/overview.md
+    acceptance:
+      - TODO
+    notes:
+      - TODO

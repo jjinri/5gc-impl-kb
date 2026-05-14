@@ -25,6 +25,7 @@ NF 개발 단계 이름은 [`docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`](
 - `/nf-build` 는 code build 가 아니라 contract extraction/generation 단계다. canonical wrapper 는 `/nf-contract-build` 다.
 - `/nf-status` 는 contract validation 호환 skill 이며 canonical wrapper 는 `/nf-contract-check` 다. 상세 아키텍처나 구현 검증 status 와 혼동하지 않는다.
 - `/nf-arch-design` 은 handoff-ready contract 를 상세 아키텍처 문서로 변환하는 canonical skill 이다. implementation planning 을 자동 호출하지 않는다.
+- `/nf-impl-plan` 은 architecture 문서를 구현 작업·테스트·traceability 계획으로 변환하는 canonical skill 이다. 소스 코드나 build system 을 만들지 않는다.
 - user-facing lifecycle skill 이 다음 user-facing lifecycle skill 을 자동 호출하지 않는다. 같은 단계의 필수 script/check 만 내부 실행하고, 다음 단계는 추천으로 보고한다.
 - `handoff_ready` 는 상세 아키텍처 설계를 시작할 수 있는 contract 입력이 충분하다는 뜻이다. 상세 아키텍처와 구현 계획은 별도 단계다.
 
@@ -33,7 +34,7 @@ NF 개발 단계 이름은 [`docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`](
 - Spec 원문은 `specs/` 가 보존한다.
 - Spec-derived contract 는 현재 `design/<nf>/contract/` 와 `handoff/<nf>/_handoff.yaml` 이 보존한다. `handoff/<nf>/contract.yaml` rename 은 plan 의 후속 phase 로 이행한다.
 - Architecture design 은 목표 구조상 `design/<nf>/architecture/` 에 둔다.
-- Implementation planning 은 목표 구조상 `dev/<nf>/` 에 둔다.
+- Implementation planning 은 `dev/<nf>/` 에 둔다. 이 영역은 계획 산출물 위치이며 소스 코드 작성 시작 신호가 아니다.
 - `.omx/` 는 runtime/state 영역이며 cleanup·구조 변경 대상이 아니다.
 
 ---

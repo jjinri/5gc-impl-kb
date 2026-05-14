@@ -1,0 +1,165 @@
+schema_version: impl-plan-v1
+nf: nssf
+stage: implementation-planning
+status: draft
+source_architecture: design/nssf/architecture
+source_contract: handoff/nssf/_handoff.yaml
+generated_date: 2026-05-14
+
+tasks:
+  - id: nssf-contract-types
+    title: Define NSSelectionGet contract type boundary
+    type: implementation-planning
+    status: planned
+    owner: dev
+    depends_on: []
+    trace_to:
+      - design/nssf/contract/api/NSSelectionGet.md
+      - design/nssf/contract/data-model/SliceInfoForRegistration.md
+      - design/nssf/contract/data-model/AuthorizedNetworkSliceInfo.md
+      - design/nssf/architecture/module-boundaries.md
+    acceptance:
+      - Request and response model inventory maps to contract artifacts.
+      - Schema generation or hand-written type strategy is marked as TBD if not decided.
+    notes:
+      - No source code is created in this planning phase.
+
+  - id: nssf-request-validator
+    title: Plan request validation for NSSelectionGet query inputs
+    type: implementation-planning
+    status: planned
+    owner: dev
+    depends_on:
+      - nssf-contract-types
+    trace_to:
+      - design/nssf/contract/api/NSSelectionGet.md
+      - design/nssf/architecture/request-flow.md
+      - design/nssf/architecture/test-strategy.md
+    acceptance:
+      - Required query fields nf-type, nf-id, tai, and registration slice info are covered.
+      - Invalid structured query JSON maps to 400 INVALID_QUERY_PARAM.
+    notes:
+      - Validation must collect invalidParams when possible.
+
+  - id: nssf-nsselection-handler
+    title: Plan inbound SBI handler boundary
+    type: implementation-planning
+    status: planned
+    owner: dev
+    depends_on:
+      - nssf-request-validator
+    trace_to:
+      - design/nssf/contract/interface.md
+      - design/nssf/contract/api/NSSelectionGet.md
+      - design/nssf/architecture/runtime-model.md
+    acceptance:
+      - Handler boundary preserves HTTP/2 over TLS, OAuth result, content type, and SBI headers.
+      - Handler does not contain slice selection business logic.
+    notes:
+      - Concrete HTTP framework remains TBD.
+
+  - id: nssf-selection-core
+    title: Plan transport-independent selection core
+    type: implementation-planning
+    status: planned
+    owner: dev
+    depends_on:
+      - nssf-contract-types
+    trace_to:
+      - design/nssf/architecture/module-boundaries.md
+      - design/nssf/architecture/state-persistence.md
+      - design/nssf/architecture/test-strategy.md
+    acceptance:
+      - Core input and output are independent of HTTP framework.
+      - requested, subscribed, and PLMN policy intersection behavior has unit-test seams.
+    notes:
+      - Policy source remains TBD and must be explicit before implementation.
+
+  - id: nssf-external-nf-gateway
+    title: Plan UDM and NRF lookup gateway interfaces
+    type: implementation-planning
+    status: planned
+    owner: dev
+    depends_on:
+      - nssf-selection-core
+    trace_to:
+      - design/nssf/architecture/state-persistence.md
+      - design/nssf/architecture/runtime-model.md
+      - design/nssf/architecture/request-flow.md
+    acceptance:
+      - UDM subscription and NRF NSI lookup boundaries are mockable.
+      - Timeout, unavailable, and invalid response failure classes are represented.
+    notes:
+      - Production client implementation is out of MVP planning scope.
+
+  - id: nssf-error-mapping
+    title: Plan deterministic ProblemDetails mapping
+    type: implementation-planning
+    status: planned
+    owner: dev
+    depends_on:
+      - nssf-request-validator
+      - nssf-selection-core
+      - nssf-external-nf-gateway
+    trace_to:
+      - design/nssf/contract/error-handling.md
+      - design/nssf/architecture/error-propagation.md
+    acceptance:
+      - 400, 403, 404, and 500 mappings have explicit source conditions.
+      - Sensitive identifiers are not leaked in error logs or ProblemDetails.
+    notes:
+      - Retry policy applies only to retryable downstream/internal failures.
+
+  - id: nssf-observability
+    title: Plan request logs, metrics, and traces
+    type: implementation-planning
+    status: planned
+    owner: dev
+    depends_on:
+      - nssf-nsselection-handler
+      - nssf-error-mapping
+    trace_to:
+      - design/nssf/architecture/observability.md
+      - design/nssf/architecture/runtime-model.md
+    acceptance:
+      - Metrics and trace spans cover success, validation failure, policy rejection, downstream failure.
+      - Redaction requirements are visible before implementation.
+    notes:
+      - Concrete telemetry library remains TBD.
+
+  - id: nssf-contract-tests
+    title: Plan contract-derived unit and boundary tests
+    type: test-planning
+    status: planned
+    owner: dev
+    depends_on:
+      - nssf-request-validator
+      - nssf-selection-core
+      - nssf-error-mapping
+    trace_to:
+      - design/nssf/architecture/test-strategy.md
+      - dev/nssf/test-matrix.md
+    acceptance:
+      - Test cases cover success, 400, 403, 404, and 500 paths.
+      - Test cases trace to API, data model, or error matrix sources.
+    notes:
+      - Test framework remains TBD.
+
+  - id: nssf-integration-scenarios
+    title: Plan integration scenarios across handler, core, and gateways
+    type: test-planning
+    status: planned
+    owner: dev
+    depends_on:
+      - nssf-nsselection-handler
+      - nssf-external-nf-gateway
+      - nssf-observability
+    trace_to:
+      - design/nssf/architecture/request-flow.md
+      - design/nssf/architecture/test-strategy.md
+      - dev/nssf/test-matrix.md
+    acceptance:
+      - End-to-end MVP scenarios can run with mocked external NF gateways.
+      - Observability evidence is checked for success and failure paths.
+    notes:
+      - Full NRF/UDM integration is deferred.
