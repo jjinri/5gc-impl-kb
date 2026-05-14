@@ -2,7 +2,7 @@
 nf: nssf
 stage: architecture-design
 status: draft
-source_contract: handoff/nssf/_handoff.yaml
+source_contract: handoff/nssf/contract.yaml
 generated_date: 2026-05-14
 ---
 

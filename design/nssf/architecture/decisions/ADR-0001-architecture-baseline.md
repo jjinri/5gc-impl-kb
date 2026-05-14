@@ -2,7 +2,7 @@
 
 Date: 2026-05-14
 Status: Proposed
-Source contract: `handoff/nssf/_handoff.yaml`
+Source contract: `handoff/nssf/contract.yaml`
 
 ## Context
 

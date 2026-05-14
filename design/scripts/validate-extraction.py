@@ -335,6 +335,13 @@ def run_basic(nf: str, data: dict) -> tuple[int, int, list[str]]:
     return pass_count, len(failures), failures
 
 
+def _handoff_path(nf: str) -> pathlib.Path:
+    canonical = REPO_ROOT / "handoff" / nf / "contract.yaml"
+    if canonical.is_file():
+        return canonical
+    return REPO_ROOT / "handoff" / nf / "_handoff.yaml"
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("nf")
@@ -342,7 +349,7 @@ def main() -> None:
     args = parser.parse_args()
 
     nf = args.nf.lower()
-    handoff_yaml = REPO_ROOT / "handoff" / nf / "_handoff.yaml"
+    handoff_yaml = _handoff_path(nf)
     if not handoff_yaml.is_file():
         sys.exit(f"[validate] {handoff_yaml.relative_to(REPO_ROOT)} 없음")
     data = _load(handoff_yaml) or {}

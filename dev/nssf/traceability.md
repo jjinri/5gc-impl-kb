@@ -3,7 +3,7 @@ nf: nssf
 stage: implementation-planning
 status: draft
 source_architecture: design/nssf/architecture
-source_contract: handoff/nssf/_handoff.yaml
+source_contract: handoff/nssf/contract.yaml
 generated_date: 2026-05-14
 ---
 
@@ -13,7 +13,7 @@ generated_date: 2026-05-14
 
 | source | role |
 | --- | --- |
-| `handoff/nssf/_handoff.yaml` | machine-readable contract handoff |
+| `handoff/nssf/contract.yaml` | machine-readable contract handoff |
 | `design/nssf/contract/interface.md` | SBI transport, auth, base URL, content type constraints |
 | `design/nssf/contract/api/NSSelectionGet.md` | API method, path, request, response constraints |
 | `design/nssf/contract/data-model/SliceInfoForRegistration.md` | registration request data model source |

@@ -391,21 +391,28 @@ def _has_dollar_ref(obj: Any) -> bool:
     return False
 
 
+def _handoff_path(nf: str) -> pathlib.Path:
+    canonical = REPO / "handoff" / nf / "contract.yaml"
+    if canonical.is_file():
+        return canonical
+    return REPO / "handoff" / nf / "_handoff.yaml"
+
+
 def check_handoff_yaml_valid(nf: str, profile: str) -> dict:
     base = {
         "id": "handoff_yaml_valid", "tier": 1,
-        "name": "handoff yaml 존재·valid·schema_version==handoff-v1·필수 top-level key 4개",
+        "name": "handoff yaml 존재·valid·recognized schema",
         "criterion": (
-            "handoff/<nf>/_handoff.yaml 존재 + yaml.safe_load 통과 + "
-            "schema_version == 'handoff-v1' + "
-            "top-level key nf·spec·api·data_model 모두 보유."
+            "handoff/<nf>/contract.yaml 존재 + yaml.safe_load 통과 + "
+            "schema_version 이 handoff-v2 또는 legacy handoff-v1. "
+            "v2 는 nf·categories·topics·tasks 를, v1 은 nf·spec·api·data_model 을 보유."
         ),
         "applies_to": ["stage_3_only", "mixed"],
     }
     if not applies(base, profile):
         base.update(status="NOT_APPLICABLE", current=f"profile={profile}", to_pass=[])
         return base
-    handoff_path = REPO / "handoff" / nf / "_handoff.yaml"
+    handoff_path = _handoff_path(nf)
     if not handoff_path.is_file():
         base.update(status="FAIL", current="handoff yaml 없음",
                     to_pass=[f"python3 design/scripts/build-handoff.py {nf}"])
@@ -417,9 +424,15 @@ def check_handoff_yaml_valid(nf: str, profile: str) -> dict:
                     to_pass=[f"python3 design/scripts/build-handoff.py {nf}"])
         return base
     issues = []
-    if data.get("schema_version") != "handoff-v1":
-        issues.append(f"schema_version={data.get('schema_version')!r} (≠ handoff-v1)")
-    for k in ("nf", "spec", "api", "data_model"):
+    schema = data.get("schema_version")
+    if schema == "handoff-v2":
+        required = ("nf", "categories", "topics", "tasks")
+    elif schema == "handoff-v1":
+        required = ("nf", "spec", "api", "data_model")
+    else:
+        required = ()
+        issues.append(f"schema_version={schema!r} (expected handoff-v2 or legacy handoff-v1)")
+    for k in required:
         if k not in data:
             issues.append(f"top-level key '{k}' 없음")
     if issues:
@@ -427,7 +440,7 @@ def check_handoff_yaml_valid(nf: str, profile: str) -> dict:
                     to_pass=[f"python3 design/scripts/build-handoff.py {nf} 로 재생성"])
     else:
         base.update(status="PASS",
-                    current="schema_version=handoff-v1, 필수 top-level key 4개 존재",
+                    current=f"schema_version={schema}, 필수 top-level key 존재",
                     to_pass=[])
     return base
 
@@ -437,7 +450,7 @@ def check_handoff_yaml_self_contained(nf: str, profile: str) -> dict:
         "id": "handoff_yaml_self_contained", "tier": 2,
         "name": "handoff yaml 안 외부 $ref 0건 (self-contained)",
         "criterion": (
-            "handoff/<nf>/_handoff.yaml 구조 안에 '$ref' 키 0건. "
+            "handoff/<nf>/contract.yaml 구조 안에 '$ref' 키 0건. "
             "외부 spec yaml 또는 다른 NF handoff 를 가리키는 참조 없음."
         ),
         "applies_to": ["stage_3_only", "mixed"],
@@ -445,7 +458,7 @@ def check_handoff_yaml_self_contained(nf: str, profile: str) -> dict:
     if not applies(base, profile):
         base.update(status="NOT_APPLICABLE", current=f"profile={profile}", to_pass=[])
         return base
-    handoff_path = REPO / "handoff" / nf / "_handoff.yaml"
+    handoff_path = _handoff_path(nf)
     if not handoff_path.is_file():
         base.update(status="FAIL", current="handoff yaml 없음",
                     to_pass=[f"python3 design/scripts/build-handoff.py {nf}"])
@@ -570,7 +583,7 @@ def check_validate_extraction(nf: str, handoff_yaml: dict | None) -> dict:
 
 
 def maybe_load_v2_handoff(nf: str) -> dict | None:
-    path = REPO / "handoff" / nf / "_handoff.yaml"
+    path = _handoff_path(nf)
     if not path.is_file():
         return None
     try:
@@ -714,14 +727,13 @@ def main() -> None:
 
     # v2 NF 는 토픽 디렉터리 layout 이라 단일 페이지 기반 check 들이 false-FAIL 한다.
     # 본 MVP 에서는 v2 schema 감지 시 그 check 들을 NOT_APPLICABLE 로 강등.
-    # 의미 있는 진실은 validate_extraction_basic + handoff_yaml_valid 가 담는다.
+    # 의미 있는 진실은 validate_extraction_basic + handoff yaml checks 가 담는다.
     if v2_handoff is not None and v2_handoff.get("schema_version") == "handoff-v2":
         v2_demoted = {
             "frontmatter_valid",
             "sections_complete", "data_model_chain_complete",
             "api_operation_coverage", "service_flow_coverage",
             "wikilinks_resolve", "no_korean_colon_end",
-            "handoff_yaml_valid", "handoff_yaml_self_contained",
             "schema_implementable",
         }
         for c in checks:

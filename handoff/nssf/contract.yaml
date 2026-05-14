@@ -1,11 +1,11 @@
 schema_version: handoff-v2
 nf: nssf
-generated_at: '2026-05-13T09:07:09.123539Z'
+generated_at: '2026-05-14T01:15:24.492972Z'
 agent_contract:
   status_precedence: topic_over_category
   default_read_order:
-  - handoff/<nf>/_handoff.yaml
-  - handoff/<nf>/_handoff.yaml#categories
+  - handoff/<nf>/contract.yaml
+  - handoff/<nf>/contract.yaml#categories
   - design/<nf>/contract/<topic>/<id>.md (target)
   - design/<nf>/contract/<topic>/<id>.json (target machine)
   - design/<nf>/contract/<topic>/<dep>.md (depends_on)

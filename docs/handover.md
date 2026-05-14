@@ -51,7 +51,7 @@ description: 본 프로젝트의 정체성·범위·사람 역할 — design ↔
 type: project
 ---
 본 repo (`5gc-impl-kb`, 추후 rename 예정) 는 *5gc-design + 5gc-dev 를 한 git repo 안에 통합한 단일 monorepo*. 안에서 *논리적으로* 두 시스템 역할을 분리.
-- `design/` — 5gc-design 영역. 3GPP spec 으로부터 LLM agent 자동 파이프라인으로 *NF design deliverable* (`design/<nf>/3gpp-*.md` + `handoff/<nf>/_handoff.yaml`) 생산.
+- `design/` — 5gc-design 영역. 3GPP spec 으로부터 LLM agent 자동 파이프라인으로 *NF design deliverable* (`design/<nf>/3gpp-*.md` + `handoff/<nf>/contract.yaml`) 생산.
 - `handoff/` — design ↔ dev contract.
 - `dev/` — 5gc-dev 영역 (현재 placeholder, 추후 채워질 예정).
 
@@ -62,7 +62,7 @@ type: project
 - `yaml-to-c.py` 는 *schema 가 어떤 언어로든 구현 가능한지 증명하는 sanity probe* 로만 잔존 (gate 이름 `schema_implementable`). 본격 codegen 아님.
 - 사람 역할은 (1) target NF 이름 결정 (2) 3GPP docx/yaml 을 `specs/<spec>/` 에 cp (3) `/nf-init`·`/nf-build`·`/nf-status` 명령 트리거 — 이 3가지로 한정. markdown·yaml 본문은 사람이 손대지 않음 (손대면 다음 `/nf-build` 에 덮어씌워질 수 있음).
 - 결정 배치 — *spec 이 글자로 박혀있으면 design, 사용자가 고르면 dev* 가 한 줄 원칙. OS / 언어 / DBMS / 배포 (bare/docker/VM) / HTTP 라이브러리 / threading model = 모두 dev. OpenAPI path·schema, error matrix, service scenario sequence, cross-NF spec, configuration key·default = design.
-- 본 repo 가 제공하는 *내부 contract* 는 `handoff/<nf>/_handoff.yaml` (markdown 의 7 카테고리를 1:1 미러한 self-contained yaml). dev/ 가 markdown 재파싱 없이 이 yaml 만 보면 됨.
+- 본 repo 가 제공하는 *내부 contract* 는 `handoff/<nf>/contract.yaml` (markdown 의 7 카테고리를 1:1 미러한 self-contained yaml). dev/ 가 markdown 재파싱 없이 이 yaml 만 보면 됨.
 ```
 
 ### 1.4 `project_gate_naming.md`
@@ -81,7 +81,7 @@ type: project
 - 신규 명명 의미 —
   - `draft`: 페이지 골격 (frontmatter_valid).
   - `review_ready`: 사람 검토 가능 (+ sections_complete, manifest_ready, wikilinks_resolve, no_korean_colon_end).
-  - `handoff_ready`: *dev 가 `_handoff.yaml` 만으로 NF 빌드 시작 가능* (+ data_model_chain_complete, api_operation_coverage, service_flow_coverage, handoff_yaml_valid [신규 — C4], handoff_yaml_self_contained [신규 — C4], schema_implementable [yaml_to_c_compiles 에서 rename]).
+  - `handoff_ready`: *dev 가 `contract.yaml` 만으로 NF build planning 을 시작 가능* (+ data_model_chain_complete, api_operation_coverage, service_flow_coverage, handoff_yaml_valid [신규 — C4], handoff_yaml_self_contained [신규 — C4], schema_implementable [yaml_to_c_compiles 에서 rename]).
   - `canonical`: *해당 spec 버전의 design 정본* (+ implementation_guidance_quality — sub-agent judge 4/5 이상).
 - check id `yaml_to_c_compiles` → `schema_implementable` 로 rename. 도구 (`yaml-to-c.py`) 는 그대로, 의미만 *언어 무관 구현 가능성 증명* 으로 변경. C 는 *증명의 수단* 일 뿐.
 - 본 repo 의 어떤 새 도구·문서·skill 에서도 "implementation"·"production" 이라는 단어로 *design 산출 상태* 를 가리키지 않는다. 두 단어는 dev/ 만의 단어.
