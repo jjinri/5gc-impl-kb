@@ -31,6 +31,10 @@ design/*/_archive/
 # OMX runtime
 .omx/*
 
+# npx skills (외부 skill 설치 산출 — repo 공유 대상 아님)
+.agents/
+skills-lock.json
+
 # OS
 .DS_Store
 Thumbs.db
