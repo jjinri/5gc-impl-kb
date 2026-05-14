@@ -112,6 +112,6 @@ mkdir -p "$DIR"
 
 ## 3. 본 wrapping 이 보존하지 않는 것
 
-- 본 plan 파일 (`~/.claude/plans/glittery-beaming-sutherland.md`) — `docs/plan.md` 의 §4 에 흡수됨.
+- 본 plan 파일 (`~/.claude/plans/glittery-beaming-sutherland.md`) — 이후 정리된 lifecycle 문서와 retrospective 에 흡수됨.
 - mattpocock skill 13개 — [`docs/setup.md`](./setup.md) §1 의 한 줄 명령으로 재설치.
 - statusline·settings.json 등 사용자 환경 — 본 repo 책임 밖. 사용자 자체 dotfiles 로 관리.

@@ -12,7 +12,7 @@ applies_to 별 NOT_APPLICABLE 처리, acceptance gate 는 check id 의 AND.
 
 Gate (4 단계).
   draft → review_ready → handoff_ready → canonical
-  의미는 ../docs/plan.md 또는 project memory project_gate_naming.md 참조.
+  의미는 ../docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md 또는 project memory project_gate_naming.md 참조.
 
 Tier 1 (Validation, binary)
   - frontmatter_valid
