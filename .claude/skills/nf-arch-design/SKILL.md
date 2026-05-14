@@ -14,10 +14,9 @@ It converts a handoff-ready, spec-derived NF contract into architecture document
 
 Read only these NF-specific inputs.
 
-1. `handoff/<nf>/contract.yaml` if it exists.
-2. Otherwise legacy `handoff/<nf>/_handoff.yaml` while the compatibility fallback remains active.
-3. `design/<nf>/contract/**/*.md` and `design/<nf>/contract/**/*.json`.
-4. `design/<nf>/_manifest.yaml` only for NF/spec/profile metadata.
+1. `handoff/<nf>/contract.yaml`.
+2. `design/<nf>/contract/**/*.md` and `design/<nf>/contract/**/*.json`.
+3. `design/<nf>/_manifest.yaml` only for NF/spec/profile metadata.
 
 Do not use `dev/<nf>/` as input.
 Do not copy or depend on legacy `design/<nf>/module-decomposition/` unless a user explicitly asks to migrate that legacy artifact.

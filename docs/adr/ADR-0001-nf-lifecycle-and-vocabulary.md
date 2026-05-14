@@ -17,8 +17,8 @@ Define the lifecycle in explicit stages and name canonical user-triggered skills
 
 | Stage | Compatibility skill | Canonical skill | Meaning |
 |---|---|---|---|
-| Spec discovery | `/nf-init <nf> --primary <spec>` | `/nf-spec-discover <nf> --primary <spec>` | Identify primary/ref specs and create or refresh the manifest. |
-| Reset + rediscovery | `/nf-init <nf> --primary <spec> --reset` | `/nf-spec-discover <nf> --primary <spec> --reset` | Archive existing contract artifacts, then recreate the manifest. |
+| Spec discovery | `/nf-init <nf> --primary <spec>` | `/nf-spec-discover <nf> --primary <spec>` | Identify primary/ref specs, create or refresh the manifest, and auto-generate the handoff seed when ready. |
+| Reset + rediscovery | `/nf-init <nf> --primary <spec> --reset` | `/nf-spec-discover <nf> --primary <spec> --reset` | Archive existing contract artifacts only, then refresh the manifest and auto-generate the seed when ready. |
 | Contract extraction | `/nf-build <nf>` | `/nf-contract-build <nf>` | Generate spec-derived contract artifacts and `handoff` contract. |
 | Contract validation | `/nf-status <nf>` | `/nf-contract-check <nf>` | Check whether the contract is ready for architecture design. |
 | Architecture design | none | `/nf-arch-design <nf>` | Convert contract into detailed module/runtime/state/test architecture. |
@@ -36,7 +36,7 @@ Agent-internal work is the script/tool/check sequence performed inside that skil
 
 - Documentation should describe `/nf-build` as contract generation, not code build.
 - `handoff_ready` means the contract is ready to start architecture design, not that coding can start without architecture work.
-- `design/<nf>/contract/` is the current spec-derived contract location. `handoff/<nf>/contract.yaml` is the current machine-readable handoff contract location, with legacy `_handoff.yaml` read fallback only. `design/<nf>/architecture/` and `dev/<nf>/implementation-plan.md` are the current architecture and implementation-planning locations.
+- `design/<nf>/contract/` is the current spec-derived contract location. `handoff/<nf>/contract.yaml` is the current machine-readable handoff contract location; legacy `_handoff.yaml` is retired. `_handoff_seed.yaml` remains the auto-generated seed that replaces manual legacy handoff authoring. `design/<nf>/architecture/` and `dev/<nf>/implementation-plan.md` are the current architecture and implementation-planning locations.
 - Existing commands remain compatibility aliases until alias removal is explicitly planned.
 
 ## Follow-ups
@@ -50,4 +50,4 @@ Agent-internal work is the script/tool/check sequence performed inside that skil
 - 2026-05-13: Moved NSSF topic contract markdown/json artifacts under `design/nssf/contract/`; kept `_handoff_seed.yaml`, `_status.yaml`, and `handoff/nssf/_handoff.yaml` names for compatibility.
 - 2026-05-14: Added `/nf-arch-design` skill, reusable architecture templates, and initial NSSF architecture draft documents under `design/nssf/architecture/`.
 - 2026-05-14: Added `/nf-impl-plan` skill, reusable dev planning templates, and initial NSSF implementation planning artifacts under `dev/nssf/`.
-- 2026-05-14: Renamed the canonical machine-readable handoff output to `handoff/<nf>/contract.yaml`; scripts keep legacy `_handoff.yaml` read fallback only.
+- 2026-05-14: Renamed the canonical machine-readable handoff output to `handoff/<nf>/contract.yaml`; legacy `_handoff.yaml` fallback was then removed.

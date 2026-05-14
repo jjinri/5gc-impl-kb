@@ -41,8 +41,8 @@ python3 -m venv .venv
 
 | 단계 | 호환 skill | canonical skill | 기능 | 주요 산출물 |
 |---|---|---|---|---|
-| Spec discovery | `/nf-init <nf> --primary <spec>` | `/nf-spec-discover <nf> --primary <spec>` | primary/ref spec 식별, manifest 생성·보강 | `design/<nf>/_manifest.yaml` |
-| Reset + rediscovery | `/nf-init <nf> --primary <spec> --reset` | `/nf-spec-discover <nf> --primary <spec> --reset` | 기존 산출 archive 후 manifest 재생성 | `design/<nf>/_archive/<ts>/`, 새 manifest |
+| Spec discovery | `/nf-init <nf> --primary <spec>` | `/nf-spec-discover <nf> --primary <spec>` | primary/ref spec 식별, manifest 생성·보강, ready 시 seed auto-gen | `design/<nf>/_manifest.yaml`, `design/<nf>/_handoff_seed.yaml` |
+| Reset + rediscovery | `/nf-init <nf> --primary <spec> --reset` | `/nf-spec-discover <nf> --primary <spec> --reset` | contract 산출만 archive 후 manifest refresh + seed auto-gen | `design/<nf>/_archive/<ts>/`, manifest/seed 보존·갱신 |
 | Contract extraction | `/nf-build <nf>` | `/nf-contract-build <nf>` | spec-derived contract markdown/json 과 handoff contract 생성 | `design/<nf>/contract/...`, `handoff/<nf>/contract.yaml` |
 | Contract validation | `/nf-status <nf>` | `/nf-contract-check <nf>` | contract 가 architecture 설계 입력으로 충분한지 검사 | `design/<nf>/_status.yaml` |
 | Architecture design | 없음 | `/nf-arch-design <nf>` | contract 를 상세 아키텍처로 변환 | `design/<nf>/architecture/*` |

@@ -336,10 +336,7 @@ def run_basic(nf: str, data: dict) -> tuple[int, int, list[str]]:
 
 
 def _handoff_path(nf: str) -> pathlib.Path:
-    canonical = REPO_ROOT / "handoff" / nf / "contract.yaml"
-    if canonical.is_file():
-        return canonical
-    return REPO_ROOT / "handoff" / nf / "_handoff.yaml"
+    return REPO_ROOT / "handoff" / nf / "contract.yaml"
 
 
 def main() -> None:

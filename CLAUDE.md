@@ -21,7 +21,7 @@
 
 NF 개발 단계 이름은 [`docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`](./docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md) 를 따른다.
 
-- `/nf-init` 은 현재 spec discovery 호환 skill 이며 canonical wrapper 는 `/nf-spec-discover` 다. reset 은 별도 skill 이 아니라 `--reset` 옵션이다.
+- `/nf-init` 은 현재 spec discovery + seed auto-gen 호환 skill 이며 canonical wrapper 는 `/nf-spec-discover` 다. 핵심 목적은 사람이 legacy handoff yaml 을 수동 작성하지 않도록 `_handoff_seed.yaml` 을 자동 생성하는 것이다. reset 은 별도 skill 이 아니라 `--reset` 옵션이고 contract 산출물만 archive 한다.
 - `/nf-build` 는 code build 가 아니라 contract extraction/generation 단계다. canonical wrapper 는 `/nf-contract-build` 다.
 - `/nf-status` 는 contract validation 호환 skill 이며 canonical wrapper 는 `/nf-contract-check` 다. 상세 아키텍처나 구현 검증 status 와 혼동하지 않는다.
 - `/nf-arch-design` 은 handoff-ready contract 를 상세 아키텍처 문서로 변환하는 canonical skill 이다. implementation planning 을 자동 호출하지 않는다.
@@ -32,7 +32,7 @@ NF 개발 단계 이름은 [`docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`](
 ## Source-of-truth policy
 
 - Spec 원문은 `specs/` 가 보존한다.
-- Spec-derived contract 는 현재 `design/<nf>/contract/` 와 `handoff/<nf>/contract.yaml` 이 보존한다. Legacy `handoff/<nf>/_handoff.yaml` 는 읽기 호환만 남긴다.
+- Spec-derived contract 는 현재 `design/<nf>/contract/` 와 `handoff/<nf>/contract.yaml` 이 보존한다. Legacy `handoff/<nf>/_handoff.yaml` 는 폐기됐고 새 workflow 의 입력이 아니다.
 - Architecture design 은 목표 구조상 `design/<nf>/architecture/` 에 둔다.
 - Implementation planning 은 `dev/<nf>/` 에 둔다. 이 영역은 계획 산출물 위치이며 소스 코드 작성 시작 신호가 아니다.
 - `.omx/` 는 runtime/state 영역이며 cleanup·구조 변경 대상이 아니다.

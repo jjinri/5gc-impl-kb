@@ -392,10 +392,7 @@ def _has_dollar_ref(obj: Any) -> bool:
 
 
 def _handoff_path(nf: str) -> pathlib.Path:
-    canonical = REPO / "handoff" / nf / "contract.yaml"
-    if canonical.is_file():
-        return canonical
-    return REPO / "handoff" / nf / "_handoff.yaml"
+    return REPO / "handoff" / nf / "contract.yaml"
 
 
 def check_handoff_yaml_valid(nf: str, profile: str) -> dict:
@@ -404,8 +401,7 @@ def check_handoff_yaml_valid(nf: str, profile: str) -> dict:
         "name": "handoff yaml 존재·valid·recognized schema",
         "criterion": (
             "handoff/<nf>/contract.yaml 존재 + yaml.safe_load 통과 + "
-            "schema_version 이 handoff-v2 또는 legacy handoff-v1. "
-            "v2 는 nf·categories·topics·tasks 를, v1 은 nf·spec·api·data_model 을 보유."
+            "schema_version 이 handoff-v2 이고 nf·categories·topics·tasks 를 보유."
         ),
         "applies_to": ["stage_3_only", "mixed"],
     }
@@ -427,11 +423,9 @@ def check_handoff_yaml_valid(nf: str, profile: str) -> dict:
     schema = data.get("schema_version")
     if schema == "handoff-v2":
         required = ("nf", "categories", "topics", "tasks")
-    elif schema == "handoff-v1":
-        required = ("nf", "spec", "api", "data_model")
     else:
         required = ()
-        issues.append(f"schema_version={schema!r} (expected handoff-v2 or legacy handoff-v1)")
+        issues.append(f"schema_version={schema!r} (expected handoff-v2)")
     for k in required:
         if k not in data:
             issues.append(f"top-level key '{k}' 없음")
@@ -551,8 +545,7 @@ def check_subjective_review(manifest: dict) -> dict:
 
 
 def check_validate_extraction(nf: str, handoff_yaml: dict | None) -> dict:
-    # handoff-v2 면 validate-extraction.py basic 모두 PASS 여야 한다.
-    # handoff-v1 이면 NOT_APPLICABLE (v1 NF 는 본 check 가 부적용).
+    # contract.yaml 이 handoff-v2 면 validate-extraction.py basic 모두 PASS 여야 한다.
     base = {
         "id": "validate_extraction_basic", "tier": 2,
         "name": "validate-extraction.py basic 13 룰 모두 PASS",

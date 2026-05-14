@@ -453,18 +453,18 @@ Acceptance criteria.
 
 ### Phase 7 — `--reset` 정책 정리
 
-목표: destructive reset 을 독립 skill 이 아니라 discovery 재시작 옵션으로 고정한다.
+목표: destructive reset 을 독립 skill 이 아니라 discovery 재시작 옵션으로 고정하되, 사람이 legacy handoff yaml 을 수동 작성하지 않도록 seed auto-gen 책임은 유지한다.
 
 작업.
 
 1. 별도 `nf-reset` skill 은 폐기 상태로 유지하고 새 canonical skill 을 만들지 않는다.
 2. 현재 명령은 `/nf-init <nf> --primary <spec> --reset`, 미래 canonical 명령은 `/nf-spec-discover <nf> --primary <spec> --reset` 로 문서화한다.
-3. topic layout 기준 archive 대상을 수정한다.
-   - `design/<nf>/contract/**/*.md`
-   - `design/<nf>/contract/**/*.json`
-   - `design/<nf>/_contract_status.yaml`
+3. topic layout 기준 archive 대상을 contract 산출물 allowlist 로 수정한다.
+   - `design/<nf>/contract/`
+   - `design/<nf>/_status.yaml`
    - `handoff/<nf>/contract.yaml`
-4. 기본 reset 은 contract 산출물과 manifest 재생성에 한정한다.
+4. 기본 reset 은 contract 산출물 archive, manifest refresh, ready-state seed auto-gen 에 한정한다.
+   - `design/<nf>/_manifest.yaml` 과 `design/<nf>/_handoff_seed.yaml` 은 보존·갱신한다.
    - architecture 산출물은 기본 보존.
    - implementation plan 은 항상 보존.
    - architecture 까지 버리는 것은 별도 explicit option 이 필요하다. 후보: `--include-architecture`.
@@ -474,6 +474,7 @@ Acceptance criteria.
 
 - `grep -R "nf-reset" README.md CLAUDE.md .claude/skills` 결과가 비어 있거나 과거 폐기 기록 문맥뿐이다.
 - reset 이 contract 산출물만 archive 하고 architecture/implementation plan 을 삭제하지 않는다.
+- reset 이 seed auto-gen 목적을 보존하고 legacy `_handoff.yaml` 수동 작성/fallback 을 되살리지 않는다.
 - destructive flag 와 archive 대상이 skill 문서에 명확히 출력된다.
 
 ### Phase 8 — 검증과 이행 종료
@@ -746,3 +747,39 @@ Open risks / gaps:
 - `_handoff_seed.yaml` and `_status.yaml` rename remains pending.
 Next step:
 - Run full validation, commit, push, and open a PR for this filename cleanup.
+
+## Progress checkpoint — 2026-05-14 Legacy handoff removal + reset contract-only policy
+
+Status: ready_for_next_phase
+Current objective: Remove runtime fallback to legacy `_handoff.yaml` while preserving `/nf-init` seed auto-generation and narrowing `--reset` to contract artifacts only.
+Completed:
+- Removed `handoff/<nf>/_handoff.yaml` fallback from `validate-extraction.py` and `nf-status.py`; current checks require `handoff/<nf>/contract.yaml` with `handoff-v2` schema.
+- Removed the regression test that accepted legacy `_handoff.yaml` when `contract.yaml` was absent.
+- Restored `/nf-init` / `/nf-spec-discover` seed auto-generation as a first-class responsibility via `design/scripts/nf-seed-gen.py`.
+- Documented `--reset` as contract-only archive: `design/<nf>/contract/`, `design/<nf>/_status.yaml`, and `handoff/<nf>/contract.yaml`; manifest, seed, architecture, module decomposition, and dev planning are preserved.
+- Updated README, CLAUDE, lifecycle ADR, and active skill docs to state that legacy `_handoff.yaml` is retired and is not a workflow input.
+Changed files:
+- `.claude/skills/nf-init/SKILL.md`
+- `.claude/skills/nf-spec-discover/SKILL.md`
+- `.claude/skills/nf-arch-design/SKILL.md`
+- `.claude/skills/nf-impl-plan/SKILL.md`
+- `README.md`
+- `CLAUDE.md`
+- `design/scripts/nf-seed-gen.py`
+- `design/scripts/validate-extraction.py`
+- `design/scripts/nf-status.py`
+- `tests/scripts/test_validate_extraction.py`
+- `docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`
+- `docs/plans/2026-05-13-lifecycle-structure-skill-rename-plan.md`
+Validation:
+- `.venv/bin/python3 design/scripts/nf-seed-gen.py nssf` → preserved existing scoped seed; categories=13 topics=6 tasks=1.
+- `git diff --check` → pass.
+- `.venv/bin/python3 design/scripts/validate-extraction.py nssf --level basic` → basic 13/13 PASS.
+- `.venv/bin/python3 design/scripts/nf-status.py nssf --no-write` → handoff_ready PASS; canonical still blocked only by existing `implementation_guidance_quality` NOT_RUN.
+- `pytest tests/scripts` → 40 passed.
+Open risks / gaps:
+- `nf-seed-gen.py --force` is a conservative generic generator and has not yet been covered by dedicated unit tests.
+- `_handoff_seed.yaml` and `_status.yaml` filenames remain compatibility names; rename remains a separate future phase.
+- Historical docs outside current workflow surfaces may still mention `_handoff.yaml` as history.
+Next step:
+- Open a PR later when usage budget allows; this checkpoint intentionally leaves the branch locally committed without creating a GitHub PR.

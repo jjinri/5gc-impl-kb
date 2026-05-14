@@ -87,15 +87,6 @@ def test_minimum_yaml_passes(tmp_path: pathlib.Path) -> None:
     assert "FAIL" not in out.stdout
 
 
-def test_legacy_handoff_yaml_fallback_still_passes(tmp_path: pathlib.Path) -> None:
-    _write_min_nf(tmp_path)
-    canonical = tmp_path / "handoff" / "demo" / "contract.yaml"
-    legacy = tmp_path / "handoff" / "demo" / "_handoff.yaml"
-    canonical.rename(legacy)
-    out = _run(tmp_path, "demo", "--level", "basic")
-    assert out.returncode == 0, out.stdout + out.stderr
-    assert "FAIL" not in out.stdout
-
 
 def test_rule_1_invalid_schema_version(tmp_path: pathlib.Path) -> None:
     _write_min_nf(tmp_path)
