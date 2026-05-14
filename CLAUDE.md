@@ -39,60 +39,12 @@ NF 개발 단계 이름은 [`docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`](
 
 ---
 
-## 원격 동기화 — PR 분기
+## Git 작업 원칙
 
-원칙. **PR 은 검토·기록·통합 리스크를 줄일 때만 만든다.** 단순히 작업 단위마다 PR 을 만들면 review/CI 비용·merge 대기·컨텍스트 스위칭만 커진다.
+Git 작업 원칙은 [`AGENTS.md`](./AGENTS.md) 를 따른다.
 
-### PR 필요 (OR — 하나라도 해당 시)
-
-| 범주 | 트리거 |
-|---|---|
-| **main 보호** | production/runtime 코드, public API·schema·contract, migration, 보안·권한·인증, 배포·CI/CD |
-| **리뷰 가치** | 설계 판단, 다중 파일/모듈 영향, 회귀 위험 버그 fix, 테스트 전략 검토, 의도·구현 분리 확인 |
-| **협업·기록** | 인수인계 가능성, 의사결정 이력, 큰 기능 milestone, 외부 리뷰어 승인, issue/spec/plan 연결 |
-| **자동화 게이트** | CI 전체 실행, branch protection required checks, merge queue, release note 검증 |
-
-본 repo 의 대표 트리거 — `design/scripts/*.py` 행위 변경, handoff schema (build-handoff/validate-extraction 룰/seed schema), `.claude/skills/*/SKILL.md`, `specs/` 추가·신규 NF 폴더, 한 push 에 commits ≥ 3.
-
-### PR 불필요 — direct push 허용
-
-| 범주 | 예 |
-|---|---|
-| **로컬·개인 산출물** | 임시 스크립트, 실험 로그, 개인 agent skill 조정, `.omx`·local scratch, 공유 수준 아닌 WIP |
-| **매우 작은 비기능 변경** | typo, prose 문구·서식·정책 텍스트 정리, 도구 산출 재emit (도구 미변경). semantic 변경 없음 |
-| **retro 단독** | `docs/retros/<date>-<slug>-summary.md` 추가/수정만 들어있는 commit. 코드·skill·script 변경이 *함께* 있으면 그 변경의 분기를 따른다 (보통 PR). |
-
-판단 모호 → PR. 본 분기는 *단독 작업자 + origin 진실 출처* 가정 위에서만 유효 — 협업자 합류 시 모든 변경 PR 격상.
-
-### 절차
-
-| 케이스 | 명령 |
-|---|---|
-| PR 필요 | `git switch -c push/<topic>-<yyyymmdd>` → push → `gh pr create --base main` → 머지 → 동기화 → push branch 삭제 |
-| Direct push | `git switch main && git commit && git push origin main` 한 사이클로 마무리 (미push 누적 금지) |
-
-PR 본문은 *요약 + 이유 + 검증* — 머지 commit 메시지 또는 retro 그대로 reuse.
-
-### 머지 후 동기화 — 머지 방식별
-
-| 머지 방식 | 처치 |
-|---|---|
-| Merge commit (본 repo) | `git pull --ff-only origin main` |
-| Squash / Rebase | `git fetch origin && git reset --hard origin/main` |
-
-FF 실패 → squash/rebase 신호 → reset 전환. 본 repo 는 **merge commit** 통일 — 혼용 금지.
-
-### 머지 끝난 push branch 정리
-
-머지 끝난 push branch 는 *전부* 삭제한다 — local + remote 양쪽. 사이클 마지막 단계.
-
-| 단계 | 명령 |
-|---|---|
-| local 일괄 (safe — `--merged main` 이 아닌 브랜치는 `-d` 가 거부) | `git branch --merged main \| grep "^  push/" \| xargs -r git branch -d` |
-| remote 일괄 | `git for-each-ref --format='%(refname:short)' refs/remotes/origin/push/ \| sed 's\|^origin/\|\|' \| xargs -r -I{} git push origin --delete {}` |
-| prune stale tracking ref | `git fetch --prune origin` |
-
-GitHub `Automatically delete head branches` ON 권장 (현재 OFF — 위 remote 일괄 명령으로 대체).
+- PR/direct push 판단, merge 후 동기화, branch 정리, 검증 요건은 AGENTS.md 기준.
+- 여기에는 중복 서술을 두지 않는다.
 
 ---
 
