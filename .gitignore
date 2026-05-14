@@ -8,6 +8,16 @@ __pycache__/
 design/*/_manifest.yaml
 design/*/_contract_status.yaml
 
+# /nf-init seed (재생성 가능 — design/scripts/nf-seed-gen.py)
+design/*/_contract_seed.yaml
+
+# /nf-build 산출 (재생성 가능 — design/scripts/build-handoff.py + nf-build SKILL)
+design/*/contract/
+handoff/*/contract.yaml
+
+# spec docx split cache (재생성 가능 — design/scripts/spec-split.py)
+specs/*/_extracted/
+
 # Reset archive (git history 가 이미 진실 출처)
 design/*/_archive/
 

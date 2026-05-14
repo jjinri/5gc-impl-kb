@@ -31,8 +31,9 @@ NF 개발 단계 이름은 [`docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`](
 
 ## Source-of-truth policy
 
-- Spec 원문은 `specs/` 가 보존한다.
-- Spec-derived contract 는 현재 `design/<nf>/contract/` 와 `handoff/<nf>/contract.yaml` 이 보존한다. Legacy `handoff/<nf>/_handoff.yaml` 는 폐기됐고 새 workflow 의 입력이 아니다.
+- Spec 원문은 `specs/` 가 보존한다. `specs/<spec>/` 안에는 3GPP 원본 (`.docx`/`.yaml`/`.pdf`) 만 두며, 그 외 캐시·split·추출 산출 (`_extracted/` 등) 은 git 에서 추적하지 않는다.
+- Spec-derived contract 는 `design/<nf>/contract/` 와 `handoff/<nf>/contract.yaml` 에 *로컬 재생성* 한다. git 추적 대상이 아니다 — 도구 (`design/scripts/build-handoff.py` + `/nf-build` SKILL) 가 진실 출처이며, fresh checkout 후엔 `/nf-init` → `/nf-build` 로 재생성한다. Legacy `handoff/<nf>/_handoff.yaml` 는 폐기됐고 새 workflow 의 입력이 아니다.
+- `/nf-init` 산출 `design/<nf>/_contract_seed.yaml` 과 `/nf-status` 산출 `_contract_status.yaml`, `_manifest.yaml` 도 같은 정책 — 로컬 재생성, 도구가 진실 출처.
 - Architecture design 은 목표 구조상 `design/<nf>/architecture/` 에 둔다.
 - Implementation planning 은 `dev/<nf>/` 에 둔다. 이 영역은 계획 산출물 위치이며 소스 코드 작성 시작 신호가 아니다.
 - `.omx/` 는 runtime/state 영역이며 cleanup·구조 변경 대상이 아니다.
