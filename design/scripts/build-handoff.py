@@ -9,7 +9,7 @@ Usage:
         nf, categories, topics, tasks, sources
 
 산출:
-    handoff/<nf>/_handoff.yaml — schema_version: handoff-v2.
+    handoff/<nf>/contract.yaml — schema_version: handoff-v2.
         + agent_contract (도구가 채움), spec_index (도구가 채움)
 """
 
@@ -33,8 +33,8 @@ REPO_ROOT = pathlib.Path(
 AGENT_CONTRACT = {
     "status_precedence": "topic_over_category",
     "default_read_order": [
-        "handoff/<nf>/_handoff.yaml",
-        "handoff/<nf>/_handoff.yaml#categories",
+        "handoff/<nf>/contract.yaml",
+        "handoff/<nf>/contract.yaml#categories",
         "design/<nf>/contract/<topic>/<id>.md (target)",
         "design/<nf>/contract/<topic>/<id>.json (target machine)",
         "design/<nf>/contract/<topic>/<dep>.md (depends_on)",
@@ -114,7 +114,7 @@ def main() -> None:
 
     out_dir = REPO_ROOT / "handoff" / nf
     out_dir.mkdir(parents=True, exist_ok=True)
-    out_path = out_dir / "_handoff.yaml"
+    out_path = out_dir / "contract.yaml"
     out_path.write_text(
         yaml.dump(out_payload, allow_unicode=True, default_flow_style=False, sort_keys=False),
         encoding="utf-8",

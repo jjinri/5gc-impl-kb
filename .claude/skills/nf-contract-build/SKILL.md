@@ -16,7 +16,7 @@ Use the workflow in `../nf-build/SKILL.md` exactly, with these terminology subst
 - Report the current user-triggered skill as `/nf-contract-build`.
 - Treat `/nf-build` as the compatibility alias.
 - Describe the output as **spec-derived NF contract artifacts**, not code build artifacts.
-- Generate topic contract artifacts under `design/<nf>/contract/` and the current handoff-v2 yaml at `handoff/<nf>/_handoff.yaml` until the handoff rename phase starts.
+- Generate topic contract artifacts under `design/<nf>/contract/` and the current handoff-v2 yaml at `handoff/<nf>/contract.yaml`.
 - Continue to run same-stage validation via `build-handoff.py` and `validate-extraction.py --level basic`.
 
 ## Boundary

@@ -18,7 +18,7 @@ def _run_build(nf: str, cwd: pathlib.Path) -> pathlib.Path:
         capture_output=True, text=True, cwd=cwd, timeout=120, env=env,
     )
     assert out.returncode == 0, out.stderr
-    return cwd / "handoff" / nf / "_handoff.yaml"
+    return cwd / "handoff" / nf / "contract.yaml"
 
 
 def _seed(tmp_path: pathlib.Path) -> pathlib.Path:

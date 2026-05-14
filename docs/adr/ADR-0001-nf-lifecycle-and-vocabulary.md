@@ -36,14 +36,13 @@ Agent-internal work is the script/tool/check sequence performed inside that skil
 
 - Documentation should describe `/nf-build` as contract generation, not code build.
 - `handoff_ready` means the contract is ready to start architecture design, not that coding can start without architecture work.
-- `design/<nf>/contract/` is the current spec-derived contract location. `design/<nf>/architecture/` is the current architecture-design location. `handoff/<nf>/contract.yaml` remains a target structure for a later compatibility-aware rename phase, and `dev/<nf>/implementation-plan.md` is the current implementation-planning location.
+- `design/<nf>/contract/` is the current spec-derived contract location. `handoff/<nf>/contract.yaml` is the current machine-readable handoff contract location, with legacy `_handoff.yaml` read fallback only. `design/<nf>/architecture/` and `dev/<nf>/implementation-plan.md` are the current architecture and implementation-planning locations.
 - Existing commands remain compatibility aliases until alias removal is explicitly planned.
 
 ## Follow-ups
 
-1. Rename `handoff/<nf>/_handoff.yaml` to `handoff/<nf>/contract.yaml` in a compatibility-aware phase.
-2. Consider `_handoff_seed.yaml` → `_contract_seed.yaml` and `_status.yaml` → `_contract_status.yaml` after script/test compatibility is prepared.
-3. Keep reset integrated into `/nf-init --reset` and `/nf-spec-discover --reset`.
+1. Consider `_handoff_seed.yaml` → `_contract_seed.yaml` and `_status.yaml` → `_contract_status.yaml` after script/test compatibility is prepared.
+2. Keep reset integrated into `/nf-init --reset` and `/nf-spec-discover --reset`.
 
 ## Migration notes
 
@@ -51,3 +50,4 @@ Agent-internal work is the script/tool/check sequence performed inside that skil
 - 2026-05-13: Moved NSSF topic contract markdown/json artifacts under `design/nssf/contract/`; kept `_handoff_seed.yaml`, `_status.yaml`, and `handoff/nssf/_handoff.yaml` names for compatibility.
 - 2026-05-14: Added `/nf-arch-design` skill, reusable architecture templates, and initial NSSF architecture draft documents under `design/nssf/architecture/`.
 - 2026-05-14: Added `/nf-impl-plan` skill, reusable dev planning templates, and initial NSSF implementation planning artifacts under `dev/nssf/`.
+- 2026-05-14: Renamed the canonical machine-readable handoff output to `handoff/<nf>/contract.yaml`; scripts keep legacy `_handoff.yaml` read fallback only.

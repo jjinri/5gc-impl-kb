@@ -1,6 +1,6 @@
 ---
 name: nf-init
-description: 본 5gc-impl-kb 의 새 NF (Network Function) 작업을 *시작* 하거나 기존 NF 산출을 *백업 후 처음부터 다시 시작* 하는 워크플로우. 사용자가 "NSSF 시작", "/nf-init nrf", "AMF 매니페스트 만들어", "amf 구현 시작", "create nf manifest", "29.510 으로 NRF 작업 시작", "NSSF 리셋", "NRF 페이지 백업하고 다시 빌드", "/nf-init nssf --primary 29.531 --reset" 등을 말하거나 NF 이름 + 주 spec 번호를 지정하면 무조건 이 skill 을 사용한다. 동작 — (1) `--reset` 인 경우 기존 산출 (`design/<nf>/` 안의 페이지·`_status.yaml`·`_handoff_seed.yaml`·`_manifest.yaml` + `handoff/<nf>/_handoff.yaml`) 을 `design/<nf>/_archive/<timestamp>/` 로 mv (2) `design/scripts/nf-manifest.py <nf> --primary <spec> --write` 호출 (3) 산출 매니페스트 (`design/<nf>/_manifest.yaml`) 의 status 를 사용자에게 보고 (4) `ready_for_build = true` 가 되려면 어느 spec 을 specs/ 에 추가해야 하는지 priority 순으로 알린다. 본 skill 은 *반복 가능* 하다 — 사용자가 새 spec 을 specs/ 에 cp 한 뒤 다시 호출하면 매니페스트가 보강된다. ready 가 될 때까지 반복하고, 그 다음 `/nf-build` 로 페이지 생성. 신규 NF 의 매니페스트 *생성/재생성* 만 한다 — 페이지 빌드는 `/nf-build`, 완성도 검사는 `/nf-status` 의 책임.
+description: 본 5gc-impl-kb 의 새 NF (Network Function) 작업을 *시작* 하거나 기존 NF 산출을 *백업 후 처음부터 다시 시작* 하는 워크플로우. 사용자가 "NSSF 시작", "/nf-init nrf", "AMF 매니페스트 만들어", "amf 구현 시작", "create nf manifest", "29.510 으로 NRF 작업 시작", "NSSF 리셋", "NRF 페이지 백업하고 다시 빌드", "/nf-init nssf --primary 29.531 --reset" 등을 말하거나 NF 이름 + 주 spec 번호를 지정하면 무조건 이 skill 을 사용한다. 동작 — (1) `--reset` 인 경우 기존 산출 (`design/<nf>/` 안의 페이지·`_status.yaml`·`_handoff_seed.yaml`·`_manifest.yaml` + `handoff/<nf>/contract.yaml`) 을 `design/<nf>/_archive/<timestamp>/` 로 mv (2) `design/scripts/nf-manifest.py <nf> --primary <spec> --write` 호출 (3) 산출 매니페스트 (`design/<nf>/_manifest.yaml`) 의 status 를 사용자에게 보고 (4) `ready_for_build = true` 가 되려면 어느 spec 을 specs/ 에 추가해야 하는지 priority 순으로 알린다. 본 skill 은 *반복 가능* 하다 — 사용자가 새 spec 을 specs/ 에 cp 한 뒤 다시 호출하면 매니페스트가 보강된다. ready 가 될 때까지 반복하고, 그 다음 `/nf-build` 로 페이지 생성. 신규 NF 의 매니페스트 *생성/재생성* 만 한다 — 페이지 빌드는 `/nf-build`, 완성도 검사는 `/nf-status` 의 책임.
 argument-hint: "<nf> --primary <spec> [--reset]"
 allowed-tools: Bash(.venv/bin/python3 design/scripts/nf-manifest.py *) Bash(ls *) Bash(cat *) Bash(mkdir -p *) Bash(git mv *) Bash(mv *) Bash(date *) Bash(find design/* *)
 ---
@@ -12,7 +12,7 @@ allowed-tools: Bash(.venv/bin/python3 design/scripts/nf-manifest.py *) Bash(ls *
 ## 입력
 - `<nf>` — `nssf`, `nrf`, `amf` 등 NF 이름 (소문자, design/ 하위 폴더명).
 - `--primary <spec>` — NF 의 주 spec 번호 (점 포함, 예 `29.531`). 필수.
-- `--reset` — *파괴적 옵션*. `design/<nf>/` 의 모든 산출 (페이지·`_status.yaml`·`_handoff_seed.yaml`·`_manifest.yaml`) 과 `handoff/<nf>/_handoff.yaml` 을 `design/<nf>/_archive/<YYYYMMDD-HHMMSS>/` 로 mv 한 뒤 manifest 를 *재생성*. `--primary <spec>` 과 함께 써야 하며, 명시 flag 이므로 추가 [Y/n] 프롬프트 없이 즉시 archive 실행. 옮길 파일 표 + archive 위치는 항상 *결과 보고* 로 출력.
+- `--reset` — *파괴적 옵션*. `design/<nf>/` 의 모든 산출 (페이지·`_status.yaml`·`_handoff_seed.yaml`·`_manifest.yaml`) 과 `handoff/<nf>/contract.yaml` 을 `design/<nf>/_archive/<YYYYMMDD-HHMMSS>/` 로 mv 한 뒤 manifest 를 *재생성*. `--primary <spec>` 과 함께 써야 하며, 명시 flag 이므로 추가 [Y/n] 프롬프트 없이 즉시 archive 실행. 옮길 파일 표 + archive 위치는 항상 *결과 보고* 로 출력.
 - 인자 없으면 어느 NF 인지·주 spec 이 무엇인지 사용자에게 묻고 정지.
 
 > 다중 primary spec (예 NWDAF = 23.288 + 29.520) 은 sprint 후반에 도구 인자 확장 예정. 현재는 *대표 1개* 로 시작하고 나머지는 매니페스트에서 docx_clause_2 references 로 자동 검출.
@@ -61,7 +61,7 @@ allowed-tools: Bash(.venv/bin/python3 design/scripts/nf-manifest.py *) Bash(ls *
   find design/<nf>/ -mindepth 1 -maxdepth 1 ! -name _archive -exec git mv -k {} <archive_dir>/ \;
   ```
   (`git mv -k` 실패 시 `mv` 로 fallback. archive 폴더는 `.gitignore` 대상이라 git 추적 밖.)
-- **handoff yaml** — `handoff/<nf>/_handoff.yaml` 존재 시 같은 archive 폴더 안 `_handoff.yaml` 로 mv. 설계와 분리된 별도 트리이지만 페이지와 한 사이클로 재생성되므로 함께 archive.
+- **handoff yaml** — `handoff/<nf>/contract.yaml` 존재 시 같은 archive 폴더 안 `contract.yaml` 로 mv. 설계와 분리된 별도 트리이지만 페이지와 한 사이클로 재생성되므로 함께 archive.
 - 옮길 파일이 0 개이면 archive 폴더 생성하지 말고 "이미 비어있음" 보고 후 §4 로 진행.
 
 ### 4. 도구 실행
@@ -115,9 +115,9 @@ allowed-tools: Bash(.venv/bin/python3 design/scripts/nf-manifest.py *) Bash(ls *
 사용자: /nf-init nssf --primary 29.531 --reset
 도구:   ts=20260513-153000; mkdir -p design/nssf/_archive/20260513-153000/
         find design/nssf/ -mindepth 1 -maxdepth 1 ! -name _archive -exec git mv -k {} ... \;
-        mv handoff/nssf/_handoff.yaml design/nssf/_archive/20260513-153000/_handoff.yaml
+        mv handoff/nssf/contract.yaml design/nssf/_archive/20260513-153000/contract.yaml
         design/scripts/nf-manifest.py nssf --primary 29.531 --write
-보고:   "archive — design/nssf/_archive/20260513-153000/ (mv entries: contract/, module-decomposition/, _manifest.yaml, _handoff_seed.yaml, _status.yaml + handoff/_handoff.yaml).
+보고:   "archive — design/nssf/_archive/20260513-153000/ (mv entries: contract/, module-decomposition/, _manifest.yaml, _handoff_seed.yaml, _status.yaml + handoff/contract.yaml).
         manifest_completeness 11/11. ready_for_build=true.
         다음 — /nf-build nssf 로 fresh 빌드."
 ```

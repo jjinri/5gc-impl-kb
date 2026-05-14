@@ -20,7 +20,7 @@
 | 현재 skill | 실제 역할 | 문제 |
 |---|---|---|
 | `/nf-init` | NF primary spec 과 의존 spec 을 찾아 `_manifest.yaml` 생성·보강하고, `--reset` 시 기존 산출을 archive 후 manifest 를 재생성 | `init` 이 너무 넓다. 실제로는 spec discovery/manifest 단계이며 reset 은 destructive 옵션으로 분리 인지가 필요하다. |
-| `/nf-build` | `_handoff_seed.yaml` 기준으로 spec-derived markdown/json 과 `handoff/<nf>/_handoff.yaml` 생성 | `build` 라는 이름이 코드 build/compile 과 충돌한다. 실제 단계는 contract extraction/generation 이다. |
+| `/nf-build` | `_handoff_seed.yaml` 기준으로 spec-derived markdown/json 과 `handoff/<nf>/contract.yaml` 생성 | `build` 라는 이름이 코드 build/compile 과 충돌한다. 실제 단계는 contract extraction/generation 이다. |
 | `/nf-status` | contract/design 산출물의 gate 검사 | 무엇의 status 인지 불명확하다. 상세 아키텍처나 구현 status 와 구분되지 않는다. |
 
 ### 현재 산출물 구조
@@ -39,7 +39,7 @@ design/nssf/
 ├── data-model/*.json
 └── module-decomposition/SelectionEngine.md
 
-handoff/nssf/_handoff.yaml
+handoff/nssf/contract.yaml
 
 dev/README.md
 ```
@@ -48,7 +48,7 @@ dev/README.md
 
 1. `design/nssf/` 안에 spec-derived contract, 사람이 정의한 seed, 상태 보고서, 초기 모듈 분해가 함께 있다.
 2. `module-decomposition` 은 상세 아키텍처의 시작점인데 `nf-build` 산출과 같은 단계처럼 보인다.
-3. `handoff/<nf>/_handoff.yaml` 은 dev contract 이지만 어떤 maturity 의 contract 인지 파일명만으로 알기 어렵다.
+3. `handoff/<nf>/contract.yaml` 은 dev contract 이지만 어떤 maturity 의 contract 인지 파일명만으로 알기 어렵다.
 4. `dev/` 는 placeholder 이고 상세 아키텍처 설계 산출물 위치가 없다.
 5. `README.md` 의 흐름도는 `nf-build` 산출을 “7 카테고리 페이지”로 설명하지만 실제 handoff-v2 는 topic layout 이다.
 
@@ -149,7 +149,7 @@ design/
 
 handoff/
 └── <nf>/
-    ├── contract.yaml              # 현재 _handoff.yaml rename
+    ├── contract.yaml
     └── architecture.yaml          # 선택. architecture summary for dev agents
 
 dev/
@@ -225,7 +225,7 @@ dev/
 | `design/<nf>/_manifest.yaml` | 유지 | discovery 산출. 이름이 충분히 명확하다. |
 | `design/<nf>/_handoff_seed.yaml` | `design/<nf>/_contract_seed.yaml` | seed 는 handoff 가 아니라 contract 생성 입력이다. |
 | `design/<nf>/_status.yaml` | `design/<nf>/_contract_status.yaml` | architecture/implementation status 와 구분한다. |
-| `handoff/<nf>/_handoff.yaml` | `handoff/<nf>/contract.yaml` | 파일명이 역할을 직접 표현한다. |
+| legacy `handoff/<nf>/_handoff.yaml` | `handoff/<nf>/contract.yaml` | 파일명이 역할을 직접 표현한다. |
 | `design/<nf>/interface.md` | `design/<nf>/contract/interface.md` | contract 산출물임을 명확히 한다. |
 | `design/<nf>/api/*` | `design/<nf>/contract/api/*` | 동일. |
 | `design/<nf>/data-model/*` | `design/<nf>/contract/data-model/*` | 동일. |
@@ -270,7 +270,7 @@ dev/<nf>/
 
 ## handoff contract 재정의
 
-현재 `handoff/<nf>/_handoff.yaml` 은 dev contract 로 충분히 중요하지만, 이름이 내부 파일처럼 보인다. 다음처럼 명확히 한다.
+기존 `handoff/<nf>/_handoff.yaml` 은 dev contract 로 충분히 중요하지만, 이름이 내부 파일처럼 보였다. 다음처럼 명확히 한다.
 
 ```text
 handoff/<nf>/contract.yaml
@@ -369,7 +369,7 @@ Acceptance criteria.
    - rename 시 `_contract_seed.yaml` 로 이동하고 scripts/tests 를 갱신한다.
 4. `_status.yaml` rename 검토.
    - rename 시 `_contract_status.yaml` 로 이동하고 scripts/tests 를 갱신한다.
-5. `handoff/<nf>/_handoff.yaml` → `handoff/<nf>/contract.yaml` rename 은 가장 마지막에 수행한다.
+5. legacy `handoff/<nf>/_handoff.yaml` → `handoff/<nf>/contract.yaml` rename 은 가장 마지막에 수행한다.
 
 수정 대상.
 
@@ -602,7 +602,7 @@ Status: ready_for_review
 Current objective: Move spec-derived NSSF contract artifacts under `design/nssf/contract/` while preserving current seed/status/handoff filenames for compatibility.
 Completed:
 - Moved NSSF `interface.md`, `error-handling.md`, `api/`, and `data-model/` artifacts into `design/nssf/contract/` using `git mv`.
-- Updated `design/nssf/_handoff_seed.yaml` paths and regenerated `handoff/nssf/_handoff.yaml`.
+- Updated `design/nssf/_handoff_seed.yaml` paths and regenerated `handoff/nssf/contract.yaml`.
 - Updated `path_resolution.py` so contract categories prefer `design/<nf>/contract/` while legacy paths remain readable for compatibility.
 - Updated `build-handoff.py` agent read-order guidance to point at contract paths.
 - Updated tests to exercise contract-root topic resolution and contract-root fixture paths.
@@ -610,10 +610,10 @@ Completed:
 Compatibility deliberately preserved:
 - `design/<nf>/_handoff_seed.yaml` not renamed yet.
 - `design/<nf>/_status.yaml` not renamed yet.
-- `handoff/<nf>/_handoff.yaml` not renamed yet.
+- legacy `handoff/<nf>/_handoff.yaml` was not renamed yet at this checkpoint.
 - `design/<nf>/module-decomposition/` left in place until the architecture-design phase decides its final structure.
 Validation:
-- `.venv/bin/python3 design/scripts/build-handoff.py nssf` → wrote `handoff/nssf/_handoff.yaml`, categories=13 topics=6 tasks=1.
+- `.venv/bin/python3 design/scripts/build-handoff.py nssf` → wrote `handoff/nssf/contract.yaml`, categories=13 topics=6 tasks=1.
 - `.venv/bin/python3 design/scripts/validate-extraction.py nssf --level basic` → basic 13/13 PASS.
 - `.venv/bin/python3 design/scripts/nf-status.py nssf --no-write` → handoff_ready PASS; canonical blocked only by `implementation_guidance_quality` NOT_RUN baseline.
 - `pytest tests/scripts` → 40 passed.
@@ -636,7 +636,7 @@ Completed:
 - Kept implementation choices explicit as `TBD` and left OS/language/DB/framework/deployment decisions to later dev stages.
 - Updated README, CLAUDE, and ADR wording so `/nf-arch-design` is now available rather than planned.
 Compatibility deliberately preserved:
-- `handoff/nssf/_handoff.yaml` remains the current source contract path until the handoff filename rename phase.
+- At this checkpoint, legacy `handoff/nssf/_handoff.yaml` still remained the source contract path pending the handoff filename rename phase.
 - `design/nssf/_handoff_seed.yaml` and `design/nssf/_status.yaml` remain unchanged.
 - `design/nssf/module-decomposition/` remains in place and was not used as the architecture input source.
 Changed files:
@@ -658,7 +658,7 @@ Validation:
 - stale planned-wording grep for `/nf-arch-design` → 0 matches.
 Open risks / gaps:
 - `/nf-impl-plan` remains planned and not implemented.
-- Handoff filename rename remains pending and should be separate.
+- At this checkpoint, handoff filename rename remained pending and was planned as a separate phase.
 - Legacy `module-decomposition` migration remains pending.
 Next step:
 - Commit and open a Phase 4 PR, then implement `/nf-impl-plan` in the next phase.
@@ -675,7 +675,7 @@ Completed:
 - Kept technology choices explicit as `TBD` and did not create source code, dependency files, or build system files.
 - Updated README, CLAUDE, ADR, and `dev/README.md` so `/nf-impl-plan` is available rather than planned.
 Compatibility deliberately preserved:
-- `handoff/nssf/_handoff.yaml` remains the current source contract path until the handoff filename rename phase.
+- At this checkpoint, legacy `handoff/nssf/_handoff.yaml` still remained the source contract path pending the handoff filename rename phase.
 - Contract and architecture paths remain unchanged.
 - `dev/nssf/` contains planning artifacts only, not implementation source code.
 Changed files:
@@ -699,8 +699,50 @@ Validation:
 - `pytest tests/scripts` → 40 passed.
 - stale planned-wording grep for `/nf-impl-plan` → 0 matches.
 Open risks / gaps:
-- Handoff filename rename remains pending and should be separate.
+- At this checkpoint, handoff filename rename remained pending and was planned as a separate phase.
 - Seed/status filename rename remains pending.
 - Reset archive policy update remains pending Phase 7.
 Next step:
 - Commit and open a Phase 5 PR, then continue with reset/archive policy cleanup in the next phase.
+
+## Progress checkpoint — 2026-05-14 Handoff filename cleanup
+
+Status: ready_for_review
+Current objective: Rename the canonical machine-readable handoff artifact from legacy `_handoff.yaml` to `contract.yaml` with read fallback for compatibility.
+Completed:
+- Renamed tracked NSSF handoff artifact `handoff/nssf/_handoff.yaml` to `handoff/nssf/contract.yaml`.
+- Updated `design/scripts/build-handoff.py` to emit `handoff/<nf>/contract.yaml` and update `agent_contract.default_read_order`.
+- Updated `design/scripts/validate-extraction.py` and `design/scripts/nf-status.py` to prefer `contract.yaml` and read legacy `_handoff.yaml` only as fallback.
+- Updated `nf-status.py` handoff yaml validity logic to recognize `handoff-v2` directly instead of treating v2 as a v1 false-fail.
+- Updated README, CLAUDE, lifecycle ADR, active skills, architecture docs, dev planning docs, and handover memory to use `contract.yaml` as the canonical handoff path.
+- Added a regression test proving legacy `_handoff.yaml` still validates when `contract.yaml` is absent.
+Decision:
+- `_handoff_seed.yaml` and `_status.yaml` are not renamed in this phase. They are still script/skill interface filenames and should move in a separate compatibility PR if needed.
+Changed files:
+- `handoff/nssf/contract.yaml`
+- `design/scripts/build-handoff.py`
+- `design/scripts/validate-extraction.py`
+- `design/scripts/nf-status.py`
+- `tests/scripts/test_build_handoff_v2.py`
+- `tests/scripts/test_validate_extraction.py`
+- `.claude/skills/*/SKILL.md` touched by handoff path wording
+- `README.md`
+- `CLAUDE.md`
+- `docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`
+- `docs/handover.md`
+- `docs/plans/2026-05-13-lifecycle-structure-skill-rename-plan.md`
+- `design/nssf/architecture/*.md`
+- `dev/nssf/*`
+Validation:
+- `.venv/bin/python3 design/scripts/build-handoff.py nssf` → wrote `handoff/nssf/contract.yaml`, categories=13 topics=6 tasks=1.
+- `.venv/bin/python3 design/scripts/validate-extraction.py nssf --level basic` → basic 13/13 PASS.
+- `.venv/bin/python3 design/scripts/nf-status.py nssf --no-write` → handoff_ready PASS; canonical remains blocked only by baseline `implementation_guidance_quality` NOT_RUN; handoff yaml checks PASS for handoff-v2.
+- `pytest tests/scripts` → 41 passed.
+- `git diff --check` → pass.
+- Current-surface `_handoff.yaml` grep → only explicit legacy fallback/code/test/history mentions remain.
+Open risks / gaps:
+- Historical docs under `docs/superpowers/`, `docs/retros/`, and older `docs/plan.md` still mention `_handoff.yaml` as historical context.
+- Reset/archive policy still needs Phase 7 cleanup.
+- `_handoff_seed.yaml` and `_status.yaml` rename remains pending.
+Next step:
+- Run full validation, commit, push, and open a PR for this filename cleanup.

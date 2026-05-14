@@ -17,7 +17,7 @@ Read these NF-specific inputs.
 
 1. `design/<nf>/architecture/*.md` and `design/<nf>/architecture/decisions/*.md`.
 2. `handoff/<nf>/contract.yaml` if it exists.
-3. Otherwise `handoff/<nf>/_handoff.yaml` while the compatibility filename remains active.
+3. Otherwise legacy `handoff/<nf>/_handoff.yaml` while the compatibility fallback remains active.
 4. `design/<nf>/contract/**/*.md` and `design/<nf>/contract/**/*.json` for source traceability.
 5. `design/<nf>/_manifest.yaml` only for NF/spec/profile metadata.
 

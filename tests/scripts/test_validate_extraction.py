@@ -35,7 +35,7 @@ def _write_min_nf(tmp_path: pathlib.Path) -> pathlib.Path:
         encoding="utf-8")
     handoff = root / "handoff" / "demo"
     handoff.mkdir(parents=True)
-    handoff_yaml = handoff / "_handoff.yaml"
+    handoff_yaml = handoff / "contract.yaml"
     handoff_yaml.write_text(yaml.safe_dump({
         "schema_version": "handoff-v2",
         "nf": "demo",
@@ -87,9 +87,19 @@ def test_minimum_yaml_passes(tmp_path: pathlib.Path) -> None:
     assert "FAIL" not in out.stdout
 
 
+def test_legacy_handoff_yaml_fallback_still_passes(tmp_path: pathlib.Path) -> None:
+    _write_min_nf(tmp_path)
+    canonical = tmp_path / "handoff" / "demo" / "contract.yaml"
+    legacy = tmp_path / "handoff" / "demo" / "_handoff.yaml"
+    canonical.rename(legacy)
+    out = _run(tmp_path, "demo", "--level", "basic")
+    assert out.returncode == 0, out.stdout + out.stderr
+    assert "FAIL" not in out.stdout
+
+
 def test_rule_1_invalid_schema_version(tmp_path: pathlib.Path) -> None:
     _write_min_nf(tmp_path)
-    p = tmp_path / "handoff" / "demo" / "_handoff.yaml"
+    p = tmp_path / "handoff" / "demo" / "contract.yaml"
     data = yaml.safe_load(p.read_text(encoding="utf-8"))
     data["schema_version"] = "handoff-v9"
     p.write_text(yaml.safe_dump(data), encoding="utf-8")
@@ -100,7 +110,7 @@ def test_rule_1_invalid_schema_version(tmp_path: pathlib.Path) -> None:
 
 def test_rule_2_invalid_status_enum(tmp_path: pathlib.Path) -> None:
     _write_min_nf(tmp_path)
-    p = tmp_path / "handoff" / "demo" / "_handoff.yaml"
+    p = tmp_path / "handoff" / "demo" / "contract.yaml"
     data = yaml.safe_load(p.read_text(encoding="utf-8"))
     data["topics"]["api/OpA"]["status"] = "ready_for_review"
     p.write_text(yaml.safe_dump(data), encoding="utf-8")
@@ -119,7 +129,7 @@ def test_rule_3_missing_topic_file(tmp_path: pathlib.Path) -> None:
 
 def test_rule_4_dangling_cross_ref(tmp_path: pathlib.Path) -> None:
     _write_min_nf(tmp_path)
-    p = tmp_path / "handoff" / "demo" / "_handoff.yaml"
+    p = tmp_path / "handoff" / "demo" / "contract.yaml"
     data = yaml.safe_load(p.read_text(encoding="utf-8"))
     data["topics"]["api/OpA"]["depends_on"] = ["data-model/Ghost"]
     p.write_text(yaml.safe_dump(data), encoding="utf-8")
@@ -137,7 +147,7 @@ def test_rule_4_anchor_present_passes(tmp_path: pathlib.Path) -> None:
         + '\n<a id="op-400"></a>\n## Op 400 — bad request\n',
         encoding="utf-8",
     )
-    p = tmp_path / "handoff" / "demo" / "_handoff.yaml"
+    p = tmp_path / "handoff" / "demo" / "contract.yaml"
     data = yaml.safe_load(p.read_text(encoding="utf-8"))
     data["topics"]["api/OpA"]["error_refs"] = ["error-handling#op-400"]
     p.write_text(yaml.safe_dump(data), encoding="utf-8")
@@ -149,7 +159,7 @@ def test_rule_4_missing_anchor_fails(tmp_path: pathlib.Path) -> None:
     # error-handling.md exists but the referenced anchor does not. Without
     # anchor verification, rule_4 used to PASS — that's the bug being fixed.
     _write_min_nf(tmp_path)
-    p = tmp_path / "handoff" / "demo" / "_handoff.yaml"
+    p = tmp_path / "handoff" / "demo" / "contract.yaml"
     data = yaml.safe_load(p.read_text(encoding="utf-8"))
     data["topics"]["api/OpA"]["error_refs"] = ["error-handling#missing-anchor"]
     p.write_text(yaml.safe_dump(data), encoding="utf-8")
@@ -165,7 +175,7 @@ def test_rule_4_missing_anchor_fails(tmp_path: pathlib.Path) -> None:
 def test_rule_4_task_read_anchor_verified(tmp_path: pathlib.Path) -> None:
     # Anchor verification must also apply to tasks.<id>.read entries.
     _write_min_nf(tmp_path)
-    p = tmp_path / "handoff" / "demo" / "_handoff.yaml"
+    p = tmp_path / "handoff" / "demo" / "contract.yaml"
     data = yaml.safe_load(p.read_text(encoding="utf-8"))
     data["tasks"] = {
         "demo-task": {
@@ -186,7 +196,7 @@ def test_rule_4_task_read_anchor_verified(tmp_path: pathlib.Path) -> None:
 
 def test_rule_5_category_topic_mismatch(tmp_path: pathlib.Path) -> None:
     _write_min_nf(tmp_path)
-    p = tmp_path / "handoff" / "demo" / "_handoff.yaml"
+    p = tmp_path / "handoff" / "demo" / "contract.yaml"
     data = yaml.safe_load(p.read_text(encoding="utf-8"))
     data["topics"]["api/OpA"]["status"] = "draft"
     p.write_text(yaml.safe_dump(data), encoding="utf-8")
@@ -197,7 +207,7 @@ def test_rule_5_category_topic_mismatch(tmp_path: pathlib.Path) -> None:
 
 def test_rule_6_blocked_needs_reason(tmp_path: pathlib.Path) -> None:
     _write_min_nf(tmp_path)
-    p = tmp_path / "handoff" / "demo" / "_handoff.yaml"
+    p = tmp_path / "handoff" / "demo" / "contract.yaml"
     data = yaml.safe_load(p.read_text(encoding="utf-8"))
     data["topics"]["api/OpA"]["status"] = "blocked"
     p.write_text(yaml.safe_dump(data), encoding="utf-8")

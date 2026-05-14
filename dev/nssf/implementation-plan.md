@@ -3,7 +3,7 @@ nf: nssf
 stage: implementation-planning
 status: draft
 source_architecture: design/nssf/architecture
-source_contract: handoff/nssf/_handoff.yaml
+source_contract: handoff/nssf/contract.yaml
 generated_date: 2026-05-14
 ---
 
@@ -17,7 +17,7 @@ generated_date: 2026-05-14
 ## Inputs
 
 - Architecture root: `design/nssf/architecture`
-- Contract handoff: `handoff/nssf/_handoff.yaml`
+- Contract handoff: `handoff/nssf/contract.yaml`
 - Contract artifacts: `design/nssf/contract/`
 
 ## Scope
