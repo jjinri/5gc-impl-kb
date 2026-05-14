@@ -7,159 +7,251 @@ source_contract: handoff/nssf/contract.yaml
 generated_date: 2026-05-14
 
 tasks:
-  - id: nssf-contract-types
-    title: Define NSSelectionGet contract type boundary
+  # ─── P1 — SBI inbound transport + 공통 utility ────────────────────────────
+  - id: nssf-transport-server
+    title: SBI inbound HTTP/2 + TLS + OAuth2 token verify 골격
     type: implementation-planning
     status: planned
     owner: dev
     depends_on: []
     trace_to:
-      - design/nssf/contract/api/NSSelectionGet.md
-      - design/nssf/contract/data-model/SliceInfoForRegistration.md
-      - design/nssf/contract/data-model/AuthorizedNetworkSliceInfo.md
-      - design/nssf/architecture/module-boundaries.md
+      - design/nssf/architecture/runtime-model.md
+      - design/nssf/architecture/configuration-strategy.md
+      - handoff/nssf/contract.yaml
     acceptance:
-      - Request and response model inventory maps to contract artifacts.
-      - Schema generation or hand-written type strategy is marked as TBD if not decided.
+      - HTTP/2 prior-knowledge 또는 ALPN h2 ingress 가 가능한 경계 정의.
+      - OAuth2 access token 검증을 transport 단계에서 처리하고 모듈로 비즈니스 책임 누출 없음.
+      - 3gpp-Sbi-Correlation-Info / 3gpp-Sbi-Producer-Id 등 헤더가 inbound context 에 도달.
     notes:
-      - No source code is created in this planning phase.
+      - 라이브러리 선택은 본 task 의 결정 사항.
 
   - id: nssf-request-validator
-    title: Plan request validation for NSSelectionGet query inputs
+    title: 8 operation 의 공통 request validation utility
     type: implementation-planning
     status: planned
     owner: dev
     depends_on:
-      - nssf-contract-types
+      - nssf-transport-server
     trace_to:
-      - design/nssf/contract/api/NSSelectionGet.md
       - design/nssf/architecture/request-flow.md
-      - design/nssf/architecture/test-strategy.md
-    acceptance:
-      - Required query fields nf-type, nf-id, tai, and registration slice info are covered.
-      - Invalid structured query JSON maps to 400 INVALID_QUERY_PARAM.
-    notes:
-      - Validation must collect invalidParams when possible.
-
-  - id: nssf-nsselection-handler
-    title: Plan inbound SBI handler boundary
-    type: implementation-planning
-    status: planned
-    owner: dev
-    depends_on:
-      - nssf-request-validator
-    trace_to:
-      - design/nssf/contract/interface.md
-      - design/nssf/contract/api/NSSelectionGet.md
-      - design/nssf/architecture/runtime-model.md
-    acceptance:
-      - Handler boundary preserves HTTP/2 over TLS, OAuth result, content type, and SBI headers.
-      - Handler does not contain slice selection business logic.
-    notes:
-      - Concrete HTTP framework remains TBD.
-
-  - id: nssf-selection-core
-    title: Plan transport-independent selection core
-    type: implementation-planning
-    status: planned
-    owner: dev
-    depends_on:
-      - nssf-contract-types
-    trace_to:
-      - design/nssf/architecture/module-boundaries.md
-      - design/nssf/architecture/state-persistence.md
-      - design/nssf/architecture/test-strategy.md
-    acceptance:
-      - Core input and output are independent of HTTP framework.
-      - requested, subscribed, and PLMN policy intersection behavior has unit-test seams.
-    notes:
-      - Policy source remains TBD and must be explicit before implementation.
-
-  - id: nssf-external-nf-gateway
-    title: Plan UDM and NRF lookup gateway interfaces
-    type: implementation-planning
-    status: planned
-    owner: dev
-    depends_on:
-      - nssf-selection-core
-    trace_to:
-      - design/nssf/architecture/state-persistence.md
-      - design/nssf/architecture/runtime-model.md
-      - design/nssf/architecture/request-flow.md
-    acceptance:
-      - UDM subscription and NRF NSI lookup boundaries are mockable.
-      - Timeout, unavailable, and invalid response failure classes are represented.
-    notes:
-      - Production client implementation is out of MVP planning scope.
-
-  - id: nssf-error-mapping
-    title: Plan deterministic ProblemDetails mapping
-    type: implementation-planning
-    status: planned
-    owner: dev
-    depends_on:
-      - nssf-request-validator
-      - nssf-selection-core
-      - nssf-external-nf-gateway
-    trace_to:
-      - design/nssf/contract/error-handling.md
       - design/nssf/architecture/error-propagation.md
     acceptance:
-      - 400, 403, 404, and 500 mappings have explicit source conditions.
-      - Sensitive identifiers are not leaked in error logs or ProblemDetails.
+      - query / body schema validation 실패가 400 INVALID_QUERY_PARAM 또는 422 로 정확히 매핑.
+      - JSON Patch validation 분리 (NSSAIAvailabilityPatch 와 SubModifyPatch).
+      - PII / token 미노출 보장.
     notes:
-      - Retry policy applies only to retryable downstream/internal failures.
+      - 별도 모듈 격상 아님 — 공통 utility.
 
-  - id: nssf-observability
-    title: Plan request logs, metrics, and traces
+  - id: nssf-problem-details-mapper
+    title: error -> ProblemDetails 매핑 utility
     type: implementation-planning
     status: planned
     owner: dev
     depends_on:
-      - nssf-nsselection-handler
-      - nssf-error-mapping
+      - nssf-transport-server
+    trace_to:
+      - design/nssf/architecture/error-propagation.md
+      - handoff/nssf/contract.yaml
+    acceptance:
+      - 8 operation 의 응답 코드 × cause 매트릭스 전체 cover.
+      - application/problem+json content-type 강제.
+      - detail 필드의 내부 hint 노출 정책 default = no.
+
+  - id: nssf-observability
+    title: log · metric · trace + correlation 전파
+    type: implementation-planning
+    status: planned
+    owner: dev
+    depends_on:
+      - nssf-transport-server
+      - nssf-problem-details-mapper
     trace_to:
       - design/nssf/architecture/observability.md
-      - design/nssf/architecture/runtime-model.md
     acceptance:
-      - Metrics and trace spans cover success, validation failure, policy rejection, downstream failure.
-      - Redaction requirements are visible before implementation.
-    notes:
-      - Concrete telemetry library remains TBD.
+      - inbound entry 마다 correlation_id 가 log / metric exemplar / trace baggage 에 부착.
+      - 부재 시 신규 생성 default.
+      - metric 명세 (nssf_request_total / duration / subscription_count / notification_dispatch_total / queue_depth) 모두 구현 자리 확보.
 
-  - id: nssf-contract-tests
-    title: Plan contract-derived unit and boundary tests
-    type: test-planning
+  # ─── P2 — SelectionEngine ───────────────────────────────────────────────────
+  - id: nssf-selection-handler
+    title: NSSelectionGet inbound handler
+    type: implementation-planning
     status: planned
     owner: dev
     depends_on:
       - nssf-request-validator
+      - nssf-problem-details-mapper
+      - nssf-observability
       - nssf-selection-core
-      - nssf-error-mapping
     trace_to:
-      - design/nssf/architecture/test-strategy.md
-      - dev/nssf/test-matrix.md
+      - handoff/nssf/contract.yaml
+      - design/nssf/module-decomposition/SelectionEngine.md
+      - design/nssf/architecture/request-flow.md
     acceptance:
-      - Test cases cover success, 400, 403, 404, and 500 paths.
-      - Test cases trace to API, data model, or error matrix sources.
-    notes:
-      - Test framework remains TBD.
+      - NSSelectionGet 의 정상 / error 경로가 contract 매트릭스와 일치.
+      - 비즈니스 로직 없음 (SelectionEngine 위임).
 
-  - id: nssf-integration-scenarios
-    title: Plan integration scenarios across handler, core, and gateways
+  - id: nssf-selection-core
+    title: SelectionEngine 핵심 결정 로직
+    type: implementation-planning
+    status: planned
+    owner: dev
+    depends_on:
+      - nssf-request-validator
+      - nssf-repo-availability
+    trace_to:
+      - design/nssf/module-decomposition/SelectionEngine.md
+      - design/nssf/architecture/state-persistence.md
+    acceptance:
+      - allowed = requested ∩ subscribed ∩ plmn_policy ∩ availability[tai] 알고리즘.
+      - 부분 거부 시 rejectedNssai 표기.
+      - 외부 호출 (UDM · NRF) 은 interface 추상화.
+
+  - id: nssf-external-nf-gateway
+    title: UDM (subscribed NSSAI) + NRF (target AMF set) gateway 추상화
+    type: implementation-planning
+    status: planned
+    owner: dev
+    depends_on:
+      - nssf-selection-core
+    trace_to:
+      - design/nssf/architecture/runtime-model.md
+      - design/nssf/architecture/request-flow.md
+    acceptance:
+      - mock 가능한 port 정의.
+      - timeout / unavailable / invalid response failure 분류.
+    notes:
+      - production client 구현 자체는 별도 사이클.
+
+  # ─── P3 — AvailabilityEngine ────────────────────────────────────────────────
+  - id: nssf-availability-engine
+    title: NSSAIAvailability Put · Patch · Delete · Options 동기 CRUD
+    type: implementation-planning
+    status: planned
+    owner: dev
+    depends_on:
+      - nssf-request-validator
+      - nssf-problem-details-mapper
+      - nssf-observability
+      - nssf-repo-availability
+    trace_to:
+      - design/nssf/module-decomposition/AvailabilityEngine.md
+      - design/nssf/architecture/request-flow.md
+    acceptance:
+      - 4 operation 의 inbound 응답이 contract 매트릭스와 일치.
+      - TAI 단위 atomic commit.
+      - commit 성공 후 변경 이벤트 발행 (in-process 또는 bus).
+
+  # ─── P4 — SubscriptionStore ────────────────────────────────────────────────
+  - id: nssf-subscription-store
+    title: NSSAIAvailability Post · SubModifyPatch · Unsubscribe lifecycle
+    type: implementation-planning
+    status: planned
+    owner: dev
+    depends_on:
+      - nssf-request-validator
+      - nssf-problem-details-mapper
+      - nssf-observability
+      - nssf-repo-subscription
+    trace_to:
+      - design/nssf/module-decomposition/SubscriptionStore.md
+      - design/nssf/architecture/state-persistence.md
+    acceptance:
+      - subscription id 발급 + lifecycle (Create / Modify / Delete) 정상 처리.
+      - 만료 (validityTime) 정책 — lazy delete 또는 background sweep, default = lazy.
+      - 변경 이벤트 consumer 인터페이스로 filter 매칭 후 영향 받는 subscription 목록 반환.
+
+  # ─── P5 — NotificationDispatcher ───────────────────────────────────────────
+  - id: nssf-notify-dispatcher
+    title: NotificationDispatcher outbound POST + correlation + retry
+    type: implementation-planning
+    status: planned
+    owner: dev
+    depends_on:
+      - nssf-availability-engine
+      - nssf-subscription-store
+      - nssf-observability
+      - nssf-repo-subscription
+    trace_to:
+      - design/nssf/module-decomposition/NotificationDispatcher.md
+      - design/nssf/architecture/configuration-strategy.md
+      - design/nssf/architecture/error-propagation.md
+    acceptance:
+      - correlation-id 가 outbound `3gpp-Sbi-Correlation-Info` header 와 W3C traceparent 양쪽 전파.
+      - OAuth2 client credentials 부착이 config 옵션 (`oauth2.enabled` true 시).
+      - retry default — max_attempts=3, initial=1s, max=16s exponential backoff.
+      - 4xx → no retry. 5xx / timeout / connection error → retry. max 초과 → dead-letter (log + metric).
+      - ordering 보장 없음 (callback receiver idempotent 가정).
+
+  # ─── P6 — repository ───────────────────────────────────────────────────────
+  - id: nssf-repo-availability
+    title: availability repository interface + in-memory + persistent 1 종
+    type: implementation-planning
+    status: planned
+    owner: dev
+    depends_on:
+      - nssf-transport-server
+    trace_to:
+      - design/nssf/architecture/state-persistence.md
+    acceptance:
+      - in-memory 와 persistent (file 권고) 두 backend 가 같은 interface.
+      - TAI 단위 atomic operation 지원.
+      - golden interface test — 두 backend 가 같은 동작.
+
+  - id: nssf-repo-subscription
+    title: subscription repository interface + in-memory + persistent 1 종
+    type: implementation-planning
+    status: planned
+    owner: dev
+    depends_on:
+      - nssf-transport-server
+    trace_to:
+      - design/nssf/architecture/state-persistence.md
+    acceptance:
+      - subscription resource + filter 의 CRUD.
+      - 만료 / expiry index 지원 (background sweep 옵션).
+      - golden interface test.
+
+  # ─── P7 — scenario + e2e ───────────────────────────────────────────────────
+  - id: nssf-scenario-contract-tests
+    title: 8 operation contract test (success + error matrix)
     type: test-planning
     status: planned
     owner: dev
     depends_on:
-      - nssf-nsselection-handler
-      - nssf-external-nf-gateway
-      - nssf-observability
+      - nssf-selection-handler
+      - nssf-availability-engine
+      - nssf-subscription-store
+      - nssf-notify-dispatcher
     trace_to:
-      - design/nssf/architecture/request-flow.md
+      - dev/nssf/test-matrix.md
       - design/nssf/architecture/test-strategy.md
+    acceptance:
+      - 8 operation 각각 성공 + 주요 error 1 건 이상.
+      - test case 가 contract schema validator 통과.
+
+  - id: nssf-scenario-end-to-end
+    title: subscription create → availability change → notify e2e + correlation + retry + dead-letter
+    type: test-planning
+    status: planned
+    owner: dev
+    depends_on:
+      - nssf-scenario-contract-tests
+    trace_to:
+      - dev/nssf/test-matrix.md
+      - design/nssf/architecture/test-strategy.md
+    acceptance:
+      - subscription-create-and-notify, notification-retry-on-5xx, notification-dead-letter, correlation-end-to-end 시나리오 통과.
+
+  - id: nssf-scenario-graceful-shutdown
+    title: graceful shutdown drain — in-flight request + retry queue
+    type: test-planning
+    status: planned
+    owner: dev
+    depends_on:
+      - nssf-scenario-end-to-end
+    trace_to:
+      - design/nssf/architecture/runtime-model.md
       - dev/nssf/test-matrix.md
     acceptance:
-      - End-to-end MVP scenarios can run with mocked external NF gateways.
-      - Observability evidence is checked for success and failure paths.
-    notes:
-      - Full NRF/UDM integration is deferred.
+      - graceful-shutdown-drain 시나리오 — inbound listener stop → in-flight drain → retry queue flush 또는 timeout.
