@@ -662,3 +662,45 @@ Open risks / gaps:
 - Legacy `module-decomposition` migration remains pending.
 Next step:
 - Commit and open a Phase 4 PR, then implement `/nf-impl-plan` in the next phase.
+
+## Progress checkpoint — 2026-05-14 Phase 5
+
+Status: ready_for_review
+Current objective: Phase 5 implementation-planning skill and initial NSSF dev planning artifacts.
+Completed:
+- Added `.claude/skills/nf-impl-plan/SKILL.md` as the canonical implementation planning lifecycle skill.
+- Added reusable dev planning templates under `.claude/skills/nf-impl-plan/templates/dev/`.
+- Created initial NSSF implementation planning artifacts under `dev/nssf/`.
+- Populated task graph, test matrix, and traceability links from NSSF contract and architecture sources.
+- Kept technology choices explicit as `TBD` and did not create source code, dependency files, or build system files.
+- Updated README, CLAUDE, ADR, and `dev/README.md` so `/nf-impl-plan` is available rather than planned.
+Compatibility deliberately preserved:
+- `handoff/nssf/_handoff.yaml` remains the current source contract path until the handoff filename rename phase.
+- Contract and architecture paths remain unchanged.
+- `dev/nssf/` contains planning artifacts only, not implementation source code.
+Changed files:
+- `.claude/skills/nf-impl-plan/SKILL.md`
+- `.claude/skills/nf-impl-plan/templates/dev/*.md`
+- `.claude/skills/nf-impl-plan/templates/dev/tasks.yaml`
+- `dev/README.md`
+- `dev/nssf/implementation-plan.md`
+- `dev/nssf/tasks.yaml`
+- `dev/nssf/test-matrix.md`
+- `dev/nssf/traceability.md`
+- `README.md`
+- `CLAUDE.md`
+- `docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`
+- `docs/plans/2026-05-13-lifecycle-structure-skill-rename-plan.md`
+Validation:
+- `python3` skill/frontmatter + required dev planning file + `tasks.yaml` traceability check → 9 traceable tasks OK.
+- `git diff --check` → pass.
+- `.venv/bin/python3 design/scripts/validate-extraction.py nssf --level basic` → basic 13/13 PASS.
+- `.venv/bin/python3 design/scripts/nf-status.py nssf --no-write` → handoff_ready PASS; canonical remains blocked only by baseline `implementation_guidance_quality` NOT_RUN.
+- `pytest tests/scripts` → 40 passed.
+- stale planned-wording grep for `/nf-impl-plan` → 0 matches.
+Open risks / gaps:
+- Handoff filename rename remains pending and should be separate.
+- Seed/status filename rename remains pending.
+- Reset archive policy update remains pending Phase 7.
+Next step:
+- Commit and open a Phase 5 PR, then continue with reset/archive policy cleanup in the next phase.

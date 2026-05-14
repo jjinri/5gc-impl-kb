@@ -18,7 +18,7 @@ specs/{spec}/{file}.{pdf,docx,doc,yaml}
         ▼  architecture design
    design/<nf>/architecture/*
         │
-        ▼  implementation planning  # planned
+        ▼  implementation planning
    dev/<nf>/implementation-plan.md
 ```
 
@@ -46,7 +46,7 @@ python3 -m venv .venv
 | Contract extraction | `/nf-build <nf>` | `/nf-contract-build <nf>` | spec-derived contract markdown/json 과 handoff contract 생성 | `design/<nf>/contract/...`, `handoff/<nf>/_handoff.yaml` |
 | Contract validation | `/nf-status <nf>` | `/nf-contract-check <nf>` | contract 가 architecture 설계 입력으로 충분한지 검사 | `design/<nf>/_status.yaml` |
 | Architecture design | 없음 | `/nf-arch-design <nf>` | contract 를 상세 아키텍처로 변환 | `design/<nf>/architecture/*` |
-| Implementation planning | 없음 | `/nf-impl-plan <nf>` 예정 | 아키텍처를 구현 작업·테스트 계획으로 분해 | `dev/<nf>/implementation-plan.md`, `tasks.yaml` |
+| Implementation planning | 없음 | `/nf-impl-plan <nf>` | 아키텍처를 구현 작업·테스트 계획으로 분해 | `dev/<nf>/implementation-plan.md`, `tasks.yaml` |
 
 `nf-reset` 은 별도 skill 이 아니라 `/nf-init --reset` 으로 통합된 destructive option 이다.
 
