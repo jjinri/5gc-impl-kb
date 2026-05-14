@@ -35,11 +35,14 @@ def _ref_name(ref: str) -> str:
     return ref.rsplit("/", 1)[-1]
 
 
+_SCHEMA_REF_RE = "/components/schemas/"
+
+
 def _schema_refs(obj: Any) -> list[str]:
     refs: list[str] = []
     if isinstance(obj, dict):
         ref = obj.get("$ref")
-        if isinstance(ref, str):
+        if isinstance(ref, str) and _SCHEMA_REF_RE in ref:
             refs.append(_ref_name(ref))
         for value in obj.values():
             refs.extend(_schema_refs(value))
