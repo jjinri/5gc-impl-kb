@@ -34,6 +34,26 @@ design/*/_archive/
 # npx skills (외부 skill 설치 산출 — repo 공유 대상 아님)
 .agents/
 skills-lock.json
+# .claude/skills/<name> 은 .agents/ 본문으로의 symlink — 본 repo 추적 대상 아님.
+# 본 repo 의 native skill (nf-*) 은 이미 tracked 라 본 패턴 영향 없음.
+.claude/skills/caveman
+.claude/skills/diagnose
+.claude/skills/docx
+.claude/skills/grill-me
+.claude/skills/grill-with-docs
+.claude/skills/handoff
+.claude/skills/improve-codebase-architecture
+.claude/skills/pdf
+.claude/skills/pptx
+.claude/skills/prototype
+.claude/skills/setup-matt-pocock-skills
+.claude/skills/tdd
+.claude/skills/to-issues
+.claude/skills/to-prd
+.claude/skills/triage
+.claude/skills/write-a-skill
+.claude/skills/xlsx
+.claude/skills/zoom-out
 
 # OS
 .DS_Store
