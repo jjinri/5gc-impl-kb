@@ -9,47 +9,76 @@ generated_date: 2026-05-14
 
 # NSSF Traceability
 
-## Source map
+## Contract → Module
 
-| source | role |
-| --- | --- |
-| `handoff/nssf/contract.yaml` | machine-readable contract handoff |
-| `design/nssf/contract/interface.md` | SBI transport, auth, base URL, content type constraints |
-| `design/nssf/contract/api/NSSelectionGet.md` | API method, path, request, response constraints |
-| `design/nssf/contract/data-model/SliceInfoForRegistration.md` | registration request data model source |
-| `design/nssf/contract/data-model/AuthorizedNetworkSliceInfo.md` | success response data model source |
-| `design/nssf/contract/error-handling.md` | ProblemDetails status and cause mapping source |
-| `design/nssf/architecture/` | architecture design input |
+8 operation 과 핵심 data-model 이 어느 모듈로 매핑되는지.
 
-## Task traceability
+| contract topic | 모듈 | task |
+|---|---|---|
+| `api/NSSelectionGet` | SelectionEngine | nssf-selection-handler, nssf-selection-core |
+| `api/NSSAIAvailabilityPut` | AvailabilityEngine | nssf-availability-engine |
+| `api/NSSAIAvailabilityPatch` | AvailabilityEngine | nssf-availability-engine |
+| `api/NSSAIAvailabilityDelete` | AvailabilityEngine | nssf-availability-engine |
+| `api/NSSAIAvailabilityOptions` | AvailabilityEngine | nssf-availability-engine |
+| `api/NSSAIAvailabilityPost` (Subscribe) | SubscriptionStore | nssf-subscription-store |
+| `api/NSSAIAvailabilitySubModifyPatch` | SubscriptionStore | nssf-subscription-store |
+| `api/NSSAIAvailabilityUnsubscribe` | SubscriptionStore | nssf-subscription-store |
+| (outbound NSSAIAvailability Notify) | NotificationDispatcher | nssf-notify-dispatcher |
+| `interface` | (공통 transport) | nssf-transport-server |
+| `error-handling` | (공통 utility) | nssf-problem-details-mapper |
+| `data-model/SliceInfoForRegistration` · `…ForPDUSession` · `…ForUEConfigurationUpdate` | SelectionEngine | nssf-selection-core |
+| `data-model/AuthorizedNetworkSliceInfo` | SelectionEngine | nssf-selection-handler |
+| `data-model/NssaiAvailabilityInfo` · `AuthorizedNssaiAvailabilityInfo` | AvailabilityEngine | nssf-availability-engine |
+| `data-model/NssfEventSubscriptionCreateData` · `NssfEventSubscriptionCreatedData` | SubscriptionStore | nssf-subscription-store |
+| `data-model/PatchDocument` | (request validator) | nssf-request-validator |
+| `data-model/Snssai` · `Tai` · `PlmnId` · `NfInstanceId` · `NFType` · `SupportedFeatures` | (공통 type) | nssf-contract-types / nssf-request-validator |
 
-| task | architecture source | contract source | tests |
-| --- | --- | --- | --- |
-| `nssf-contract-types` | `module-boundaries.md` | API and data model contract docs | success, invalid structured query |
-| `nssf-request-validator` | `request-flow.md`, `test-strategy.md` | `api/NSSelectionGet.md`, `error-handling.md` | missing query, invalid structured query |
-| `nssf-nsselection-handler` | `runtime-model.md`, `request-flow.md` | `interface.md`, `api/NSSelectionGet.md` | success registration, observability success |
-| `nssf-selection-core` | `module-boundaries.md`, `state-persistence.md` | data model docs, error matrix | unauthorized NSSAI, NSSAI not available |
-| `nssf-external-nf-gateway` | `runtime-model.md`, `state-persistence.md` | cross-NF boundary in handoff | downstream timeout |
-| `nssf-error-mapping` | `error-propagation.md` | `error-handling.md` | 400, 403, 404, 500 tests |
-| `nssf-observability` | `observability.md` | interface and error causes | observability success/failure |
-| `nssf-contract-tests` | `test-strategy.md` | all contract docs | all unit and boundary tests |
-| `nssf-integration-scenarios` | `request-flow.md`, `test-strategy.md` | API and error contract docs | integration scenarios |
+## Module → Test
 
-## Test traceability
+각 모듈/task 가 어느 test 시나리오로 검증되는지.
 
-| test | requirement source | task |
-| --- | --- | --- |
-| `nssf-test-success-registration` | `api/NSSelectionGet.md`, `request-flow.md` | `nssf-nsselection-handler`, `nssf-selection-core` |
-| `nssf-test-missing-query` | `error-handling.md`, `error-propagation.md` | `nssf-request-validator`, `nssf-error-mapping` |
-| `nssf-test-invalid-structured-query` | `api/NSSelectionGet.md`, `test-strategy.md` | `nssf-contract-types`, `nssf-request-validator` |
-| `nssf-test-unauthorized-nssai` | `error-handling.md`, `module-boundaries.md` | `nssf-selection-core`, `nssf-error-mapping` |
-| `nssf-test-nssai-not-available` | `error-handling.md`, `state-persistence.md` | `nssf-selection-core`, `nssf-error-mapping` |
-| `nssf-test-downstream-timeout` | `runtime-model.md`, `error-propagation.md` | `nssf-external-nf-gateway`, `nssf-error-mapping` |
-| `nssf-test-observability-success` | `observability.md` | `nssf-observability`, `nssf-integration-scenarios` |
-| `nssf-test-observability-failure` | `observability.md`, `error-propagation.md` | `nssf-observability`, `nssf-error-mapping` |
+| task | test 시나리오 | test id (test-matrix.md) |
+|---|---|---|
+| nssf-selection-handler · nssf-selection-core | success-registration-selection | t-selection-success |
+| nssf-selection-handler | invalid-structured-query | t-selection-invalid-query |
+| nssf-selection-core | unauthorized-nssai | t-selection-unauthorized |
+| nssf-selection-core | nssai-not-available | t-selection-not-available |
+| nssf-availability-engine | availability-put-creates-record | t-availability-put |
+| nssf-availability-engine + nssf-request-validator | availability-put-invalid-body | t-availability-put-invalid-body |
+| nssf-availability-engine | availability-patch-applies | t-availability-patch |
+| nssf-availability-engine | availability-patch-conflict (옵션) | t-availability-patch-conflict |
+| nssf-availability-engine | availability-delete | t-availability-delete |
+| nssf-availability-engine | availability-delete-not-found | t-availability-delete-not-found |
+| nssf-availability-engine | availability-options-supported-features | t-availability-options |
+| nssf-transport-server + nssf-availability-engine | availability-options-unauthorized | t-availability-options-unauthorized |
+| nssf-subscription-store | subscription-create | t-subscription-create |
+| nssf-subscription-store + nssf-notify-dispatcher | subscription-create-and-notify | t-subscription-notify |
+| nssf-subscription-store + nssf-request-validator | subscription-create-invalid-callback | t-subscription-create-invalid-callback |
+| nssf-subscription-store | subscription-modify-filter | t-subscription-modify |
+| nssf-subscription-store | subscription-modify-not-found | t-subscription-modify-not-found |
+| nssf-subscription-store | subscription-unsubscribe | t-subscription-unsubscribe |
+| nssf-subscription-store | subscription-unsubscribe-not-found | t-subscription-unsubscribe-not-found |
+| nssf-notify-dispatcher | notification-retry-on-5xx | t-notify-retry |
+| nssf-notify-dispatcher | notification-dead-letter | t-notify-dead-letter |
+| nssf-notify-dispatcher + nssf-transport-server | oauth2-client-credentials-enabled | t-notify-oauth2-enabled |
+| nssf-notify-dispatcher + nssf-transport-server | oauth2-client-credentials-disabled | t-notify-oauth2-disabled |
+| nssf-observability + (전체) | correlation-end-to-end | t-correlation-e2e |
+| nssf-scenario-graceful-shutdown | graceful-shutdown-drain | t-shutdown-drain |
+| nssf-repo-availability · nssf-repo-subscription | repository golden interface (in-memory ↔ persistent) | t-repo-golden |
 
-## Open trace gaps
+## Open Gaps
 
-- Concrete language/runtime, HTTP framework, cache backend, telemetry library, and test framework remain TBD.
-- Full production NRF/UDM integration remains deferred beyond this MVP plan.
-- PDU session path and NSSAIAvailability service are not covered by this implementation planning pass.
+- `handoff/nssf/contract.yaml` 과 `design/nssf/contract/**` 는 *workflow-generated, normally untracked* 산출이다 — `.gitignore` 로 제외되며 fresh checkout 후엔 `/nf-init` + `/nf-build` 사이클로 로컬 재생성된다 (`CLAUDE.md` Source-of-truth policy 참고). 본 traceability 의 `handoff/nssf/contract.yaml` 참조는 *현재 워크플로우 산출 경로* 를 의미.
+- contract markdown body 부재 — 본 사이클은 `/nf-build` 의 *handoff yaml 까지만* 결정. `design/nssf/contract/**/*.md` 의 본문 (AUTO/USER section) 은 별도 nf-build 사이클에서 채운다. 본 traceability 는 *handoff yaml topic ID* 기준이라 동작은 함.
+- `data-model/<HTTP code>` 등 18 개 노이즈 — PR #15 머지로 fix 됐고 본 seed 는 깨끗. 잔여 없음.
+- 33.501 · 38.413 운영 결정 보류 — TLS profile / NGAP 절차 깊이가 결정되기 전에는 본 traceability 의 `(공통 transport)` 와 `nssf-transport-server` 안에 *config 외부화* 로만 표현.
+- subscription persistence backend default — `state-persistence.md` open question. test golden interface 가 이 결정의 추상화 검증.
+
+## References
+
+- `dev/nssf/implementation-plan.md`.
+- `dev/nssf/tasks.yaml`.
+- `dev/nssf/test-matrix.md`.
+- `design/nssf/architecture/` 전체.
+- `design/nssf/module-decomposition/` 전체.
+- `handoff/nssf/contract.yaml` — 8 API topic + data-model.
