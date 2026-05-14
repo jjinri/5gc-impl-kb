@@ -56,7 +56,7 @@ ADR follow-up #1 처리.
 - data. `design/nssf/_handoff_seed.yaml` → `_contract_seed.yaml` git mv. `design/nssf/architecture/overview.md` 의 contract_status 경로 갱신.
 - meta. `.gitignore` 의 `design/*/_status.yaml` → `_contract_status.yaml`.
 
-historical 문서 (`docs/superpowers/`, `docs/plan.md`, `_archive/*`, ADR migration notes 의 2026-05-13 라인) 는 시점 정확성을 위해 갱신하지 않았다. 새 migration note 한 줄로 rename 사실만 추가했다.
+historical 문서 (`docs/superpowers/`, legacy lifecycle plan, `_archive/*`, ADR migration notes 의 2026-05-13 라인) 는 시점 정확성을 위해 갱신하지 않았다. 새 migration note 한 줄로 rename 사실만 추가했다.
 
 ## Phase 5 — 검증
 
@@ -104,7 +104,7 @@ worktree (`.claude/worktrees/contract-rename-arch-impl-status-20260514`) 에서 
 
 ## 관찰 + 다음 사이클 권고
 
-- ADR follow-up 은 즉시 처리 가능한 작업이면 같은 사이클에 흡수하는 게 비용이 낮다. 본 사이클은 리뷰 약한 지점 4개 + ADR follow-up #1 을 한 PR 로 묶었고 16 파일이지만 의미 단위가 일관해 리뷰 비용이 작았다.
+- ADR follow-up 은 즉시 처리 가능한 작업이면 같은 사이클에 흡수하는 게 비용이 낮다. 본 사이클은 리뷰 findings 5개 중 1개를 ADR 한 줄 명시로 처리하고, 나머지 약한 지점과 함께 한 PR 로 묶었기 때문에 16 파일이어도 의미 단위가 일관해 리뷰 비용이 작았다.
 - historical 문서 갱신 정책을 본 사이클에 처음 명시적으로 적용했다 — ADR 의 시점별 migration note 만 추가, 과거 라인은 그대로. 다음 사이클에도 같은 패턴 유지.
 - worktree 안에서 NSSF 스크립트를 돌릴 때 `.venv/bin/python3` 가 worktree 에 없어 `nf-manifest.py` 가 internal `subprocess` 호출에서 실패했다. worktree 에 `.venv` symlink 를 만들어 우회했다. 향후 sub-script 의 venv 경로를 절대 경로 또는 `sys.executable` 기준으로 바꾸는 것이 깔끔하다.
 - `nf-status.py` 가 contract 단계 한정이라는 점을 ADR 에 명시했다. architecture/dev 단계 status 가 필요해지면 별도 skill (예 `/nf-arch-status`, `/nf-impl-status`) 로 분리하는 게 lifecycle 분리 원칙에 맞는다. 현재는 over-engineering 이므로 사용자 요청 전까지 보류.
