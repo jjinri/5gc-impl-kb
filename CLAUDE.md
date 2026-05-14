@@ -60,6 +60,7 @@ NF 개발 단계 이름은 [`docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`](
 |---|---|
 | **로컬·개인 산출물** | 임시 스크립트, 실험 로그, 개인 agent skill 조정, `.omx`·local scratch, 공유 수준 아닌 WIP |
 | **매우 작은 비기능 변경** | typo, prose 문구·서식·정책 텍스트 정리, 도구 산출 재emit (도구 미변경). semantic 변경 없음 |
+| **retro 단독** | `docs/retros/<date>-<slug>-summary.md` 추가/수정만 들어있는 commit. 코드·skill·script 변경이 *함께* 있으면 그 변경의 분기를 따른다 (보통 PR). |
 
 판단 모호 → PR. 본 분기는 *단독 작업자 + origin 진실 출처* 가정 위에서만 유효 — 협업자 합류 시 모든 변경 PR 격상.
 
@@ -79,7 +80,19 @@ PR 본문은 *요약 + 이유 + 검증* — 머지 commit 메시지 또는 retro
 | Merge commit (본 repo) | `git pull --ff-only origin main` |
 | Squash / Rebase | `git fetch origin && git reset --hard origin/main` |
 
-FF 실패 → squash/rebase 신호 → reset 전환. 본 repo 는 **merge commit** 통일 — 혼용 금지. GitHub `Automatically delete head branches` ON 권장 (현재 OFF, 머지 후 수동 `git push origin --delete <branch>`).
+FF 실패 → squash/rebase 신호 → reset 전환. 본 repo 는 **merge commit** 통일 — 혼용 금지.
+
+### 머지 끝난 push branch 정리
+
+머지 끝난 push branch 는 *전부* 삭제한다 — local + remote 양쪽. 사이클 마지막 단계.
+
+| 단계 | 명령 |
+|---|---|
+| local 일괄 (safe — `--merged main` 이 아닌 브랜치는 `-d` 가 거부) | `git branch --merged main \| grep "^  push/" \| xargs -r git branch -d` |
+| remote 일괄 | `git for-each-ref --format='%(refname:short)' refs/remotes/origin/push/ \| sed 's\|^origin/\|\|' \| xargs -r -I{} git push origin --delete {}` |
+| prune stale tracking ref | `git fetch --prune origin` |
+
+GitHub `Automatically delete head branches` ON 권장 (현재 OFF — 위 remote 일괄 명령으로 대체).
 
 ---
 
