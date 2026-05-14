@@ -8,33 +8,71 @@ generated_date: 2026-05-14
 
 # NSSF Error Propagation
 
-## Spec-derived constraints
+## Purpose
 
-- Error response content type 은 `application/problem+json` 이다.
-- ProblemDetails `cause` 는 TS 29.500 generic causes 와 TS 29.531 NSSF-specific causes 를 허용한다.
-- 가능한 invalid query 는 `invalidParams` 에 최대한 함께 담아 client round trip 을 줄인다.
+NSSF 의 8 operation × 응답 코드 × `ProblemDetails` 매핑 매트릭스를 정의한다. inbound 에러의 mapping 위치와 outbound notification 실패의 처리 정책도 함께 명시한다.
 
-## Error map
+## Inputs (contract)
 
-| source | condition | response | retryable | observability |
-| --- | --- | --- | --- | --- |
-| Request Validator | required query 누락 또는 형식 오류 | 400 `INVALID_QUERY_PARAM` | no | validation failure counter |
-| Selection Core | requested NSSAI 가 PLMN policy 밖 | 403 `UNAUTHORIZED_NSSAI` | no | policy rejection counter |
-| Selection Core | matching NSI instance 부재 | 404 `NSSAI_NOT_AVAILABLE` | maybe fallback | availability miss counter |
-| External NF Gateway | UDM/NRF timeout 또는 invalid response | 500 `SYSTEM_FAILURE` | yes with backoff | downstream failure counter and trace span |
-| Internal invariant | 예상하지 못한 core exception | 500 `SYSTEM_FAILURE` | yes with backoff | sanitized error log |
+- `error-handling` topic — operation × response code 표.
+- 8 API topics — operation 별 응답 코드 enumeration.
+- spec `application/problem+json` shape (RFC 7807, 3GPP 29.500 §5.2.7).
 
-## Propagation rules
+## Boundaries
 
-- Contract validation error 는 client-correctable error 로 분류한다.
-- Contract policy rejection 은 authorization or availability error 로 분류한다.
-- Internal invariant violation 은 sanitized ProblemDetails 로 변환한다.
-- External NF failure 는 timeout, unavailable, invalid response 를 구분한다.
+본 문서가 다루는 것 — error → `ProblemDetails` shape 매핑, 책임 모듈, retry 가능 vs 불가 분류.
 
-## Implementation choices
+본 문서가 다루지 않는 것 — 라이브러리 별 exception → ProblemDetails 자동 변환 코드 (dev 책임).
 
-| choice | status | constraint |
-| --- | --- | --- |
-| exception/error type model | TBD | ProblemDetails mapping 이 deterministic 해야 한다. |
-| retry policy implementation | TBD | non-retryable client error 를 재시도하지 않는다. |
-| redaction policy | TBD | sensitive identifier 를 log 에 그대로 남기지 않는다. |
+## Decisions
+
+### 공통 매핑 원칙
+
+- 모든 inbound error 응답은 `application/problem+json` content-type.
+- `title`, `status`, `cause` (3GPP 확장), `detail` 필드 포함.
+- 5xx 응답은 `cause: SYSTEM_FAILURE` default.
+- 4xx 응답은 operation 별 cause enumeration 따름.
+
+### 매트릭스 (요약)
+
+| operation | 200/201/204 | 400 | 401/403 | 404 | 409 | 5xx | retry 가능 (client 측) |
+|---|---|---|---|---|---|---|---|
+| `NSSelectionGet` | 200 `AuthorizedNetworkSliceInfo` | `INVALID_QUERY_PARAM`, `UNAUTHORIZED_NSSAI`, `NSSAI_NOT_AVAILABLE` | 401 unauthorized, 403 forbidden (OAuth2 정책) | — | — | `SYSTEM_FAILURE` | 5xx 만 client retry. 4xx 는 입력 수정 필요. |
+| `NSSAIAvailabilityPut` | 200 `AuthorizedNssaiAvailabilityInfo` 또는 204 | invalid body | 401/403 | — | conflict 가능 | 5xx | 5xx + 일부 conflict (idempotency key 정의 시) |
+| `NSSAIAvailabilityPatch` | 200 `AuthorizedNssaiAvailabilityInfo` | invalid patch | 401/403 | resource not found | 412 etag mismatch | 5xx | 412 는 client 가 재조회 후 재시도 |
+| `NSSAIAvailabilityDelete` | 204 | — | 401/403 | not found | — | 5xx | — |
+| `NSSAIAvailabilityOptions` | 200 | — | 401/403 | — | — | 5xx | — |
+| `NSSAIAvailabilityPost` | 201 `NssfEventSubscriptionCreatedData` | invalid body | 401/403 | — | — | 5xx | 5xx |
+| `NSSAIAvailabilitySubModifyPatch` | 200 또는 204 | invalid patch | 401/403 | subscription not found | — | 5xx | 5xx |
+| `NSSAIAvailabilityUnsubscribe` | 204 | — | 401/403 | not found | — | 5xx | — |
+
+전체 응답 코드 표는 `handoff/nssf/contract.yaml` 의 `error-handling` topic 이 진실 출처.
+
+### 책임 모듈
+
+| error 위치 | 매핑 책임 |
+|---|---|
+| transport 단계 (TLS, OAuth2 실패) | transport layer / 공통 utility |
+| request validation 실패 (schema, query) | 공통 `RequestValidator` utility |
+| business logic 실패 (NSSAI 인증·존재) | 해당 모듈 (SelectionEngine / AvailabilityEngine / SubscriptionStore) 이 의도된 cause 반환 → 공통 `ProblemDetailsMapper` 가 응답으로 |
+| 내부 unexpected (panic / null ref) | 공통 fallback → 500 `SYSTEM_FAILURE` |
+
+### outbound notification 실패
+
+- HTTP status 2xx — 성공.
+- HTTP status 4xx (`callback` 측 invalid) — *retry 안 함*. metric/log 만, subscription 자동 비활성화 정책 보류 (`## Open Questions`).
+- HTTP status 5xx, timeout, connection error — *retry queue* 에 추가. `configuration-strategy.md` 의 retry 정책 따름.
+- max_attempts 초과 — dead-letter (log + metric). 정책 보류.
+
+## Open Questions
+
+- callback 4xx 가 반복되면 subscription 자동 deactivate 할지 — spec 강제 없음. 운영 결정.
+- ProblemDetails 의 `detail` 필드에 *내부 hint* (모듈명 등) 노출 정책 — 보안 관점 검토 필요.
+- 412 etag 정책을 NSSF 가 *지원* 할지 — spec 옵션. dev 결정.
+
+## References
+
+- [[request-flow]] — error 발생 시점.
+- [[observability]] — error 분류별 log/metric.
+- [[module-boundaries]] — 모듈 책임.
+- `handoff/nssf/contract.yaml` `error-handling` topic — 진실 출처.

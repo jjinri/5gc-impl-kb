@@ -1,50 +1,54 @@
 ---
-id: module-decomposition/SelectionEngine
-status: handoff_ready
-scope: NSSelectionGet MVP only
-generated_sections:
-  - module-graph
-user_sections:
-  - responsibility-prose
-  - implementation-notes
+nf: nssf
+stage: architecture-design
+status: draft
+source_contract: handoff/nssf/contract.yaml
+generated_date: 2026-05-14
 ---
 
-# module-decomposition/SelectionEngine
+# SelectionEngine
 
-NSSF NSSelectionGet 처리의 *내부 분해*. spec 강제 아님 — 사람이 정한 분해 의도 (`spec_refs: []`).
+## Responsibility
 
-## Module Graph
+NSSF inbound `NSSelectionGet` 의 핵심 로직 — UE 등록 시점 input (`SliceInfoForRegistration` + 컨텍스트) 을 받아 allowed NSSAI 와 target AMF set 을 결정해 `AuthorizedNetworkSliceInfo` 를 반환한다. 본 모듈은 NSSelectionGet 처리 전담 — NSSAIAvailability 의 CRUD / subscription / notification 책임은 가지지 않는다.
 
-<!-- AUTO:module-graph:start -->
-```mermaid
-flowchart TD
-    Handler[NSSelectionGet Handler] --> Validator[Request Validator]
-    Validator --> Engine[SelectionEngine]
-    Engine --> SubscriptionLookup[Subscription Lookup<br/>via UDM cache]
-    Engine --> PolicyResolver[Policy Resolver<br/>NSSAI ∩ PLMN policy]
-    Engine --> NsiResolver[NSI Resolver<br/>via NRF lookup]
-    Engine --> Response[AuthorizedNetworkSliceInfo builder]
-    Engine -.fail.-> ProblemDetails[ProblemDetails builder]
-```
-<!-- AUTO:module-graph:end -->
+## Inputs
 
-## 책임 분배
+- inbound — `api/NSSelectionGet` 의 query + body (`SliceInfoForRegistration` 또는 `SliceInfoForPDUSession` / `SliceInfoForUEConfigurationUpdate`).
+- contract data-model — `SliceInfoForRegistration`, `Snssai`, `Tai`, `PlmnId`, `NfInstanceId`, `SupportedFeatures`.
+- collaborator (interface) — subscribed NSSAI source (UDM 추상화), PLMN policy source (config 또는 외부), NRF discovery (target AMF set 결정용).
+- AvailabilityEngine 의 현재 availability map (TAI × S-NSSAI) — read-only 참조 (slice 가용성 확인).
 
-<!-- USER:responsibility-prose:start -->
-- **Handler** — HTTP 진입, OAuth 검증, query 파싱·역직렬화. 비즈니스 로직 안 함.
-- **Request Validator** — 필수 query (nf-type/nf-id/tai/slice-info-request-for-registration) 존재·형식 검증. 위반 시 400.
-- **SelectionEngine** — 순수 함수 같은 핵심 — (SliceInfoForRegistration, UE context) → AuthorizedNetworkSliceInfo. 내부적으로 SubscriptionLookup, PolicyResolver, NsiResolver 를 차례로 호출.
-- **Subscription Lookup** — UE 의 subscribed NSSAI 캐시 확인, 없으면 UDM 호출. 본 MVP 는 UDM 호출 skeleton 만 (실제 client 는 cross-NF MVP 범위 밖).
-- **Policy Resolver** — `requested ∩ subscribed ∩ PLMN policy` 계산. 거부된 항목은 rejectedNssai 로 넘김.
-- **NSI Resolver** — 허용된 slice 각각에 NSI instance 조회. 본 MVP 는 stub — 후속 사이클에서 NRF client 실제 호출.
-- **Response Builder** — 정상 경로의 AuthorizedNetworkSliceInfo 직렬화 (200).
-- **ProblemDetails Builder** — 400/403/404 응답 본문.
-<!-- USER:responsibility-prose:end -->
+## Outputs
 
-## Implementation Notes
+- 정상 — `AuthorizedNetworkSliceInfo` (200).
+- error — 의도된 cause (`INVALID_QUERY_PARAM`, `UNAUTHORIZED_NSSAI`, `NSSAI_NOT_AVAILABLE`) 를 호출자 (handler / ProblemDetailsMapper) 에 반환.
+- log/metric/trace event — `request-flow.md` 의 trace span + `observability.md` 의 metric.
 
-<!-- USER:implementation-notes:start -->
-- 본 분해는 *NSSelectionGet 1 API 한정*. NSSelectionPost 등 다른 operation 추가 시 SelectionEngine 의 위치·이름이 바뀔 수 있음 (그 시점에 본 토픽 갱신 + scope 재정의).
-- 라이브러리 경계는 dev agent 의 `may_decide`. 본 토픽은 *논리적 책임 분배* 만 기술한다.
-- 테스트 — SelectionEngine 은 순수 함수에 가까우므로 unit test 우선. Handler/Validator 는 integration test.
-<!-- USER:implementation-notes:end -->
+## State
+
+- 없음 (stateless). 모든 입력은 인자 또는 collaborator 호출로 수신.
+- 캐시 (subscribed NSSAI, PLMN policy) 는 collaborator 내부 책임이며 SelectionEngine 의 상태가 아니다.
+
+## Decisions
+
+| 결정 | 내용 |
+|---|---|
+| 순수성 | 외부 호출 (UDM, NRF) 은 *interface* 로 추상화. SelectionEngine 본체는 *입력 → 출력* 매핑 함수에 가깝게 유지. |
+| 알고리즘 | `allowed = requested ∩ subscribed ∩ plmn_policy ∩ availability[tai]`. 부분 거부 시 `rejectedNssai` 채움. |
+| target AMF set | NRF discovery 호출. 실패 시 NSSF 가 cache 된 last-known AMF set 사용 또는 5xx fallback. |
+| 두 종류 input | SliceInfoForRegistration / PDUSession / UEConfigurationUpdate 셋 다 처리. Registration 이 핵심 path, 나머지 두 종류는 spec 정의 따라 같은 모듈에서 처리. |
+| 부분 거부 정책 | rejected 항목은 응답에 포함, 200 응답 유지. 전체 거부 시 4xx. |
+
+## Open Questions
+
+- subscribed NSSAI 캐시의 stale 정책 — TTL vs invalidate-on-change.
+- AMF reallocation via RAN 지원 시 target AMF set 결정 로직 변경 (38.413 운영 결정과 연동).
+
+## References
+
+- [[../architecture/module-boundaries]] — 4 모듈 책임.
+- [[../architecture/request-flow]] — NSSelectionGet 시퀀스.
+- `handoff/nssf/contract.yaml` `api/NSSelectionGet` topic — 진실 출처.
+- `handoff/nssf/contract.yaml` data-model — `SliceInfoForRegistration`, `AuthorizedNetworkSliceInfo`, `Snssai`, `Tai`.
+- [[AvailabilityEngine]] — availability map read source.
