@@ -1,7 +1,9 @@
 # NSSF arch/dev full scope 재작업 — 2026-05-14
 
-Status: in_progress
-Current objective: NSSF MVP (NSSelectionGet 단일 op) 가정으로 작성된 architecture / module-decomposition / dev 산출을 full NSSF (Nnssf_NSSelection + Nnssf_NSSAIAvailability 두 service · 8 operation) 기준으로 재작업한다.
+Status: closed (2026-05-14)
+Current objective: (closed) NSSF MVP (NSSelectionGet 단일 op) 가정으로 작성된 architecture / module-decomposition / dev 산출을 full NSSF (Nnssf_NSSelection + Nnssf_NSSAIAvailability 두 service · 8 operation) 기준으로 재작업한다.
+
+Phase 0 (plan, commit `21efd49`) + Phase 1 (PR #16 merge `1ea2239`) + Phase 3 (PR #17 merge `17d3496`) + Phase 4 (본 close 마킹 + retro `docs/retros/2026-05-14-nssf-arch-dev-full-scope-summary.md`) 완료. 영구화 후보 (표준 섹션 templates 등) 는 retro 의 "다음 사이클" 섹션 참고.
 
 ## 컨텍스트
 
