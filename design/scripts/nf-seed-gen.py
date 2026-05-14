@@ -2,7 +2,7 @@
 """Generate the initial handoff seed from an NF manifest and primary OpenAPI YAML.
 
 This intentionally replaces the old manual `_handoff.yaml` authoring step:
-`/nf-init` discovers specs, then this script creates `design/<nf>/_handoff_seed.yaml`
+`/nf-init` discovers specs, then this script creates `design/<nf>/_contract_seed.yaml`
 so `/nf-build` can assemble `handoff/<nf>/contract.yaml`.
 
 Default behavior is conservative: if a seed already exists, preserve it unless
@@ -149,7 +149,7 @@ def _build_seed(nf: str, manifest: dict[str, Any], yaml_paths: list[pathlib.Path
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate design/<nf>/_handoff_seed.yaml")
+    parser = argparse.ArgumentParser(description="Generate design/<nf>/_contract_seed.yaml")
     parser.add_argument("nf", help="NF folder name, e.g. nssf")
     parser.add_argument("--force", action="store_true", help="regenerate even when a seed already exists")
     args = parser.parse_args()
@@ -157,7 +157,7 @@ def main() -> None:
     nf = args.nf.lower()
     design_dir = REPO_ROOT / "design" / nf
     manifest_path = design_dir / "_manifest.yaml"
-    seed_path = design_dir / "_handoff_seed.yaml"
+    seed_path = design_dir / "_contract_seed.yaml"
     if not manifest_path.is_file():
         sys.exit(f"[nf-seed-gen] {manifest_path.relative_to(REPO_ROOT)} 없음")
 

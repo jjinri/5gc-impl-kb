@@ -1,6 +1,6 @@
 schema_version: handoff-v2
 nf: nssf
-generated_at: '2026-05-14T01:15:24.492972Z'
+generated_at: '2026-05-14T02:34:51.961783Z'
 agent_contract:
   status_precedence: topic_over_category
   default_read_order:

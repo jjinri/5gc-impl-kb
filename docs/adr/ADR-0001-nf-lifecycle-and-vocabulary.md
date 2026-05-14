@@ -36,13 +36,12 @@ Agent-internal work is the script/tool/check sequence performed inside that skil
 
 - Documentation should describe `/nf-build` as contract generation, not code build.
 - `handoff_ready` means the contract is ready to start architecture design, not that coding can start without architecture work.
-- `design/<nf>/contract/` is the current spec-derived contract location. `handoff/<nf>/contract.yaml` is the current machine-readable handoff contract location; legacy `_handoff.yaml` is retired. `_handoff_seed.yaml` remains the auto-generated seed that replaces manual legacy handoff authoring. `design/<nf>/architecture/` and `dev/<nf>/implementation-plan.md` are the current architecture and implementation-planning locations.
+- `design/<nf>/contract/` is the current spec-derived contract location. `handoff/<nf>/contract.yaml` is the current machine-readable handoff contract location; legacy `_handoff.yaml` is retired. `design/<nf>/_contract_seed.yaml` is the auto-generated seed that replaces manual legacy handoff authoring, and `design/<nf>/_contract_status.yaml` is the contract-stage completeness report. `design/<nf>/architecture/` and `dev/<nf>/implementation-plan.md` are the current architecture and implementation-planning locations.
 - Existing commands remain compatibility aliases until alias removal is explicitly planned.
 
 ## Follow-ups
 
-1. Consider `_handoff_seed.yaml` → `_contract_seed.yaml` and `_status.yaml` → `_contract_status.yaml` after script/test compatibility is prepared.
-2. Keep reset integrated into `/nf-init --reset` and `/nf-spec-discover --reset`.
+1. Keep reset integrated into `/nf-init --reset` and `/nf-spec-discover --reset`.
 
 ## Migration notes
 
@@ -50,4 +49,7 @@ Agent-internal work is the script/tool/check sequence performed inside that skil
 - 2026-05-13: Moved NSSF topic contract markdown/json artifacts under `design/nssf/contract/`; kept `_handoff_seed.yaml`, `_status.yaml`, and `handoff/nssf/_handoff.yaml` names for compatibility.
 - 2026-05-14: Added `/nf-arch-design` skill, reusable architecture templates, and initial NSSF architecture draft documents under `design/nssf/architecture/`.
 - 2026-05-14: Added `/nf-impl-plan` skill, reusable dev planning templates, and initial NSSF implementation planning artifacts under `dev/nssf/`.
-- 2026-05-14: Renamed the canonical machine-readable handoff output to `handoff/<nf>/contract.yaml`; legacy `_handoff.yaml` fallback was then removed.
+- 2026-05-14: Renamed the canonical machine-readable handoff output to `handoff/<nf>/contract.yaml`.
+- 2026-05-14: Removed legacy `handoff/<nf>/_handoff.yaml` fallback in `validate-extraction.py` and `nf-status.py`; `contract.yaml` is now the only handoff input.
+- 2026-05-14: `nf-status.py` measures contract-stage completeness only; architecture and implementation-planning stage status are out of scope and would belong to a separate future skill.
+- 2026-05-14: Renamed `design/<nf>/_handoff_seed.yaml` → `design/<nf>/_contract_seed.yaml` and `design/<nf>/_status.yaml` → `design/<nf>/_contract_status.yaml` to match the contract-stage vocabulary. Scripts, skills, tests, and `.gitignore` were updated; no compatibility aliases.

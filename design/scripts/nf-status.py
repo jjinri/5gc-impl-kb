@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-# design/<nf>/ 의 design 완성도를 검사해 _status.yaml 산출 (handoff_ready·canonical gate)
+# design/<nf>/ 의 design 완성도를 검사해 _contract_status.yaml 산출 (handoff_ready·canonical gate)
 """
 Usage:
     .venv/bin/python3 design/scripts/nf-status.py <nf> [--no-write]
 
 옵션:
-    --no-write   _status.yaml 저장 없이 stdout 만 보고
+    --no-write   _contract_status.yaml 저장 없이 stdout 만 보고
 
 평가 framework. 무가중치, 항목별 criterion + to_pass 의무,
 applies_to 별 NOT_APPLICABLE 처리, acceptance gate 는 check id 의 AND.
@@ -739,7 +739,7 @@ def main() -> None:
 
     yaml_text = render_yaml(nf, profile, manifest, checks, gates)
     if not args.no_write:
-        out_path = nf_dir / "_status.yaml"
+        out_path = nf_dir / "_contract_status.yaml"
         out_path.write_text(yaml_text, encoding="utf-8")
         print(f"[nf-status] wrote {out_path.relative_to(REPO)}", file=sys.stderr)
 
