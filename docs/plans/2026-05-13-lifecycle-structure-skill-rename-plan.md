@@ -1,5 +1,7 @@
 # NF 개발 lifecycle·프로젝트 구조·skill rename 계획 — 2026-05-13
 
+Status: closed (2026-05-14). 계획 Phase 0~5 + Handoff filename cleanup + Legacy handoff removal/reset contract-only 까지 완료. 이후 후속 변경은 신규 plan 또는 retro 로 분리한다. ADR-0001 `Follow-ups` 의 `_handoff_seed.yaml` / `_status.yaml` rename 은 별도 작업에서 추적한다.
+
 ## 목적
 
 현재 NF workflow 는 `nf-init` (`--reset` 포함) → `nf-build` → `nf-status` 로 구성되어 있지만, 이름과 산출물의 개발 단계가 맞지 않는다. 특히 `nf-build` 는 실제 코드 build 가 아니라 3GPP spec 에서 NF contract/design deliverable 을 생성하는 단계다. 이 불일치는 다음 단계인 상세 아키텍처 설계, 구현 계획, 실제 구현과 섞여 agent 판단을 흐린다.

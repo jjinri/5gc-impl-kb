@@ -21,7 +21,7 @@
 
 NF 개발 단계 이름은 [`docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`](./docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md) 를 따른다.
 
-- `/nf-init` 은 현재 spec discovery + seed auto-gen 호환 skill 이며 canonical wrapper 는 `/nf-spec-discover` 다. 핵심 목적은 사람이 legacy handoff yaml 을 수동 작성하지 않도록 `_handoff_seed.yaml` 을 자동 생성하는 것이다. reset 은 별도 skill 이 아니라 `--reset` 옵션이고 contract 산출물만 archive 한다.
+- `/nf-init` 은 현재 spec discovery + seed auto-gen 호환 skill 이며 canonical wrapper 는 `/nf-spec-discover` 다. 핵심 목적은 사람이 legacy handoff yaml 을 수동 작성하지 않도록 `_contract_seed.yaml` 을 자동 생성하는 것이다. reset 은 별도 skill 이 아니라 `--reset` 옵션이고 contract 산출물만 archive 한다.
 - `/nf-build` 는 code build 가 아니라 contract extraction/generation 단계다. canonical wrapper 는 `/nf-contract-build` 다.
 - `/nf-status` 는 contract validation 호환 skill 이며 canonical wrapper 는 `/nf-contract-check` 다. 상세 아키텍처나 구현 검증 status 와 혼동하지 않는다.
 - `/nf-arch-design` 은 handoff-ready contract 를 상세 아키텍처 문서로 변환하는 canonical skill 이다. implementation planning 을 자동 호출하지 않는다.

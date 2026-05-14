@@ -38,7 +38,7 @@ def _seed(tmp_path: pathlib.Path) -> pathlib.Path:
         "---\nid: data-model/S\nstatus: canonical\ngenerated_sections: []\n"
         "user_sections: []\n---\n# S\n", encoding="utf-8")
     (nf / "contract" / "data-model" / "S.json").write_text("{}", encoding="utf-8")
-    seed = nf / "_handoff_seed.yaml"
+    seed = nf / "_contract_seed.yaml"
     seed.write_text(
         yaml.safe_dump({
             "nf": "demo",
@@ -124,4 +124,4 @@ def test_build_handoff_v2_missing_seed_errors(tmp_path: pathlib.Path) -> None:
         capture_output=True, text=True, cwd=tmp_path, timeout=30, env=env,
     )
     assert out.returncode != 0
-    assert "_handoff_seed.yaml" in out.stderr
+    assert "_contract_seed.yaml" in out.stderr

@@ -3,7 +3,7 @@ nf: nssf
 stage: architecture-design
 status: draft
 source_contract: handoff/nssf/contract.yaml
-contract_status: design/nssf/_status.yaml
+contract_status: design/nssf/_contract_status.yaml
 generated_date: 2026-05-14
 ---
 
@@ -17,7 +17,7 @@ generated_date: 2026-05-14
 ## Source contract
 
 - Contract handoff: `handoff/nssf/contract.yaml`
-- Contract status: `design/nssf/_status.yaml`
+- Contract status: `design/nssf/_contract_status.yaml`
 - Contract artifacts: `design/nssf/contract/`
 
 ## Spec-derived constraints

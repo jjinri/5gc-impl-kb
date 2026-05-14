@@ -13,7 +13,7 @@ specs/{spec}/{file}.{pdf,docx,doc,yaml}
    handoff/<nf>/contract.yaml      # 현재 machine-readable dev contract
         │
         ▼  contract validation
-   design/<nf>/_status.yaml
+   design/<nf>/_contract_status.yaml
         │
         ▼  architecture design
    design/<nf>/architecture/*
@@ -41,10 +41,10 @@ python3 -m venv .venv
 
 | 단계 | 호환 skill | canonical skill | 기능 | 주요 산출물 |
 |---|---|---|---|---|
-| Spec discovery | `/nf-init <nf> --primary <spec>` | `/nf-spec-discover <nf> --primary <spec>` | primary/ref spec 식별, manifest 생성·보강, ready 시 seed auto-gen | `design/<nf>/_manifest.yaml`, `design/<nf>/_handoff_seed.yaml` |
+| Spec discovery | `/nf-init <nf> --primary <spec>` | `/nf-spec-discover <nf> --primary <spec>` | primary/ref spec 식별, manifest 생성·보강, ready 시 seed auto-gen | `design/<nf>/_manifest.yaml`, `design/<nf>/_contract_seed.yaml` |
 | Reset + rediscovery | `/nf-init <nf> --primary <spec> --reset` | `/nf-spec-discover <nf> --primary <spec> --reset` | contract 산출만 archive 후 manifest refresh + seed auto-gen | `design/<nf>/_archive/<ts>/`, manifest/seed 보존·갱신 |
 | Contract extraction | `/nf-build <nf>` | `/nf-contract-build <nf>` | spec-derived contract markdown/json 과 handoff contract 생성 | `design/<nf>/contract/...`, `handoff/<nf>/contract.yaml` |
-| Contract validation | `/nf-status <nf>` | `/nf-contract-check <nf>` | contract 가 architecture 설계 입력으로 충분한지 검사 | `design/<nf>/_status.yaml` |
+| Contract validation | `/nf-status <nf>` | `/nf-contract-check <nf>` | contract 가 architecture 설계 입력으로 충분한지 검사 | `design/<nf>/_contract_status.yaml` |
 | Architecture design | 없음 | `/nf-arch-design <nf>` | contract 를 상세 아키텍처로 변환 | `design/<nf>/architecture/*` |
 | Implementation planning | 없음 | `/nf-impl-plan <nf>` | 아키텍처를 구현 작업·테스트 계획으로 분해 | `dev/<nf>/implementation-plan.md`, `tasks.yaml` |
 

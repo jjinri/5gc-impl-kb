@@ -72,6 +72,7 @@ Current objective: Phase 1부터 마무리 단계까지 진행한 `/nf-init` 계
 - 커밋:
   - `f7a203c legacy handoff 없이 seed 기반 init을 지킨다`
 - 사용자 요청대로 PR 없이 원격 `main` 에 직접 반영했다.
+- 정책 예외 사유. CLAUDE.md PR 분기상 handoff schema 변경은 PR 트리거에 해당하지만, 본 사이클은 단독 작업이고 직전 PR #12 가 동일 영역을 이미 리뷰했으며 변경 폭이 fallback 한 줄 제거 수준이라 사용자 판단으로 직접 push 했다. 다음 사이클부터는 동일 영역 변경이라도 기본은 PR 로 복귀.
 - 결과:
   - `origin/main` 이 해당 커밋으로 fast-forward 됨
 

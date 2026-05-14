@@ -6,7 +6,7 @@ __pycache__/
 
 # Auto-generated KB artifacts (재생성 가능 — design/scripts/nf-manifest.py, design/scripts/nf-status.py)
 design/*/_manifest.yaml
-design/*/_status.yaml
+design/*/_contract_status.yaml
 
 # Reset archive (git history 가 이미 진실 출처)
 design/*/_archive/

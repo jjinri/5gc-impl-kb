@@ -5,7 +5,7 @@ Usage:
     .venv/bin/python3 design/scripts/build-handoff.py <nf>
 
 입력:
-    design/<nf>/_handoff_seed.yaml — 사람·/nf-build 가 작성한 seed (필수)
+    design/<nf>/_contract_seed.yaml — 사람·/nf-build 가 작성한 seed (필수)
         nf, categories, topics, tasks, sources
 
 산출:
@@ -86,7 +86,7 @@ def main() -> None:
     if not design_dir.is_dir():
         sys.exit(f"[build-handoff] design/{nf}/ 없음")
 
-    seed_path = design_dir / "_handoff_seed.yaml"
+    seed_path = design_dir / "_contract_seed.yaml"
     if not seed_path.is_file():
         sys.exit(f"[build-handoff] {seed_path.relative_to(REPO_ROOT)} 없음. "
                  f"seed 를 먼저 작성하거나 /nf-build <nf> 를 실행.")
