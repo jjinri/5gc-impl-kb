@@ -2,7 +2,7 @@
 name: pane-send
 description: 본 tmux 세션의 다른 pane (예 codex/gpt-5.5, 다른 claude, shell) 에 텍스트를 송신해 *검토 요청·질문·명령* 을 전달한다. 사용자가 "/pane-send 2 ...", "pane 2 에 보내", "pane 3 에 요청", "다른 pane 으로 검토 요청", "second-opinion 요청 보내" 등을 말하거나 본 pane 외의 인스턴스에 *입력* 을 전달해야 할 때 사용한다. 본 skill 은 *송신* 에 한정 — target pane 의 Ready 상태 검증·응답 대기·응답 수신은 *하지 않는다*. 사용자가 target pane 의 상태를 *이미 안다는 가정* 으로 동작. 응답 수신·비교는 자매 skill `/pane-compare` 의 책임.
 argument-hint: "<pane-index> <text>"
-allowed-tools: Bash(tmux send-keys *) Bash(tmux list-panes *) Bash(tmux display-message *)
+allowed-tools: Bash(tmux send-keys *) Bash(tmux list-panes *) Bash(ps *)
 ---
 
 # pane-send — tmux pane 으로 텍스트 송신
@@ -28,16 +28,44 @@ allowed-tools: Bash(tmux send-keys *) Bash(tmux list-panes *) Bash(tmux display-
 
 ### 1. 인자 검증
 - `<pane-index>` 가 정수 1~9 범위인지 확인. 아니면 정지.
-- 본 pane index 와 같으면 정지 — 자기 자신에게 보내기 차단.
 - `<text>` 가 비어있으면 정지 — empty send 금지.
 
-### 2. target pane 존재 확인
+### 2. self pane 검출 + self-send 차단
+
+`tmux display-message -p '#{pane_index}'` 는 *현 shell 이 TMUX env 를 상속하지 않으면* (예 Claude Code 가 bg job 으로 invoke 한 Bash) 잘못된 pane 을 반환한다. 따라서 *process tree 매칭* 으로 self pane 을 식별한다.
+
+```bash
+self_pane() {
+  local pid=$$
+  local match=""
+  while [ "$pid" -gt 1 ]; do
+    match=$(tmux list-panes -F '#{pane_index} #{pane_pid}' 2>/dev/null \
+            | awk -v p="$pid" '$2==p {print $1; exit}')
+    if [ -n "$match" ]; then
+      printf "%s" "$match"
+      return 0
+    fi
+    pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+    [ -z "$pid" ] && break
+  done
+  return 1
+}
+self=$(self_pane)
+[ "$self" = "<pane-index>" ] && { echo "self-send 차단 (self=$self)"; exit 1; }
+```
+
+- `$$` (현 shell PID) 에서 `ppid` 따라 위로 올라가며 각 PID 를 `tmux list-panes` 의 `pane_pid` 와 매칭.
+- 매칭되는 pane index 가 self.
+- self 식별 실패 시 (`return 1`) — bg context 등에서 정상 가능, *self-send 차단 skip* (사용자 책임).
+- *zsh 호환 주의* — `local match` 를 *별도 줄에서 빈 문자열로 선언* 후 다음 줄에서 assign. zsh 에서 `local match=$(...)` 가 빈 값일 때 `match=''` 를 stdout 출력하는 부작용 회피.
+
+### 3. target pane 존재 확인
 ```bash
 tmux list-panes -F '#{pane_index}' | grep -q "^<pane-index>$" || { echo "target pane <pane-index> 부재"; exit 1; }
 ```
 - 존재 안 하면 정지. 사용자에게 `tmux list-panes` 결과 보고.
 
-### 3. 송신
+### 4. 송신
 ```bash
 tmux send-keys -t <pane-index> -l "<text>"
 tmux send-keys -t <pane-index> Enter
@@ -46,7 +74,7 @@ tmux send-keys -t <pane-index> Enter
 - 텍스트 + Enter 별도 send-keys — multi-line 텍스트의 줄바꿈도 보존 (텍스트 안 `\n` 은 send-keys 가 newline 으로 처리, 받는 pane 이 paste 처리).
 - 줄바꿈을 명시 multi-line 으로 보내려면 텍스트를 `\n` 으로 직접 join.
 
-### 4. 보고
+### 5. 보고
 - "sent to pane <pane-index>: <첫 줄 + 길이>" 형식.
 - 사용자에게 *응답 확인은 사용자 책임* 임을 짧게 안내.
 - 본 skill 은 응답 polling 안 함.
@@ -71,7 +99,7 @@ tmux send-keys -t <pane-index> Enter
 
 ## 자주 틀리는 지점
 
-- 본 pane index 와 target index 혼동. 본 pane index 는 `tmux display-message -p '#{pane_index}'` 로 확인.
+- 본 pane index 와 target index 혼동. 본 pane index 는 §2 의 `self_pane` 함수 (process tree 매칭) 로 확인. `tmux display-message -p '#{pane_index}'` 는 TMUX env 미상속 시 잘못된 pane 반환 — *사용 금지*.
 - target pane 이 *수정·실행 중인 prompt buffer* 보유 시 본 skill 의 텍스트가 그 buffer 에 *추가* 돼 corruption. 사용자가 사전 확인 필수.
 - multi-line 텍스트의 줄바꿈 — `-l` flag 가 *literal* 모드라 줄바꿈은 newline 으로 그대로 전달. 받는 측이 *paste 처리* 하면 한 prompt 로 합침, *line 마다 enter* 하면 의도와 달리 분리될 수 있음.
 - target pane 이 *지원하지 않는 인스턴스* (예 OMX coordinator) 면 send 가 의미 없음. 사용자 책임.
