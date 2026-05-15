@@ -2,7 +2,7 @@
 name: pane-compare
 description: 본 tmux 세션의 다른 pane (예 codex/gpt-5.5, 다른 claude) 의 최근 출력을 capture 해 본 pane 의 직전 의견·분석과 *비교 검토* 한 뒤 *분기·합의·통합 결론* 표를 만든다. 사용자가 "/pane-compare 2", "pane 2 결과 가져와 비교", "second-opinion 종합 리뷰", "다른 pane 의 의견과 본 결론 비교", "pane 2 검토 의견 확인" 등을 말하거나 자매 skill `/pane-send` 로 보낸 검토 요청의 응답이 *완료됨을 사용자가 확인* 한 시점에 사용한다. 본 skill 은 *수신 + 비교* 에 한정 — target pane 에 *송신* 하지 않으며, 응답 *완료 polling* 도 하지 않는다 (사용자가 완료 시점을 안다는 가정).
 argument-hint: "<pane-index> [--lines <n>]"
-allowed-tools: Bash(tmux capture-pane *) Bash(tmux list-panes *) Bash(tmux display-message *)
+allowed-tools: Bash(tmux capture-pane *) Bash(tmux list-panes *) Bash(ps *)
 ---
 
 # pane-compare — 다른 pane 응답 capture + 본 pane 의견과 비교
@@ -29,8 +29,31 @@ allowed-tools: Bash(tmux capture-pane *) Bash(tmux list-panes *) Bash(tmux displ
 ## Workflow
 
 ### 1. 인자 검증
-- `<pane-index>` 정수 + 본 pane 과 다른 값 + `tmux list-panes` 에 존재. 아니면 정지.
+- `<pane-index>` 정수 + `tmux list-panes` 에 존재. 아니면 정지.
 - `--lines` 가 있으면 정수, 양수.
+- *self pane 식별* — `/pane-send` SKILL §2 의 `self_pane()` (process tree 매칭) 와 동일 방식. self 와 `<pane-index>` 가 같으면 capture 가 무의미 — 정지. `tmux display-message` 는 *사용 금지* (TMUX env 미상속 시 오반환).
+
+```bash
+self_pane() {
+  local pid=$$
+  local match=""
+  while [ "$pid" -gt 1 ]; do
+    match=$(tmux list-panes -F '#{pane_index} #{pane_pid}' 2>/dev/null \
+            | awk -v p="$pid" '$2==p {print $1; exit}')
+    if [ -n "$match" ]; then
+      printf "%s" "$match"
+      return 0
+    fi
+    pid=$(ps -o ppid= -p "$pid" 2>/dev/null | tr -d ' ')
+    [ -z "$pid" ] && break
+  done
+  return 1
+}
+self=$(self_pane)
+[ "$self" = "<pane-index>" ] && { echo "self-capture 차단 (self=$self)"; exit 1; }
+```
+
+*zsh 호환 주의* — `local match=""` 별도 줄 선언, zsh 의 `local match=$()` 빈 값 stdout 부작용 회피.
 
 ### 2. capture
 ```bash
