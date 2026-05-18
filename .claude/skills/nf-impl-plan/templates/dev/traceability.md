@@ -9,26 +9,26 @@ generated_date: {{generated_date}}
 
 # {{NF}} Traceability
 
-## Source map
+## Contract → Module
 
-| source | role |
-| --- | --- |
-| `{{contract_path}}` | machine-readable contract handoff |
-| `design/{{nf}}/contract/` | spec-derived contract artifacts |
-| `{{architecture_root}}/` | architecture design input |
-
-## Task traceability
-
-| task | architecture source | contract source | tests |
-| --- | --- | --- | --- |
-| TODO | TODO | TODO | TODO |
-
-## Test traceability
-
-| test | requirement source | task |
+| contract topic | module | architecture source |
 | --- | --- | --- |
 | TODO | TODO | TODO |
 
-## Open trace gaps
+## Module → Test
 
-- TODO: source 가 없는 task 또는 test 를 이곳에 적고, 구현 착수 전 닫는다.
+| module | task | test id (`test-matrix.md`) |
+| --- | --- | --- |
+| TODO | TODO | TODO |
+
+## Open Gaps
+
+- TODO: contract topic 중 매핑된 module 이 없는 항목을 적고 구현 착수 전 닫는다.
+- TODO: source 가 없는 task 또는 test 를 적는다.
+
+## References
+
+- `{{contract_path}}` — machine-readable contract handoff.
+- `design/{{nf}}/contract/` — spec-derived contract 산출.
+- `{{architecture_root}}/` — architecture + `module-decomposition/`.
+- `tasks.yaml`, `test-matrix.md`.

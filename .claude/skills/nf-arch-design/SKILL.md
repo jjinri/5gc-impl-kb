@@ -19,8 +19,7 @@ Read only these NF-specific inputs.
 3. `design/<nf>/_manifest.yaml` only for NF/spec/profile metadata.
 
 Do not use `dev/<nf>/` as input.
-Do not copy or depend on legacy `design/<nf>/module-decomposition/` unless a user explicitly asks to migrate that legacy artifact.
-That legacy folder is pending a separate compatibility-aware migration.
+`design/<nf>/module-decomposition/` is a first-class output of this stage, not a legacy artifact. When updating an existing architecture, read it only to preserve user-written sections.
 
 ## Preconditions
 
@@ -48,27 +47,40 @@ design/<nf>/architecture/
 ├── test-strategy.md
 └── decisions/
     └── ADR-0001-architecture-baseline.md
+
+design/<nf>/module-decomposition/
+└── <Module>.md   # one file per logical module from module-boundaries.md
 ```
 
-Use the templates in `templates/architecture/` as the required section skeleton.
-Replace `{{nf}}`, `{{NF}}`, `{{contract_path}}`, `{{status_path}}`, and `{{generated_date}}` placeholders.
+Use the templates in `templates/architecture/` and `templates/module-decomposition/_MODULE.md` as the required section skeleton.
+Replace `{{nf}}`, `{{NF}}`, `{{Module}}`, `{{contract_path}}`, and `{{generated_date}}` placeholders.
+
+Every architecture file must carry exactly this canonical section set:
+
+`## Purpose` · `## Inputs (contract)` · `## Boundaries` · `## Decisions` · `## Open Questions` · `## References`
+
+Every `module-decomposition/<Module>.md` file must carry exactly:
+
+`## Responsibility` · `## Inputs` · `## Outputs` · `## State` · `## Decisions` · `## Open Questions` · `## References`
+
+`decisions/ADR-*.md` keeps the ADR record format (`## Context` · `## Decision` · `## Consequences` · `## Open choices` · `## References`), not the architecture section set.
 
 ## Architecture rules
 
 - Keep design prose in Korean.
 - Preserve 3GPP terms, API names, field names, and schema names in English.
-- Separate **Spec-derived constraints** from **Implementation choices** in every document.
+- Within the canonical section set, keep contract-derived facts under `## Inputs (contract)`, `## Boundaries`, and `## Decisions`; put unresolved dev choices under `## Open Questions`.
 - Architecture may define logical modules, request flow, state boundaries, error propagation, observability points, and test seams.
 - Architecture must not choose OS, programming language, database, HTTP framework, service mesh, deployment substrate, or concrete libraries unless the user explicitly supplies that dev decision.
-- When a decision is needed but not contract-derived, write it under **Implementation choices** with status `TBD` or record a decision in `decisions/ADR-*.md`.
+- When a decision is needed but not contract-derived, write it under `## Open Questions` with status `TBD` or record a decision in `decisions/ADR-*.md`.
 - Do not auto-run `/nf-impl-plan`. End by recommending `/nf-impl-plan <nf>` only after the architecture docs are coherent.
 
 ## Execution
 
 1. Validate preconditions.
 2. Inspect the contract handoff yaml and topic contract files.
-3. Create `design/<nf>/architecture/decisions/`.
-4. Copy the template files into `design/<nf>/architecture/` if the target files do not exist.
+3. Create `design/<nf>/architecture/decisions/` and `design/<nf>/module-decomposition/`.
+4. Copy the architecture templates into `design/<nf>/architecture/` and one `module-decomposition/_MODULE.md` copy per logical module if the target files do not exist.
 5. Populate sections with contract-derived facts and explicit `TBD` implementation choices.
 6. Preserve existing user-written sections when updating an existing architecture document.
 7. Run lightweight validation.
@@ -96,7 +108,31 @@ required = [
 missing = [p for p in required if not (root / p).exists()]
 if missing:
     raise SystemExit(f'missing architecture files: {missing}')
-print('architecture files present')
+md = Path('design') / nf / 'module-decomposition'
+module_files = sorted(md.glob('*.md')) if md.is_dir() else []
+if not module_files:
+    raise SystemExit('missing module-decomposition/<Module>.md')
+
+def h2(path):
+    return [ln.strip() for ln in path.read_text().splitlines()
+            if ln.startswith('## ')]
+
+arch_canon = ['## Purpose', '## Inputs (contract)', '## Boundaries',
+              '## Decisions', '## Open Questions', '## References']
+adr_canon = ['## Context', '## Decision', '## Consequences',
+             '## Open choices', '## References']
+module_canon = ['## Responsibility', '## Inputs', '## Outputs', '## State',
+                '## Decisions', '## Open Questions', '## References']
+for p in required:
+    want = adr_canon if p.startswith('decisions/') else arch_canon
+    got = h2(root / p)
+    if got != want:
+        raise SystemExit(f'{p} canonical sections mismatch: {got} != {want}')
+for mf in module_files:
+    got = h2(mf)
+    if got != module_canon:
+        raise SystemExit(f'{mf} module sections mismatch: {got} != {module_canon}')
+print('architecture + module-decomposition files present, canonical sections exact-match OK')
 PY
 ```
 

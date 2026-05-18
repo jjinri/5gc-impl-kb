@@ -11,8 +11,8 @@ The architecture must preserve spec-derived API, data model, error handling, and
 
 ## Decision
 
-Use the architecture document set under `design/{{nf}}/architecture/` as the boundary between contract extraction and implementation planning.
-Each architecture file separates spec-derived constraints from implementation choices.
+Use the architecture document set under `design/{{nf}}/architecture/` plus the module decomposition under `design/{{nf}}/module-decomposition/` as the boundary between contract extraction and implementation planning.
+Every architecture file uses the canonical section set (`## Purpose`, `## Inputs (contract)`, `## Boundaries`, `## Decisions`, `## Open Questions`, `## References`); contract-derived facts live under Inputs/Boundaries/Decisions and unresolved dev choices live under Open Questions.
 
 ## Consequences
 
@@ -27,3 +27,10 @@ Each architecture file separates spec-derived constraints from implementation ch
 | runtime and language | TBD | dev-stage decision |
 | persistence backend | TBD | dev-stage decision |
 | framework and deployment | TBD | dev-stage decision |
+
+## References
+
+- `{{contract_path}}` — contract handoff.
+- `design/{{nf}}/architecture/` — architecture document set.
+- `design/{{nf}}/module-decomposition/` — module decomposition.
+- TODO: 인용 spec clause 를 적는다.
