@@ -62,6 +62,13 @@ dev/<nf>/
 Use the templates in `templates/dev/` as the required section skeleton.
 Replace `{{nf}}`, `{{NF}}`, `{{architecture_root}}`, `{{contract_path}}`, and `{{generated_date}}` placeholders.
 
+Each planning file must carry exactly its canonical section set:
+
+- `implementation-plan.md` — `## Scope` · `## Phases` · `## Test Plan` · `## Open Risks` · `## References`
+- `test-matrix.md` — `## Purpose` · `## Test Inventory` · `## Coverage Rules` · `## Open Questions` · `## References`
+- `traceability.md` — `## Contract → Module` · `## Module → Test` · `## Open Gaps` · `## References`
+- `tasks.yaml` — keep the `impl-plan-v1` schema unchanged.
+
 ## Planning rules
 
 - Keep prose in Korean.
@@ -99,7 +106,17 @@ tasks = yaml.safe_load((root / 'tasks.yaml').read_text())
 for task in tasks.get('tasks', []):
     if not task.get('trace_to'):
         raise SystemExit(f"task has no trace_to: {task.get('id')}")
-print('implementation planning files present and traceable')
+canon = {
+    'implementation-plan.md': ['## Scope', '## Phases', '## Test Plan', '## Open Risks', '## References'],
+    'test-matrix.md': ['## Purpose', '## Test Inventory', '## Coverage Rules', '## Open Questions', '## References'],
+    'traceability.md': ['## Contract → Module', '## Module → Test', '## Open Gaps', '## References'],
+}
+for fn, heads in canon.items():
+    body = (root / fn).read_text()
+    bad = [h for h in heads if h not in body]
+    if bad:
+        raise SystemExit(f'{fn} missing canonical sections: {bad}')
+print('implementation planning files present, traceable, canonical sections OK')
 PY
 ```
 
