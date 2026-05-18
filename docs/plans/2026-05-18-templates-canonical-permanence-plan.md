@@ -1,7 +1,9 @@
 # 표준 섹션 templates 영구화 — 2026-05-18
 
-Status: in_progress
-Current objective: NSSF arch/dev full scope 사이클 (PR #16/#17, retro `docs/retros/2026-05-14-nssf-arch-dev-full-scope-summary.md`) 에서 검증된 *표준 섹션 구조* 를 skill template + SKILL.md 에 영구화한다. 다음 NF 사이클이 같은 구조를 자동 상속하게 만든다.
+Status: closed (2026-05-18)
+Current objective: (closed) NSSF arch/dev full scope 사이클 (PR #16/#17, retro `docs/retros/2026-05-14-nssf-arch-dev-full-scope-summary.md`) 에서 검증된 *표준 섹션 구조* 를 skill template + SKILL.md 에 영구화한다. 다음 NF 사이클이 같은 구조를 자동 상속하게 만든다.
+
+P0~P5 완료 — 단일 PR #20 머지 (`f3dbdda`). 2 라운드 second-opinion 리뷰 (1 차 request changes: presence-only validation → exact-match 반영 commit `4780600`, 2 차 approve). 사이클 요약은 `docs/retros/2026-05-18-templates-canonical-summary.md`. 다음 사이클 후보는 해당 retro "다음 사이클 후보" 참고.
 
 retro "영구화 후보" 표의 첫 3 항목 (architecture 6 종 · module-decomposition 7 종 · dev 표준 섹션) 을 *단일 PR 사이클* 로 처리한다. retro "다음 사이클 후보" 의 사용자 결정 — (4) 진행, (2) 다른 NF 사이클 미진행.
 
