@@ -1,7 +1,9 @@
 # nf-build fresh full materialization — 2026-05-18
 
-Status: in_progress
-Current objective: fresh 상태 (`design/<nf>/contract/` 부재) 에서 `_contract_seed.yaml` 의 *모든* topic 을 사람 수동 저작 없이 agent/script 주도로 전량 materialize 해, `handoff_ready` gate 까지 도달 가능하게 만든다. 사람 개입은 정책 결정·결과 리뷰·선택적 USER prose 보강으로 최소화.
+Status: closed (2026-05-18)
+Current objective: (closed) fresh 상태 (`design/<nf>/contract/` 부재) 에서 `_contract_seed.yaml` 의 *모든* topic 을 사람 수동 저작 없이 agent/script 주도로 전량 materialize 해, `handoff_ready` gate 까지 도달 가능하게 만든다. 사람 개입은 정책 결정·결과 리뷰·선택적 USER prose 보강으로 최소화.
+
+P0~P4 완료 — 단일 PR #24 머지 (`4967274`). 2 라운드 plan 비평 + 진행 중 resolver 버그 2건 + 리뷰 Medium 1건 전부 root-fix. 사이클 요약·다음 후보는 `docs/retros/2026-05-18-nf-build-fresh-full-materialization-summary.md`. (E) architecture 재생성은 의도적 별도 후속 사이클.
 
 사용자 결정 — (C) contract 생성은 "전량 신규 저작 + 사람 개입 최소". Pane 2 second-opinion 합의 (옵션 2 재구성: 수동 저작 아님, agent/script 주도 materialization, USER 섹션 TODO placeholder). 본 plan 은 `/nf-build` 의 fresh-full 역량을 명세+구현하는 사이클이며, NSSF 적용 (C)~(F) 는 그 위에서 수행.
 
