@@ -111,12 +111,12 @@ canon = {
     'test-matrix.md': ['## Purpose', '## Test Inventory', '## Coverage Rules', '## Open Questions', '## References'],
     'traceability.md': ['## Contract → Module', '## Module → Test', '## Open Gaps', '## References'],
 }
-for fn, heads in canon.items():
-    body = (root / fn).read_text()
-    bad = [h for h in heads if h not in body]
-    if bad:
-        raise SystemExit(f'{fn} missing canonical sections: {bad}')
-print('implementation planning files present, traceable, canonical sections OK')
+for fn, want in canon.items():
+    got = [ln.strip() for ln in (root / fn).read_text().splitlines()
+           if ln.startswith('## ')]
+    if got != want:
+        raise SystemExit(f'{fn} canonical sections mismatch: {got} != {want}')
+print('implementation planning files present, traceable, canonical sections exact-match OK')
 PY
 ```
 

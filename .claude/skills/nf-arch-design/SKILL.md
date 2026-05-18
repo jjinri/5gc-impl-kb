@@ -109,18 +109,30 @@ missing = [p for p in required if not (root / p).exists()]
 if missing:
     raise SystemExit(f'missing architecture files: {missing}')
 md = Path('design') / nf / 'module-decomposition'
-if not md.is_dir() or not list(md.glob('*.md')):
+module_files = sorted(md.glob('*.md')) if md.is_dir() else []
+if not module_files:
     raise SystemExit('missing module-decomposition/<Module>.md')
-canon = ['## Purpose', '## Inputs (contract)', '## Boundaries',
-         '## Decisions', '## Open Questions', '## References']
+
+def h2(path):
+    return [ln.strip() for ln in path.read_text().splitlines()
+            if ln.startswith('## ')]
+
+arch_canon = ['## Purpose', '## Inputs (contract)', '## Boundaries',
+              '## Decisions', '## Open Questions', '## References']
+adr_canon = ['## Context', '## Decision', '## Consequences',
+             '## Open choices', '## References']
+module_canon = ['## Responsibility', '## Inputs', '## Outputs', '## State',
+                '## Decisions', '## Open Questions', '## References']
 for p in required:
-    if p.startswith('decisions/'):
-        continue
-    body = (root / p).read_text()
-    bad = [h for h in canon if h not in body]
-    if bad:
-        raise SystemExit(f'{p} missing canonical sections: {bad}')
-print('architecture + module-decomposition files present, canonical sections OK')
+    want = adr_canon if p.startswith('decisions/') else arch_canon
+    got = h2(root / p)
+    if got != want:
+        raise SystemExit(f'{p} canonical sections mismatch: {got} != {want}')
+for mf in module_files:
+    got = h2(mf)
+    if got != module_canon:
+        raise SystemExit(f'{mf} module sections mismatch: {got} != {module_canon}')
+print('architecture + module-decomposition files present, canonical sections exact-match OK')
 PY
 ```
 

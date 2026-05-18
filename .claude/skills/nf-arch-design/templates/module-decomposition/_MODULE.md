@@ -9,7 +9,7 @@ generated_date: {{generated_date}}
 # {{Module}}
 
 > 본 파일은 module-decomposition template 이다. `<Module>` 한 개당 한 파일을 만들고
-> 파일명을 module 명으로 둔다 (예 `SelectionEngine.md`). `{{Module}}` 을 module 명으로 치환한다.
+> 파일명을 module 명으로 둔다 (예 `ExampleModule.md`). `{{Module}}` 을 module 명으로 치환한다.
 
 ## Responsibility
 
