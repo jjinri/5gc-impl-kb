@@ -100,8 +100,8 @@ manifest 의 `status.ready_for_build == true` 인 경우에만 실행.
 .venv/bin/python3 design/scripts/nf-seed-gen.py <nf> --force
 ```
 - `--force` 는 기존 seed 를 *덮어쓰고* 자동 산출 범위로 재생성한다.
-- 사용 시점 — (a) `nf-seed-gen.py`/`nf-manifest.py` 도구가 fix 된 뒤 stale seed 를 깨끗이 다시 만들 때 (예 schema_refs 노이즈 fix 후), (b) manifest `manual_overrides` 변경을 seed 에 반영해야 할 때, (c) 사용자 작업트리에 손상·stale `_contract_seed.yaml` 이 의심될 때.
-- 주의 — `--force` 는 seed 의 *사용자 수동 편집* 도 잃는다. scoped 결정이 seed 에 직접 들어있다면 `--force` 전에 그 결정을 manifest `manual_overrides` 로 옮겨라 (그래야 재생성 후에도 반영됨).
+- 사용 시점 — (a) `nf-seed-gen.py` 도구가 fix 된 뒤 stale seed 를 깨끗이 다시 만들 때 (예 schema_refs 노이즈 fix 후), (b) manifest 의 `primary_spec`/`primary_files`/`ready_for_build` 가 바뀌어 새 입력 기준으로 seed 를 다시 생성해야 할 때, (c) 사용자 작업트리에 손상·stale `_contract_seed.yaml` 이 의심될 때.
+- 주의 — `--force` 는 seed 의 *사용자 수동 편집* 을 잃는다. `nf-seed-gen.py` 는 seed *내용* 을 manifest 의 `primary_spec`·`primary_files` (primary OpenAPI paths/schema chain) 로만 생성하며 `manual_overrides` 는 읽지 않는다. cross-NF/보안 spec 의 in-scope 결정 (`manual_overrides.exclude/add`) 은 `nf-manifest.py` 가 manifest 에 보존하는 것이고 seed content 와는 별개다.
 - `--reset` (contract 산출물 archive) 과 무관 — `--force` 는 seed 파일 1 개의 재생성 여부만 제어한다.
 
 ### 6. 결과 보고
