@@ -42,6 +42,7 @@ allowed-tools: Bash(.venv/bin/python3 design/scripts/extract.py *) Bash(.venv/bi
 
 ### 2. 카테고리·토픽 결정
 - 인자 없음 → seed 의 *활성* (`status ≠ draft, ≠ not_applicable`) 카테고리·토픽 전체.
+- **Fresh full materialization 예외** — `design/<nf>/contract/` 가 부재하거나 seed.topics 중 파일 없는 topic 이 있으면, 활성 필터를 적용하지 않고 *seed.topics 전량* 을 materialize 한다 (draft 라도). 상세는 §"Fresh full materialization".
 - `--<category>` → 해당 카테고리 산하 토픽만.
 - `--topic <id>` → 단일 토픽만.
 
@@ -88,6 +89,50 @@ allowed-tools: Bash(.venv/bin/python3 design/scripts/extract.py *) Bash(.venv/bi
 - 미해결 leaf (Data Model JSON 의 `unresolved_refs` 등).
 - 제안 commit 메시지.
 - 사용자 다음 액션 — `/nf-status <nf>` 또는 사용자 prose 보강 위치.
+
+## Fresh full materialization
+
+`design/<nf>/contract/` 부재 (fresh checkout, `--reset` 후 등) 또는 seed.topics 중 파일 없는 topic 존재 시, *사람 수동 저작 없이* seed.topics 전량을 materialize 해 `handoff_ready` 까지 도달 가능하게 한다. 사람 = spec 원본·범위·`manual_overrides` 정책·결과 리뷰·선택적 USER prose. 그 외 전부 script/agent.
+
+근거 — `validate-extraction.py` basic #3 (topic file exists)·#9 (data-model machine_file)·#4 (xref target) 는 *실제 topic 파일* 을 요구한다. fresh 는 파일 부재라 `validate_extraction_basic` FAIL → `handoff_ready` 도달 불가. 본 모드가 그 파일들을 전량 생성한다.
+
+### 카테고리별 marker/frontmatter schema (구현 계약)
+
+각 topic `.md` frontmatter 필수 — `topic_id`, `category`, `status`, `generated_sections: [<AUTO id…>]`, `user_sections: [<USER id…>]`. 본문 marker `<!-- AUTO:<id>:start/end -->` / `<!-- USER:<id>:start/end -->` 가 frontmatter 와 *1:1*, id 중복 0 (validate #7/#8). 필수키 (`topic_id`/`category`/`status`) 는 validate 가 강제하지 않으므로 *materializer self-check* 로 보장.
+
+| 카테고리 | layout | AUTO marker id | USER marker id | 격상 |
+|---|---|---|---|---|
+| interface | single-file | `auth-block`, `transport-block` | `implementation-notes` | spec-derived → 자동 |
+| api/&lt;op&gt; | directory | `api-matrix`, `request-schema`, `response-schema` | `implementation-notes` | spec-derived → 자동 |
+| data-model/&lt;schema&gt; | directory | `chain-tree`, `field-table` (+ `<schema>.json` machine_file) | `implementation-notes` | spec-derived → 자동 (JSON `unresolved_refs` 빈 경우만) |
+| error-handling | single-file | `error-matrix` | `recovery-prose`, `implementation-notes` | spec-derived → 자동 |
+| module-decomposition/&lt;mod&gt; | directory | `module-graph` (placeholder/minimal — no inferred decomposition) | `responsibility-prose`, `implementation-notes` | draft 유지 |
+| service-scenarios/&lt;sc&gt; | directory | `scenario-index` | `scenario-prose` | draft 유지 |
+| behavior-state/&lt;st&gt; | directory | `state-index` | `state-prose` | draft 유지 |
+| failure-policy | single-file | `failure-index` | `policy-prose` | draft 유지 |
+| configuration | single-file | `config-index` | `policy-notes` | draft 유지 |
+| persistence | single-file | `persistence-index` | `policy-notes` | draft 유지 |
+| test-matrix | single-file | `test-index` | `coverage-notes` | draft 유지 |
+| work-plan | single-file | `work-index` | `plan-notes` | draft 유지 |
+| cross-nf | single-file | `crossnf-index` | `crossnf-notes` | draft 유지 |
+
+- **seed.topics 에 존재하는 topic 만 materialize. seed 에 없는 topic/category 를 invent 하지 않는다.**
+- draft-유지 카테고리 AUTO `*-index` = seed 도출 최소 인덱스 (topic 목록·spec_refs). USER = `TODO:` placeholder. spec 추출 불가 내용은 USER TODO 로만.
+- refs 에 `#anchor` 포함 시 validate 가 anchor/heading 실재를 본다 — skeleton 은 해당 anchor 를 생성하거나 생성 refs 에서 anchor 회피.
+
+### 자동격상 알고리즘 (preflight 순서)
+
+"validate basic 통과 후 격상" 은 #11 (JSON status ↔ handoff topic status) 순환이다. 격상 조건은 *최종 validate 이전의 validate-basic-equivalent **preflight*** 로 산출한다.
+
+1. seed.topics 전량 materialize. 최초 status = seed 기준 `draft`.
+2. preflight — 각 topic 의 AUTO marker / frontmatter sync / refs target / data-model JSON parse·dependencies·`unresolved_refs` 를 *검사만* (status 미변경).
+3. promotion set — spec-derived (api·data-model·interface·error-handling) 중 preflight 통과한 것만. data-model 은 JSON `unresolved_refs` 가 *비어있을 때만* 격상.
+4. promotion set status 를 `handoff_ready` 로 갱신 — **seed/handoff source status 와 data-model JSON status 를 *동일* 값으로 함께** (#11 정합).
+5. category status — *모든 하위 topic 이 격상된 카테고리만* `handoff_ready`. 하나라도 draft 면 category `draft` 유지 (#5 정합).
+6. `build-handoff.py` → 최종 `validate-extraction.py --level basic` (격상 후 실행).
+
+- status 쓰기 위치 — materializer 가 `_contract_seed.yaml` 의 topic/category status 를 갱신 (build-handoff.py 가 seed 를 읽으므로 promotion 이 seed 에 반영돼야 handoff yaml 에 전달). `build-handoff.py` 자체는 무변경.
+- `draft` 로 남는 topic 은 최종 handoff 의 `tasks.*.read` 필수 참조에서 제외 (validate #4 는 target 존재만 보고 draft 를 막지 않으므로 materializer 가 보장).
 
 ## 자주 틀리는 지점
 - `_contract_seed.yaml` 없이 도구를 직접 호출했는가 — build-handoff.py 가 SystemExit.

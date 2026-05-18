@@ -529,6 +529,65 @@ def _schema_node(
     return out
 
 
+def _root_node(
+    schema: dict,
+    current_file: pathlib.Path,
+    handoff_topic_index: dict[str, str],
+    visited: set[tuple[str, str]],
+    no_docx_fallback: bool,
+    unresolved: list[dict],
+) -> dict:
+    """root schema 를 JSON node 로. _schema_node 는 항상 type=object 라
+    scalar/enum/anyOf root (NFType/NfInstanceId/SupportedFeatures 등) 의
+    type·enum·pattern·format 을 잃는다 — 본 helper 가 그 손실을 막는다."""
+    # object — properties / allOf-with-properties / type=object
+    if (schema.get("type") == "object" or "properties" in schema
+            or "additionalProperties" in schema
+            or any(isinstance(a, dict) and (a.get("properties") or a.get("required"))
+                   for a in (schema.get("allOf") or []))):
+        return _schema_node(
+            schema, current_file, handoff_topic_index, visited,
+            no_docx_fallback, unresolved,
+        )
+    # array
+    if schema.get("type") == "array":
+        return _resolve_to_node(
+            schema, current_file, handoff_topic_index, visited,
+            no_docx_fallback, unresolved,
+        )
+    # anyOf / oneOf — scalar 합성 (NFType: [{string,enum:[…]},{string}])
+    arms = schema.get("anyOf") or schema.get("oneOf")
+    if arms:
+        out: dict = {}
+        enum: list = []
+        for a in arms:
+            if not isinstance(a, dict):
+                continue
+            if a.get("type") and "type" not in out:
+                out["type"] = a["type"]
+            for k in ("format", "pattern"):
+                if k in a and k not in out:
+                    out[k] = a[k]
+            for e in a.get("enum") or []:
+                if e not in enum:
+                    enum.append(e)
+        if enum:
+            out["enum"] = enum
+        if "description" in schema and out:
+            out["description"] = schema["description"]
+        return out or {"type": "unknown"}
+    # scalar — type/format/pattern/enum/nullable
+    out = {}
+    if schema.get("type"):
+        out["type"] = schema["type"]
+    for k in ("format", "pattern", "enum", "nullable"):
+        if k in schema:
+            out[k] = schema[k]
+    if "description" in schema and out:
+        out["description"] = schema["description"]
+    return out or {"type": "unknown"}
+
+
 def emit_json(
     *,
     yaml_path: pathlib.Path,
@@ -557,7 +616,7 @@ def emit_json(
 
     unresolved: list[dict] = []
     visited: set[tuple[str, str]] = {(str(yaml_path), root_schema_name)}
-    body = _schema_node(
+    body = _root_node(
         root_schema, yaml_path, index, visited, no_docx_fallback, unresolved,
     )
 
@@ -588,6 +647,7 @@ def emit_json(
                 else str(yaml_path),
         },
         "root_schema": root_schema_name,
+        "root": body,
         "fields": body.get("properties", []),
         "dependencies": sorted(dependencies),
         "unresolved_refs": unresolved,
