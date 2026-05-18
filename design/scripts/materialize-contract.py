@@ -379,6 +379,15 @@ def main() -> None:
 
     for tid in promoted:
         topics[tid]["status"] = "handoff_ready"
+        # .md frontmatter status 도 함께 갱신 — 안 하면 seed/JSON=handoff_ready
+        # 인데 .md=draft 인 3-way split (frontmatter 만 patch, USER/AUTO 보존).
+        fp = REPO / topics[tid]["file"]
+        if fp.is_file():
+            t = fp.read_text(encoding="utf-8")
+            t2 = re.sub(r"(?s)(\A---\n.*?\nstatus: )\w+(\n.*?\n---\n)",
+                        r"\1handoff_ready\2", t, count=1)
+            if t2 != t:
+                fp.write_text(t2, encoding="utf-8")
         mf = topics[tid].get("machine_file")
         if mf and (REPO / mf).is_file():
             try:
