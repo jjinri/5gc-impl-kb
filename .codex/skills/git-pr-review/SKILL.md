@@ -1,13 +1,13 @@
 ---
 name: git-pr-review
-description: Git/GitHub pull request inspection and evidence-backed code review workflow for this repository. Use when the user asks to check, inspect, summarize, review, or audit a PR/branch before merge; examples include "PR 확인", "PR 리뷰", "이 PR 봐줘", "review current PR", "check GitHub PR", or requests to produce review comments. The workflow collects PR metadata, checks, commits, files, and diffs via git/gh, verifies local state, reviews for correctness/security/tests/docs, and reports prioritized findings without posting comments unless explicitly requested.
+description: Git/GitHub pull request inspection and evidence-backed code review workflow for this repository. Use when the user asks to check, inspect, summarize, review, or audit a PR/branch before merge; examples include "PR 확인", "PR 리뷰", "이 PR 봐줘", "review current PR", "check GitHub PR", or requests to produce review comments. The workflow collects PR metadata, checks, commits, files, and diffs via git/gh, verifies local state, reviews for correctness/security/tests/docs, reports prioritized findings, and posts the same review body back to the resolved GitHub PR as a comment by default unless the user opts out.
 ---
 
 # git-pr-review — PR 확인 후 리뷰 워크플로우
 
 ## 목적
 
-PR 또는 현재 브랜치를 merge 전에 확인하고, 근거 있는 코드 리뷰를 생성한다. 기본 동작은 **읽기 전용 리뷰**다. GitHub 에 comment/review 를 게시하거나 push/merge 하는 행동은 사용자가 명시적으로 요청했을 때만 한다.
+PR 또는 현재 브랜치를 merge 전에 확인하고, 근거 있는 코드 리뷰를 생성한다. 기본 동작은 **리뷰 후 GitHub PR comment 게시**다. 단, 대상 PR 이 정확히 하나로 resolve 되고 `gh` 인증이 가능할 때만 게시한다. push/merge/approve/request-changes 는 사용자가 명시적으로 요청했을 때만 한다.
 
 ## 입력 해석
 
@@ -16,7 +16,8 @@ PR 또는 현재 브랜치를 merge 전에 확인하고, 근거 있는 코드 �
 - 대상 PR 이 모호하거나 현재 브랜치 PR 을 특정할 수 없고 여러 open PR 이 있으면 리뷰를 시작하지 말고 후보 목록을 출력한 뒤 번호/URL/브랜치 재지정을 요청한다.
 - 후보 목록은 `bash .codex/skills/git-pr-review/scripts/list-pr-candidates.sh` 로 출력한다.
 - `--base <branch>` 는 gh PR base 를 찾지 못할 때의 비교 기준이다.
-- `--post` 또는 "댓글 달아" 같은 명시 요청이 있을 때만 GitHub review/comment 게시를 고려한다. 그 전에는 게시하지 않는다.
+- `--no-post` 또는 "댓글 달지 마" 같은 명시 요청이 있으면 GitHub 에 게시하지 않고 로컬 보고만 한다.
+- 기본 게시 방식은 `gh pr review --comment` 이다. blocking finding 이 있어도 기본은 comment-only 이며, `--request-changes` 또는 "변경 요청으로 등록" 같은 명시 요청이 있을 때만 request-changes review 를 사용한다.
 
 ## Workflow
 
@@ -84,7 +85,7 @@ Finding 은 반드시 재현 가능한 근거를 포함한다. 근거가 없으�
 
 ### 6. 출력 형식
 
-기본 출력은 한국어로 간결하게 작성한다.
+기본 출력은 한국어로 간결하게 작성한다. 이 본문은 최종 사용자 보고와 GitHub PR comment 의 단일 source 로 사용한다.
 
 ```text
 PR Review: <title or branch>
@@ -105,12 +106,16 @@ Verification run:
 - <command> → <result>
 
 Verdict: approve | request changes | comment only | blocked
+Posted: <review/comment URL or not posted + reason>
 ```
 
 Finding 이 없으면 "No blocking findings" 라고 쓰되, 확인한 범위와 실행한 검증을 반드시 적는다.
 
 ## Posting policy
 
-- 기본: GitHub 에 아무것도 게시하지 않는다.
-- 사용자가 `--post`, "리뷰 등록", "코멘트 달아"를 명시하면 게시 전 최종 review body 를 보여주고, destructive 하지 않은 `gh pr review --comment|--request-changes|--approve` 중 맞는 명령을 사용한다.
-- 승인(`--approve`)은 실제 blocking finding 이 없고 검증 evidence 가 충분할 때만 한다.
+- 기본: 정확히 resolve 된 GitHub PR 에 최종 review body 를 `gh pr review <target> --comment --body-file <tmp>` 로 게시한다.
+- 게시 전 조건: PR target 이 정확히 하나, PR 이 GitHub 에 존재, `gh` 가 사용 가능하고 인증됨, 사용자가 `--no-post` 하지 않음.
+- 게시 실패 시 `gh pr comment <target> --body-file <tmp>` 로 1회 fallback 한다. 둘 다 실패하면 로컬 보고에 `Posted: not posted + error` 를 남긴다.
+- `--request-changes` 또는 "변경 요청" 을 명시하고 blocking finding 이 있으면 `gh pr review --request-changes` 를 사용할 수 있다.
+- 승인(`--approve`)은 사용자가 명시적으로 승인 리뷰를 요청하고, 실제 blocking finding 이 없고, 검증 evidence 가 충분할 때만 한다. 일반 `git-pr-review` 기본값은 approve 가 아니라 comment-only 다.
+- target 이 모호하거나 로컬 diff fallback 리뷰이면 게시하지 않는다. 잘못된 PR 에 댓글을 남기는 external side effect 를 피한다.
