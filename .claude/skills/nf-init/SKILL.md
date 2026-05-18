@@ -12,7 +12,7 @@ allowed-tools: Bash(.venv/bin/python3 design/scripts/nf-manifest.py *) Bash(.ven
 ## 입력
 - `<nf>` — `nssf`, `nrf`, `amf` 등 NF 이름 (소문자, design/ 하위 폴더명).
 - `--primary <spec>` — NF 의 주 spec 번호 (점 포함, 예 `29.531`). 필수.
-- `--reset` — *파괴적 옵션*. contract 추출 산출물 (`design/<nf>/contract/`, `design/<nf>/_contract_status.yaml`, `handoff/<nf>/contract.yaml`) 만 `design/<nf>/_archive/<YYYYMMDD-HHMMSS>/` 로 mv 한 뒤 manifest 를 refresh 하고 ready 이면 seed 를 다시 auto-gen. `design/<nf>/_manifest.yaml`, `design/<nf>/_contract_seed.yaml`, `design/<nf>/architecture/`, `design/<nf>/module-decomposition/`, `dev/<nf>/` 는 보존한다. `--primary <spec>` 과 함께 써야 하며, 명시 flag 이므로 추가 [Y/n] 프롬프트 없이 즉시 archive 실행. 옮길 파일 표 + 보존 파일 표 + archive 위치는 항상 *결과 보고* 로 출력.
+- `--reset` — *파괴적 옵션*. contract 추출 산출물 (`design/<nf>/contract/`, `design/<nf>/_contract_status.yaml`, `handoff/<nf>/contract.yaml`) 만 `design/<nf>/_archive/<YYYYMMDD-HHMMSS>/` 로 mv 한 뒤 manifest 를 refresh 하고 ready 이면 seed auto-gen 을 호출한다. `design/<nf>/_manifest.yaml`, `design/<nf>/_contract_seed.yaml`, `design/<nf>/architecture/`, `design/<nf>/module-decomposition/`, `dev/<nf>/` 는 보존한다. 주의 — `_contract_seed.yaml` 도 보존 대상이라 `--reset` 만으로는 *기존 seed 가 재생성되지 않는다* (보수적 default). 도구 fix 후 stale seed 를 깨끗이 다시 만들려면 step 5 의 `--force` 를 함께 써야 한다. `--primary <spec>` 과 함께 써야 하며, 명시 flag 이므로 추가 [Y/n] 프롬프트 없이 즉시 archive 실행. 옮길 파일 표 + 보존 파일 표 + archive 위치는 항상 *결과 보고* 로 출력.
 - 인자 없으면 어느 NF 인지·주 spec 이 무엇인지 사용자에게 묻고 정지.
 
 > 다중 primary spec (예 NWDAF = 23.288 + 29.520) 은 sprint 후반에 도구 인자 확장 예정. 현재는 *대표 1개* 로 시작하고 나머지는 매니페스트에서 docx_clause_2 references 로 자동 검출.
@@ -91,7 +91,18 @@ manifest 의 `status.ready_for_build == true` 인 경우에만 실행.
 - 산출 — `design/<nf>/_contract_seed.yaml`.
 - yaml `paths` 의 모든 operationId 를 `api/<OpId>` 토픽으로, schema chain 을 `data-model/<Schema>` 토픽으로 자동 등록.
 - module-decomposition 카테고리 = `status: draft, topics 없음` — 사람이 후속 사이클에 보강.
-- 기존 seed 가 있으면 자동 산출 범위로 재생성한다. 이 자동 seed 가 legacy `_handoff.yaml` 수동 작성 단계를 대체한다.
+- 이 자동 seed 가 legacy `_handoff.yaml` 수동 작성 단계를 대체한다.
+- **기본은 보수적 — 기존 seed 가 있으면 보존하고 재생성하지 않는다** (`nf-seed-gen.py` 가 scoped 결정·수동 편집 손실을 막으려 `--force` 없이는 보존). 기존 seed 없을 때만 새로 생성.
+
+`--force` 운영 가이드.
+
+```bash
+.venv/bin/python3 design/scripts/nf-seed-gen.py <nf> --force
+```
+- `--force` 는 기존 seed 를 *덮어쓰고* 자동 산출 범위로 재생성한다.
+- 사용 시점 — (a) `nf-seed-gen.py`/`nf-manifest.py` 도구가 fix 된 뒤 stale seed 를 깨끗이 다시 만들 때 (예 schema_refs 노이즈 fix 후), (b) manifest `manual_overrides` 변경을 seed 에 반영해야 할 때, (c) 사용자 작업트리에 손상·stale `_contract_seed.yaml` 이 의심될 때.
+- 주의 — `--force` 는 seed 의 *사용자 수동 편집* 도 잃는다. scoped 결정이 seed 에 직접 들어있다면 `--force` 전에 그 결정을 manifest `manual_overrides` 로 옮겨라 (그래야 재생성 후에도 반영됨).
+- `--reset` (contract 산출물 archive) 과 무관 — `--force` 는 seed 파일 1 개의 재생성 여부만 제어한다.
 
 ### 6. 결과 보고
 - (`--reset` 시) archive 경로 + mv 된 파일 수.
