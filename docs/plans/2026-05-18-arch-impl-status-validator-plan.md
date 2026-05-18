@@ -1,7 +1,9 @@
 # nf-arch-status / nf-impl-status validator skill 신설 — 2026-05-18
 
-Status: in_progress
-Current objective: architecture·implementation-planning 산출의 *자기 일관성* 을 측정하는 read-only validator skill 2 개를 신설한다. contract 단계의 `/nf-status` 와 동격이되 책임이 분리된 arch/dev 단계 status 검사다.
+Status: closed (2026-05-18)
+Current objective: (closed) architecture·implementation-planning 산출의 *자기 일관성* 을 측정하는 read-only validator skill 2 개를 신설한다. contract 단계의 `/nf-status` 와 동격이되 책임이 분리된 arch/dev 단계 status 검사다.
+
+P0~P4 완료 — 단일 PR #21 머지 (`7974e5e`). 2 라운드 second-opinion 리뷰 (1 차 request changes: pass_anyway inert + render YAML 직렬화 근본버그 → commit `6b60a74`, 2 차 approve). 사이클 요약은 `docs/retros/2026-05-18-arch-impl-status-validator-summary.md`. Phase 2 (deep traceability id-relation gate 化) 는 해당 retro "다음 사이클 후보" 참고.
 
 retro `docs/retros/2026-05-18-templates-canonical-summary.md` "다음 사이클 후보" (3), retro 2026-05-14 후보 (3) + L110, ADR-0001 L54 가 예고한 follow-up. 사용자 결정 — (3) 진행. Pane 2 비교에서 우선순위 (3)→(7)→(1) 타당 + 과적합 완화책 합의.
 
