@@ -1,14 +1,22 @@
 # engineering-core-slots — eng_frozen blocking inventory profile
 #
-# ADR-0002 (Engineering Design Freeze). 사람/repo-policy 소유. PR review 필수.
+# ADR-0002 (Engineering Design Freeze) + ADR-0003 (Engineering Dependency
+# Closure, v2). 사람/repo-policy 소유. PR review 필수.
 # 본 파일 변경은 단순 schema 수정이 아니라 *파이프라인 정책 변경* — 모든 NF 의
 # eng_frozen 의미를 바꾼다. nf-eng-status.py 는 slot 상수를 하드코딩하지 않고
 # 본 파일을 read-only 로 읽어 inventory 의 core 절반을 구성한다 (나머지 절반은
 # per-NF 연기 레지스터: design/<nf>/architecture/decisions/ADR-0001-architecture-baseline.md).
 #
-# 버전 규약 — 파일명 무버전, 내부 version 필드 (rename churn 회피).
+# 버전 규약 — 파일명 무버전, 내부 version 필드.
+#
+# v2 (ADR-0003) — software-using slot 에 library/version closure 강제.
+#   * dependency_shape: software dependency 의 닫힌 결정 형태.
+#   * required_shape 필드 값은 object — {type: scalar} 또는
+#     {shape_ref: dependency_shape}. validator 가 shape_ref 로 분기.
+#   * sbi_http_framework → sbi_server_stack (server-only 명확화),
+#     sbi_client_stack 신설 (outbound NF 호출, required source = F architecture).
 
-version: 1
+version: 2
 
 # 모든 inventory row (core slot + 연기 레지스터 행) 공통 계약.
 common_row_fields:
@@ -17,62 +25,155 @@ common_row_fields:
   # ratified_by·date 는 *모든 frozen row* (decided ∪ explicitly_out_of_scope) 에
   # 필수 — 없으면 FAIL. AI-draft 가 status:decided 만 붙여 PASS 하는 loophole 차단.
   ratify_required_for: [decided, explicitly_out_of_scope]
-  # explicitly_out_of_scope 는 추가로 아래가 실질 내용(비어있지 않음)이어야 함.
   out_of_scope_substantive: [rationale, consequence, source]
+  # 주의 — common `source` = 결정 근거/참조. dependency 출처는 dependency_source
+  # (dependency_shape). 같은 row 두 의미 충돌 방지 (ADR-0003 차단1 해소).
 
-# core slot 12. 각 slot 은 required_shape (무조건) 또는 discriminant+variants
-# (conditional). slot 값이 `none`/`disabled`/explicitly_out_of_scope 여도 row 는
-# 존재해야 하며 rationale 이 그 제외를 정당화해야 한다 (NF-invariant 유지).
+# software dependency 의 닫힌 결정 형태. software-using slot 필드가
+# {shape_ref: dependency_shape} 로 참조 → validator 가 nested object 로 검사.
+dependency_shape:
+  required: [dependency_source, version_policy]
+  dependency_source_enum: [stdlib, third_party, generated, externalized, none]
+  version_policy_enum: [pinned, range, repo_lockfile, runtime_managed, externalized, none]
+  # package 는 dependency_source 가 아래에 없을 때 필수.
+  package_required_unless_dependency_source_in: [stdlib, externalized, none]
+
+# field shape 표기 — {type: scalar} | {type: non_empty_list} |
+# {shape_ref: dependency_shape}. (향후 arch_ref / enum 확장 가능.)
 slots:
 
   language:
-    required_shape: { name, version }
+    required_shape:
+      name: { type: scalar }
+      version: { type: scalar }
 
   runtime:
-    required_shape: { name, version }
+    required_shape:
+      name: { type: scalar }
+      version: { type: scalar }
 
-  sbi_http_framework:
-    required_shape: { name, http2 }
+  deployment_topology:
+    required_shape:
+      form: { type: scalar }
+
+  module_source_layout:
+    required_shape:
+      layout: { type: scalar }
+
+  sbi_server_stack:        # v1 sbi_http_framework rename (server-only)
+    required_shape:
+      server_runtime: { type: scalar }
+      http2_mode: { type: scalar }
+      framework: { shape_ref: dependency_shape }
+
+  sbi_client_stack:        # outbound NF 호출. required 진실 source = F architecture.
+    discriminant: required
+    variants:
+      "true":
+        required_shape:
+          required: { type: scalar }
+          source_arch_ref: { type: scalar }   # design/<nf>/architecture/ 하위 — validator 결정론 검사
+          targets: { type: non_empty_list }
+          http2_mode: { type: scalar }
+          timeout_retry_policy: { type: scalar }
+          client: { shape_ref: dependency_shape }
+      "false":
+        required_shape:
+          required: { type: scalar }
+          source_arch_ref: { type: scalar }
+          rationale: { type: scalar }
 
   schema_codegen:
-    # strategy 예: generate | handwrite | hybrid
-    required_shape: { tool, strategy }
+    required_shape:
+      generated_artifact_policy: { type: scalar }
+      tool: { shape_ref: dependency_shape }
 
   tls_security:
     discriminant: mode
     variants:
-      enabled:  { required: [mode, min_version, cipher_policy, mutual_auth] }
-      external: { required: [mode, externalized_to] }   # sidecar/mesh/ops 외부화
-      disabled: { required: [mode] }                     # dev-only; rationale 정당화 필수
+      enabled:
+        required_shape:
+          mode: { type: scalar }
+          min_version: { type: scalar }
+          cipher_policy: { type: scalar }
+          mutual_auth: { type: scalar }
+          tls_provider: { type: scalar }   # app_library | stdlib | externalized
+      external:
+        required_shape:
+          mode: { type: scalar }
+          externalized_to: { type: scalar }
+      disabled:
+        required_shape:
+          mode: { type: scalar }
+    conditional_dependency:
+      # discriminant 값이 enabled 이고 tls_provider=app_library 면 아래 필드 필수.
+      when: { variant: enabled, field: tls_provider, equals: app_library }
+      require:
+        tls_dependency: { shape_ref: dependency_shape }
 
   oauth2_token_validation:
     discriminant: enabled
     variants:
-      "true":  { required: [enabled, token_source, scope_check] }
-      "false": { required: [enabled] }                   # rationale 정당화 필수
+      "true":
+        required_shape:
+          enabled: { type: scalar }
+          token_validation_strategy: { type: scalar }   # jwks | introspection | externalized
+          lib: { shape_ref: dependency_shape }
+      "false":
+        required_shape:
+          enabled: { type: scalar }
+          rationale: { type: scalar }
+          # common `source` 가 이미 필수 — variant 에 재기재 안 함 (중복 회피).
 
   persistence:
     discriminant: backend
     variants:
-      rdbms:     { required: [backend, tables, columns, primary_key, indexes, constraints, migration_tool, migration_policy] }
-      kv:        { required: [backend, key_schema, durability] }
-      file:      { required: [backend, path_layout, durability] }
-      in_memory: { required: [backend, durability] }     # durability=none 명시 허용
-      none:      { required: [backend] }                 # rationale 정당화 필수
+      rdbms:
+        required_shape:
+          backend: { type: scalar }
+          tables: { type: scalar }
+          columns: { type: scalar }
+          primary_key: { type: scalar }
+          indexes: { type: scalar }
+          constraints: { type: scalar }
+          migration_tool: { type: scalar }
+          migration_policy: { type: scalar }
+          driver_or_orm: { shape_ref: dependency_shape }
+      kv:
+        required_shape:
+          backend: { type: scalar }
+          key_schema: { type: scalar }
+          durability: { type: scalar }
+          client: { shape_ref: dependency_shape }
+      file:
+        required_shape:
+          backend: { type: scalar }
+          path_layout: { type: scalar }
+          durability: { type: scalar }
+      in_memory:
+        required_shape:
+          backend: { type: scalar }
+          durability: { type: scalar }
+      none:
+        required_shape:
+          backend: { type: scalar }
 
   telemetry:
-    required_shape: { logging, metrics, tracing }
-
-  deployment_topology:
-    # form 예: single-process | sidecar | service-mesh
-    required_shape: { form }
-
-  module_source_layout:
-    # layout 예: 명명된 source tree 규약
-    required_shape: { layout }
-
-  test_build_tooling:
-    required_shape: { test_runner, build_tool }
+    required_shape:
+      logging: { shape_ref: dependency_shape }
+      metrics: { shape_ref: dependency_shape }
+      tracing: { shape_ref: dependency_shape }
 
   configuration_management:
-    required_shape: { source, secret_strategy, override_order }
+    required_shape:
+      secret_strategy: { type: scalar }
+      override_order: { type: scalar }
+      config: { shape_ref: dependency_shape }
+
+  test_build_tooling:
+    required_shape:
+      lockfile_policy: { type: scalar }
+      test_runner: { shape_ref: dependency_shape }
+      build_tool: { shape_ref: dependency_shape }
+      lint_tool: { shape_ref: dependency_shape }
+      typecheck_tool: { shape_ref: dependency_shape }

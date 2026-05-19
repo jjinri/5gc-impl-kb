@@ -4,6 +4,8 @@ Date: 2026-05-19
 Status: Accepted (2026-05-19)
 
 > Accepted — Proposed 시 요구한 사람 ratify 4건이 skill-build 사이클 (plan `docs/plans/2026-05-19-eng-design-freeze-skill-build-plan.md` R1~R5) 에서 사용자 승인으로 잠김: (1) `engineering/<nf>/` tracking policy = `engineering-design.md` 추적·`_engineering_status.yaml` gitignored, (2) core slot 12 + 내부 `version` 필드 (`design/schemas/engineering-core-slots.yaml`), (3) canonical 섹션 5, (4) `explicitly_out_of_scope` + 모든 frozen row `ratified_by`/`date` 필수 schema. 구현 = profile + `nf-eng-status.py` + `/nf-eng-design`·`/nf-eng-status`. Open choices 표는 Decided 로 해소됨.
+>
+> **Extended by ADR-0003 (2026-05-19).** profile policy 가 v1 → v2 로 확장됨 — software-using slot 에 software dependency/library/version closure 강제, `sbi_http_framework`→`sbi_server_stack` rename + `sbi_client_stack` 신설 (core slot 12→13). 본 ADR-0002 는 단계/게이트 구조 결정으로 유효하며 재정의되지 않는다. profile 강화 상세는 `docs/adr/ADR-0003-engineering-dependency-closure.md`.
 
 ## Context
 

@@ -127,6 +127,8 @@ def load_profile() -> tuple[dict, str | None]:
         return {}, f"profile 파싱 실패: {e}"
     if "version" not in d or "slots" not in d or "common_row_fields" not in d:
         return {}, "profile 에 version/slots/common_row_fields 필요"
+    if d.get("version") == 2 and "dependency_shape" not in d:
+        return {}, "profile v2 에 dependency_shape 필요"
     return d, None
 
 
@@ -314,40 +316,114 @@ def chk_rows_well_formed(rows: dict, profile: dict, inv_ids: list[str],
     return base
 
 
-def _shape_fields(slotdef: dict, row: dict) -> tuple[list[str], str | None]:
-    """slot 의 required field 이름 리스트 + (불충족 시) 사유."""
+def _active_shape(slotdef: dict, row: dict) -> tuple[dict, str | None]:
+    """slot 의 활성 required_shape (field→spec) 반환 + (불충족 시) 사유.
+    v2 — flat: slotdef.required_shape. conditional: discriminant 값으로
+    variant 선택 후 그 variant.required_shape. conditional_dependency 는
+    when 조건 충족 시 require 필드를 활성 shape 에 합친다."""
     if "required_shape" in slotdef:
-        rs = slotdef["required_shape"]
-        return (list(rs) if isinstance(rs, dict) else list(rs)), None
+        return dict(slotdef["required_shape"]), None
     if "discriminant" in slotdef:
         disc = slotdef["discriminant"]
         val = row.get(disc)
-        if val is None:
-            return [], f"discriminant `{disc}` 값 없음"
-        variants = slotdef.get("variants", {})
-        # PyYAML 은 bare `enabled: true|false` 를 bool 로 읽어 str(True)=="True"
-        # 가 되므로 variant 키("true"/"false")와 안 맞는다. 정상 YAML boolean
-        # 결정문이 false-negative 로 eng_frozen 을 막지 않게 정규화한다.
-        # profile variant 키는 전부 lowercase 라 .lower() 매칭이 안전.
+        if val in (None, ""):
+            return {}, f"discriminant `{disc}` 값 없음"
+        # bare YAML bool(true/false) → str(True)=="True" variant 미스 방지.
         key = str(val).strip().lower()
+        variants = slotdef.get("variants", {})
         var = variants.get(key)
         if var is None:
-            return [], (f"discriminant {disc}={val!r} 가 variants "
+            return {}, (f"discriminant {disc}={val!r} 가 variants "
                         f"{sorted(variants)} 에 없음")
-        return list(var.get("required", [])), None
-    return [], "slot 정의에 required_shape/discriminant 없음"
+        shape = dict(var.get("required_shape", {}))
+        cd = slotdef.get("conditional_dependency")
+        if cd:
+            w = cd.get("when", {})
+            if (str(w.get("variant", "")).lower() == key
+                    and str(row.get(w.get("field", ""), "")).strip()
+                        == str(w.get("equals", ""))):
+                shape.update(cd.get("require", {}))
+        return shape, None
+    return {}, "slot 정의에 required_shape/discriminant 없음"
+
+
+def _check_dependency(val, dep: dict) -> str | None:
+    """dependency_shape 충족 검사. None=OK, str=사유. dep=profile.dependency_shape."""
+    if not isinstance(val, dict):
+        return "dependency 객체 아님"
+    src_enum = {str(x).lower() for x in dep.get("dependency_source_enum", [])}
+    ver_enum = {str(x).lower() for x in dep.get("version_policy_enum", [])}
+    pkg_exempt = {str(x).lower() for x in
+                  dep.get("package_required_unless_dependency_source_in", [])}
+    src = str(val.get("dependency_source", "")).strip().lower()
+    if src not in src_enum:
+        return f"dependency_source={src!r} ∉ {sorted(src_enum)}"
+    vp = str(val.get("version_policy", "")).strip().lower()
+    if vp not in ver_enum:
+        return f"version_policy={vp!r} ∉ {sorted(ver_enum)}"
+    if src not in pkg_exempt and not str(val.get("package", "")).strip():
+        return f"package 필수 (dependency_source={src})"
+    return None
+
+
+def _check_field(name: str, spec, val, slot: str, nf: str,
+                 dep: dict) -> str | None:
+    """field 값을 spec 에 맞춰 검사. None=OK, str=사유."""
+    if not isinstance(spec, dict):
+        return f"{name} spec 형식 오류"
+    if "shape_ref" in spec:
+        if spec["shape_ref"] != "dependency_shape":
+            return f"{name} 알 수 없는 shape_ref {spec['shape_ref']}"
+        why = _check_dependency(val, dep)
+        return f"{name}: {why}" if why else None
+    t = spec.get("type")
+    if t == "non_empty_list":
+        if not isinstance(val, list) or not val:
+            return f"{name} non-empty list 아님"
+        return None
+    if t == "scalar":
+        if val in (None, "") or isinstance(val, (list, dict)):
+            return f"{name} scalar 값 없음"
+        # source_arch_ref 는 F architecture 결정론 traceability 검사.
+        if name == "source_arch_ref":
+            return _check_arch_ref(str(val), nf)
+        return None
+    return f"{name} 알 수 없는 type {t!r}"
+
+
+def _check_arch_ref(ref: str, nf: str) -> str | None:
+    """source_arch_ref 가 design/<nf>/architecture/ 하위 파일·(있으면) anchor.
+    'path#anchor' 또는 'path' 형식. 결정론 — F 산출 traceability."""
+    path_part = ref.split("#", 1)[0].strip()
+    prefix = f"design/{nf}/architecture/"
+    if not path_part.startswith(prefix):
+        return f"source_arch_ref 가 {prefix} 하위 아님: {path_part}"
+    p = REPO / path_part
+    if not p.is_file():
+        return f"source_arch_ref 파일 없음: {path_part}"
+    if "#" in ref:
+        anchor = ref.split("#", 1)[1].strip().lower()
+        text = p.read_text(encoding="utf-8").lower()
+        heads = {re.sub(r"[^a-z0-9]+", "-", ln.lstrip("# ").strip()).strip("-")
+                 for ln in text.splitlines() if ln.startswith("#")}
+        if anchor not in heads and anchor not in text:
+            return f"source_arch_ref anchor 없음: #{anchor}"
+    return None
 
 
 def chk_slot_typed_shape(rows: dict, profile: dict,
-                         rows_err: str | None) -> dict:
+                         rows_err: str | None, nf: str) -> dict:
     base = {"id": "eng_slot_typed_shape", "tier": 1,
-            "name": "core slot row 가 profile typed shape 충족 (conditional 포함)",
-            "criterion": "각 core slot row 가 required_shape 의 필드를, conditional "
-                         "slot 은 discriminant 값에 해당하는 variant 의 required "
-                         "필드를 모두 보유."}
+            "name": "core slot row 가 profile typed shape 충족 (v2 dependency closure)",
+            "criterion": "각 core slot row 가 활성 required_shape 의 필드를 보유하고, "
+                         "{shape_ref:dependency_shape} 필드는 dependency_source/"
+                         "version_policy/package 를, {type:non_empty_list}/{type:"
+                         "scalar} 는 형식을 충족. source_arch_ref 는 F architecture "
+                         "하위 파일·anchor 결정론 검사."}
     if rows_err:
         base.update(status="FAIL", current=rows_err, to_pass=["## Decisions 작성"])
         return base
+    dep = profile.get("dependency_shape", {})
     bad = []
     for slot, sdef in profile["slots"].items():
         r = rows.get(slot)
@@ -357,20 +433,25 @@ def chk_slot_typed_shape(rows: dict, profile: dict,
         # explicitly_out_of_scope 는 typed shape 면제 (제외 결정 자체가 합법).
         if r.get("status") == "explicitly_out_of_scope":
             continue
-        fields, why = _shape_fields(sdef, r)
+        shape, why = _active_shape(sdef, r)
         if why:
             bad.append(f"{slot}: {why}")
             continue
-        miss = [f for f in fields if f not in r or r.get(f) in (None, "")]
-        if miss:
-            bad.append(f"{slot} typed 필드 누락 {miss}")
+        for fname, fspec in shape.items():
+            if fname not in r:
+                bad.append(f"{slot}.{fname} 누락")
+                continue
+            e = _check_field(fname, fspec, r.get(fname), slot, nf, dep)
+            if e:
+                bad.append(f"{slot}.{e}")
     if bad:
         base.update(status="FAIL", current=f"불충족 — {bad}",
-                    to_pass=["profile 의 slot typed shape 에 맞춰 결정값 채움 "
-                             "(rdbms 면 tables/columns/PK/indexes/... 필수)"])
+                    to_pass=["profile v2 typed shape 충족 — software-using slot 은 "
+                             "{dependency_source,version_policy,package?} nested, "
+                             "sbi_client_stack.source_arch_ref 는 F architecture 참조"])
     else:
         base.update(status="PASS",
-                    current=f"{len(profile['slots'])} slot typed shape 충족",
+                    current=f"{len(profile['slots'])} slot v2 typed shape 충족",
                     to_pass=[])
     return base
 
@@ -558,7 +639,7 @@ def main() -> None:
          "criterion": "profile 유효해야 평가 가능.",
          "status": "FAIL", "current": "profile 무효로 평가 불가",
          "to_pass": ["profile 복구 후 재실행"]},
-        chk_slot_typed_shape(rows, profile, rows_err)
+        chk_slot_typed_shape(rows, profile, rows_err, nf)
         if not perr else
         {"id": "eng_slot_typed_shape", "tier": 1,
          "name": "core slot row 가 profile typed shape 충족",

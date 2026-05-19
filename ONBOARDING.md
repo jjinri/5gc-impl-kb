@@ -129,8 +129,8 @@ specs/ (사람: 3GPP 원본 투입)
 |---|---|
 | 트리거 | "/nf-eng-design nssf" (impl-status 후) |
 | skill | `/nf-eng-design` |
-| 입력 | `design/<nf>/architecture/**` (특히 `decisions/ADR-0001-architecture-baseline.md` `## Open choices` = 연기 레지스터, **F-hard**), `design/schemas/engineering-core-slots.yaml` (12 slot profile), `handoff/<nf>/contract.yaml` + contract data model/API/lifecycle, `dev/<nf>/` (soft 참조). |
-| AI agent | F/G+contract 근거로 12 core slot + per-NF 연기 레지스터 결정을 *초안 자동생성* (persistence backend 후보·DB schema 초안 tables/columns/PK/indexes/constraints/migration_policy 포함). canonical 5 섹션 + `## Decisions` ```yaml 블록. |
+| 입력 | `design/<nf>/architecture/**` (특히 `decisions/ADR-0001-architecture-baseline.md` `## Open choices` = 연기 레지스터, **F-hard**), `design/schemas/engineering-core-slots.yaml` (13 slot v2 profile), `handoff/<nf>/contract.yaml` + contract data model/API/lifecycle, `dev/<nf>/` (soft 참조). |
+| AI agent | F/G+contract 근거로 13 core slot + per-NF 연기 레지스터 결정을 *초안 자동생성* (persistence backend 후보·DB schema 초안 tables/columns/PK/indexes/constraints/migration_policy 포함). canonical 5 섹션 + `## Decisions` ```yaml 블록. |
 | 사람 | 초안 검토 후 **각 결정·`explicitly_out_of_scope` ratify** (`ratified_by`/`date`). engineering decision 은 spec-derived 아님 — ratify 전 frozen 아님. PR 리뷰·머지. |
 | 산출 | `engineering/<nf>/engineering-design.md` (git 추적, 사람 소유). |
 
