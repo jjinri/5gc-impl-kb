@@ -49,6 +49,12 @@ Git 작업 원칙은 [`AGENTS.md`](./AGENTS.md) 를 따른다.
 
 ---
 
+## 의사결정 제시
+
+비-trivial 의사결정을 사용자에게 선택지로 제시할 때, 진행 옵션과 나란히 **"Pane 2 에 의사결정 리뷰 요청"** (다른 pane 의 독립 인스턴스 second-opinion) 을 *항상* 선택지 중 하나로 포함한다. 본 repo 의 비-trivial = plan → second-opinion → PR 패턴상 분기 결정은 교차검토가 기본이다. trivial·되돌리기 쉬운 결정은 제외. self/other pane 구분은 `AGENTS.md` 와 memory 규칙을 따른다.
+
+---
+
 ## File Naming Convention
 
 ### Original (`specs/`) — 3GPP 원본 보존
