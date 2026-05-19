@@ -1,6 +1,7 @@
 # Engineering Design Freeze — skill-build 사이클 — 2026-05-19
 
-Status: in progress (2026-05-19)
+Status: closed (2026-05-19)
+종결: P1~P7 완료. PR #28 머지 (`d71f76e`, 3 커밋 `ce20baf` profile / `207e09b` mechanism / `de7f242` bool fix). Pane 2 review Medium 1건(bool discriminant false-negative) 반영 후 approve-ready 재확인. R1~R5 사용자 승인 = ADR-0002 Open choices ratify → Status Accepted. 회고 `docs/retros/2026-05-19-eng-design-freeze-skill-build-summary.md`. 후속(별 사이클) — `/nf-eng-design nssf` 첫 실행(NSSF 실 12 slot + 7 register 결정·33.501/38.413/AMF ratify) → 그 뒤 자율 코드 생성(프로젝트 최종 목표).
 Current objective: ADR-0002(Proposed)를 구현 — `engineering-core-slots.yaml` profile + `nf-eng-status.py` validator script + `/nf-eng-design`·`/nf-eng-status` 2 skills + 정책 문서(.gitignore·ONBOARDING·lifecycle ADR-0001) 갱신. Open choices 4건을 사람 ratify 로 잠근 뒤 ADR-0002 Status Proposed→Accepted.
 
 직전 사이클: grill-with-docs 2026-05-19 (PR #27 머지 `032ab80`, ADR-0002+CONTEXT.md). 본 사이클은 그 의도된 후속(ADR Consequences/Open choices 구현).
