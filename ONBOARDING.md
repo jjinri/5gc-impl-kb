@@ -1,7 +1,7 @@
 
 # 5gc-impl-kb — NF 개발 온보딩 (spec 준비 → dev harness 설계)
 
-본 문서는 3GPP spec 파일 준비부터 NSSF *개발 하네스 설계* (implementation-planning + 자기 일관성 검증) 까지의 전체 절차를, **사람이 하는 일** 과 **AI agent 가 하는 일** 로 나눠 정리한다. 실제 구현 코드 작성 (*AI agents 주도 개발 단계*) 은 본 문서 범위 밖 — 본 문서가 끝나는 지점이 그 단계의 입력이다.
+**프로젝트 최종 목표는 AI agent 가 3GPP spec 을 입력으로 완성된 NSSF 구현 코드를 자율 생성·빌드하는 것이다.** 본 문서는 그 목표로 가는 *개발 하네스 설계* 절차 — 3GPP spec 파일 준비부터 implementation-planning + 자기 일관성 검증 + Engineering Design Freeze 까지 — 를 **사람이 하는 일** 과 **AI agent 가 하는 일** 로 나눠 정리한다. 자율 코드 생성 단계 *자체* 의 절차는 본 문서가 다루지 않으며(범위 밖), `eng_frozen` PASS 가 그 단계로 넘어가는 입력 GO 신호다. 즉 코드 생성은 프로젝트의 목표지 제외 대상이 아니다 — 본 문서는 그 GO 게이트까지의 하네스를 다룬다.
 
 > 용어·단계 이름은 `docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md` 를 따른다. 정책은 `CLAUDE.md`, Git 원칙은 `AGENTS.md`.
 
@@ -18,7 +18,9 @@ specs/ (사람: 3GPP 원본 투입)
                           └─ /nf-arch-status ──[gate: arch_consistent]
                                 └─ /nf-impl-plan ─→ dev/<nf>/ (plan·tasks·test-matrix·traceability)
                                       └─ /nf-impl-status ──[gate: impl_consistent]
-                                            └─ ★ dev harness 설계 완료 — 구현 단계 입력 ★
+                                            └─ /nf-eng-design ─→ engineering/<nf>/engineering-design.md (사람 ratify)
+                                                  └─ /nf-eng-status ──[gate: eng_frozen]
+                                                        └─ ★ eng_frozen PASS — 자율 코드 생성 GO ★
 ```
 
 핵심 원칙.
@@ -119,11 +121,33 @@ specs/ (사람: 3GPP 원본 투입)
 | script | `design/scripts/nf-impl-status.py` → `dev/<nf>/_impl_status.yaml` |
 | AI agent | 필수 파일, canonical 섹션 exact-match, tasks.yaml schema + `trace_to`, frontmatter, traceability xref (advisory WARN) 검사. |
 | 사람 | FAIL 시 `/nf-impl-plan` 으로 반영. `manual_overrides.pass_anyway` 동일 규칙. |
-| gate | **`impl_consistent`** — Tier 1 binary AND. → PASS 시 **dev harness 설계 완료**. 이후가 *AI agents 주도 구현 단계* (본 문서 범위 밖). |
+| gate | **`impl_consistent`** — Tier 1 binary AND. → PASS 시 impl-planning 검증 완료. 다음 = 단계 I. |
+
+### 단계 I — Engineering Design Freeze (사람 소유 결정 freeze)
+
+| 항목 | 내용 |
+|---|---|
+| 트리거 | "/nf-eng-design nssf" (impl-status 후) |
+| skill | `/nf-eng-design` |
+| 입력 | `design/<nf>/architecture/**` (특히 `decisions/ADR-0001-architecture-baseline.md` `## Open choices` = 연기 레지스터, **F-hard**), `design/schemas/engineering-core-slots.yaml` (12 slot profile), `handoff/<nf>/contract.yaml` + contract data model/API/lifecycle, `dev/<nf>/` (soft 참조). |
+| AI agent | F/G+contract 근거로 12 core slot + per-NF 연기 레지스터 결정을 *초안 자동생성* (persistence backend 후보·DB schema 초안 tables/columns/PK/indexes/constraints/migration_policy 포함). canonical 5 섹션 + `## Decisions` ```yaml 블록. |
+| 사람 | 초안 검토 후 **각 결정·`explicitly_out_of_scope` ratify** (`ratified_by`/`date`). engineering decision 은 spec-derived 아님 — ratify 전 frozen 아님. PR 리뷰·머지. |
+| 산출 | `engineering/<nf>/engineering-design.md` (git 추적, 사람 소유). |
+
+### 단계 J — Engineering Design Freeze 검증 (게이트, 하네스 설계 완료)
+
+| 항목 | 내용 |
+|---|---|
+| 트리거 | "/nf-eng-status nssf" |
+| skill | `/nf-eng-status` (read-only 측정) |
+| script | `design/scripts/nf-eng-status.py` → `engineering/<nf>/_engineering_status.yaml` |
+| AI agent | profile ∪ 연기 레지스터 inventory 커버, slot typed shape (conditional 포함), 공통 필드·status·ratify·미결정표현 검사 (결정론 blocking). `advisory.impl_plan_alignment` 는 비차단. |
+| 사람 | FAIL 시 `/nf-eng-design` 으로 반영·ratify. `manual_overrides.pass_anyway` 동일 규칙. |
+| gate | **`eng_frozen`** — Tier 1 binary AND, 결정론. → PASS 시 **하네스 설계 완료 = 자율 코드 생성 GO**. 이후가 *AI agents 주도 자율 코드 생성* (프로젝트 최종 목표, 본 문서 절차 범위 밖 — 입력은 `eng_frozen` PASS). 상세 ADR-0002. |
 
 ---
 
-## 2. AI 주도 개발 단계 *전* — 스킬 / 워크플로우 / 산출물 요약
+## 2. 자율 코드 생성 *전* — 스킬 / 워크플로우 / 산출물 요약
 
 | 단계 | skill (canonical / alias) | 주 script | 핵심 산출물 | 추적 | gate |
 |---|---|---|---|---|---|
@@ -135,6 +159,8 @@ specs/ (사람: 3GPP 원본 투입)
 | F arch 검증 | `/nf-arch-status` | nf-arch-status.py | `_arch_status.yaml` | 비추적 | **arch_consistent** |
 | G impl-plan | `/nf-impl-plan` | (skill 내 생성) | `dev/<nf>/{plan,tasks,test-matrix,traceability}` | git | — |
 | H impl 검증 | `/nf-impl-status` | nf-impl-status.py | `_impl_status.yaml` | 비추적 | **impl_consistent** |
+| I eng-design | `/nf-eng-design` | (skill 내 생성) | `engineering/<nf>/engineering-design.md` | git | — |
+| J eng 검증 | `/nf-eng-status` | nf-eng-status.py | `_engineering_status.yaml` | 비추적 | **eng_frozen** |
 
 ### 사람 vs AI agent 책임 경계
 

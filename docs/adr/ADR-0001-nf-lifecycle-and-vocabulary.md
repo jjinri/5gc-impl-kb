@@ -23,6 +23,7 @@ Define the lifecycle in explicit stages and name canonical user-triggered skills
 | Contract validation | `/nf-status <nf>` | `/nf-contract-check <nf>` | Check whether the contract is ready for architecture design. |
 | Architecture design | none | `/nf-arch-design <nf>` | Convert contract into detailed module/runtime/state/test architecture. |
 | Implementation planning | none | `/nf-impl-plan <nf>` | Convert architecture into implementable tasks and test plan. |
+| Engineering Design Freeze | none | `/nf-eng-design <nf>` + `/nf-eng-status <nf>` | Freeze human-owned engineering decisions (`engineering/<nf>/engineering-design.md`); `eng_frozen` gate is the sole GO signal for autonomous code generation. See ADR-0002. |
 
 `nf-reset` remains deprecated. Reset is an explicit destructive option of the discovery stage, not an independent lifecycle skill.
 
@@ -54,3 +55,4 @@ Agent-internal work is the script/tool/check sequence performed inside that skil
 - 2026-05-14: `nf-status.py` measures contract-stage completeness only; architecture and implementation-planning stage status are out of scope and would belong to a separate future skill.
 - 2026-05-18: Added that separate future skill — `/nf-arch-status` (`design/scripts/nf-arch-status.py` → `design/<nf>/_arch_status.yaml`, gate `arch_consistent`) and `/nf-impl-status` (`design/scripts/nf-impl-status.py` → `dev/<nf>/_impl_status.yaml`, gate `impl_consistent`). Read-only, discover-based, no semantic judge; Phase 1 = exact canonical sections + required files + frontmatter + tasks schema, cross-ref is advisory WARN. Phase 2 (deep traceability id-relation gate) deferred to a separate cycle. Resolves the 2026-05-14 out-of-scope note above.
 - 2026-05-14: Renamed `design/<nf>/_handoff_seed.yaml` → `design/<nf>/_contract_seed.yaml` and `design/<nf>/_status.yaml` → `design/<nf>/_contract_status.yaml` to match the contract-stage vocabulary. Scripts, skills, tests, and `.gitignore` were updated; no compatibility aliases.
+- 2026-05-19: Added the Engineering Design Freeze stage between implementation planning and autonomous code generation (ADR-0002). `/nf-eng-design` generates `engineering/<nf>/engineering-design.md`; `/nf-eng-status` (`design/scripts/nf-eng-status.py` → `engineering/<nf>/_engineering_status.yaml`) reports gate `eng_frozen` (deterministic, blocking) and `advisory.impl_plan_alignment` (non-blocking). `eng_frozen` is the sole GO signal for autonomous code generation. Inventory = `design/schemas/engineering-core-slots.yaml` profile ∪ per-NF deferral register; no validator hardcoding.
