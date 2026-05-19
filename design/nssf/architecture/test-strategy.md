@@ -15,7 +15,7 @@ NSSF 의 architecture-level test seam 을 정의한다 — 어떤 경계가 unit
 ## Inputs (contract)
 
 - 8 API topics — input · output schema.
-- `error-handling` topic — operation × error 매트릭스.
+- `error-handling` topic — status code 목록 (operation×error 매트릭스는 spec/manual augmentation — `error-propagation.md` `## Inputs` 참조).
 - 본 architecture 의 4 모듈 + outbound dispatcher.
 
 ## Boundaries

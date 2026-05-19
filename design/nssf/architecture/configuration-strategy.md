@@ -14,7 +14,7 @@ NSSF 가 *외부 입력* 으로 받아야 하는 config 항목과 그 경계를 
 
 ## Inputs (contract)
 
-- `interface` topic — server URL, security scheme, supportedFeatures.
+- `interface` topic — server URL, security scheme, supportedFeatures (fresh-full 주의: 현 generated `interface` output 은 materializer `auto_interface` first-YAML-only 구현이라 첫 primary YAML 기반 partial — `overview.md` `## Inputs` 참조).
 - 8 API topics — operation 별 input 의 validation 규칙.
 
 ## Boundaries

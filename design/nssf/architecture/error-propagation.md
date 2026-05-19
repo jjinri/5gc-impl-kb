@@ -14,9 +14,10 @@ NSSF 의 8 operation × 응답 코드 × `ProblemDetails` 매핑 매트릭스를
 
 ## Inputs (contract)
 
-- `error-handling` topic — operation × response code 표.
+- `error-handling` topic — status code 목록 (operation×cause 매핑 부재 — 하단 fresh-full 주의 참조).
 - 8 API topics — operation 별 응답 코드 enumeration.
 - spec `application/problem+json` shape (RFC 7807, 3GPP 29.500 §5.2.7).
+- 주의 (2026-05-18 fresh-full contract 기준). 현 generated `error-handling` topic 은 status code 나열만 보유한다 (meaning 전부 `-`, operation×cause 매핑 부재). 아래 cause matrix (`INVALID_QUERY_PARAM` · `UNAUTHORIZED_NSSAI` · `NSSAI_NOT_AVAILABLE` 등) 는 contract-derived 가 아니라 3GPP TS 29.531 spec-valid manual augmentation 이며 current generated contract 에 trace 되지 않는다. 추출 심화는 별도 tooling follow-up.
 
 ## Boundaries
 

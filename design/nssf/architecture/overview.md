@@ -18,6 +18,7 @@ generated_date: 2026-05-14
 - API topics 8 — `api/NSSelectionGet`, `api/NSSAIAvailability{Put,Patch,Delete,Post,Unsubscribe,SubModifyPatch,Options}`.
 - 핵심 data-model topics — `data-model/{SliceInfoForRegistration, AuthorizedNetworkSliceInfo, NssaiAvailabilityInfo, AuthorizedNssaiAvailabilityInfo, NssfEventSubscriptionCreateData, NssfEventSubscriptionCreatedData, Snssai, Tai, PlmnId, NFType, PatchDocument, ...}`.
 - 공통 topics — `interface`, `error-handling`.
+- 주의 (2026-05-18 fresh-full contract 기준). `interface` topic 의 의도는 NF service-level 공통 표면 전체 대표지만, 현 generated `interface` output 은 materializer (`auto_interface`) 의 first-YAML-only 구현 때문에 `_manifest.yaml` `primary_files.yamls` 중 첫 번째 (`TS29531_Nnssf_NSSAIAvailability.yaml`) 기반 partial output 이며 `Nnssf_NSSelection` service-level metadata 가 누락된다. 본 architecture 의 full scope (두 service · 8 op) 근거는 `primary_files.yamls` 전체와 그로부터 산출된 8 api topic 이며 현 generated `interface` output 단독이 아니다.
 
 ## Boundaries
 

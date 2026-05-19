@@ -15,7 +15,7 @@ NSSF 가 어떤 runtime 책임을 가지는지 정의한다 — request-response
 ## Inputs (contract)
 
 - 8 API topics.
-- `interface` topic — server URL · HTTP/2 stream multiplexing 전제.
+- `interface` topic — server URL · HTTP/2 stream multiplexing 전제 (fresh-full 주의: 현 generated `interface` output 은 materializer `auto_interface` first-YAML-only 구현이라 첫 primary YAML 기반 partial — `overview.md` `## Inputs` 참조).
 
 ## Boundaries
 
