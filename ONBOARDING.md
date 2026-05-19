@@ -1,3 +1,4 @@
+
 # 5gc-impl-kb — NF 개발 온보딩 (spec 준비 → dev harness 설계)
 
 본 문서는 3GPP spec 파일 준비부터 NSSF *개발 하네스 설계* (implementation-planning + 자기 일관성 검증) 까지의 전체 절차를, **사람이 하는 일** 과 **AI agent 가 하는 일** 로 나눠 정리한다. 실제 구현 코드 작성 (*AI agents 주도 개발 단계*) 은 본 문서 범위 밖 — 본 문서가 끝나는 지점이 그 단계의 입력이다.

@@ -119,3 +119,16 @@ Finding 이 없으면 "No blocking findings" 라고 쓰되, 확인한 범위와 
 - `--request-changes` 또는 "변경 요청" 을 명시하고 blocking finding 이 있으면 `gh pr review --request-changes` 를 사용할 수 있다.
 - 승인(`--approve`)은 사용자가 명시적으로 승인 리뷰를 요청하고, 실제 blocking finding 이 없고, 검증 evidence 가 충분할 때만 한다. 일반 `git-pr-review` 기본값은 approve 가 아니라 comment-only 다.
 - target 이 모호하거나 로컬 diff fallback 리뷰이면 게시하지 않는다. 잘못된 PR 에 댓글을 남기는 external side effect 를 피한다.
+
+## Pane completion notification
+
+- GitHub 게시가 성공해 `Posted:` 값이 review/comment URL 또는 성공 상태로 확정되면, `pane-send` skill 로 pane 1 에 리뷰 완료 메시지를 보낸다.
+- 권장 명령:
+
+```bash
+printf '%s\n' "[Pane 2] git-pr-review <target> 완료 — Verdict: <verdict>, Posted: <url-or-status>" \
+  | bash .codex/skills/pane-send/scripts/pane-send.sh 1 --stdin
+```
+
+- 알림은 best-effort 후처리다. `pane-send` script 가 없거나 pane 1 이 없거나 송신에 실패해도 PR review 결과 자체는 실패로 바꾸지 말고, 최종 보고에 `Pane notify: skipped|failed + reason` 을 짧게 남긴다.
+- 게시하지 않은 리뷰(`--no-post`, ambiguous target, local fallback, gh 실패)는 pane 1 완료 알림 대상이 아니다.
