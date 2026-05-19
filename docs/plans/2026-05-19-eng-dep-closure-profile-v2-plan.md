@@ -1,6 +1,7 @@
 # Engineering Dependency Closure — profile v2 + ADR-0003 — 2026-05-19
 
-Status: in progress (2026-05-19)
+Status: closed (2026-05-19)
+종결: P1~P6 완료. PR #29 머지 (`3cf1aed`, 3 커밋 `162e487` profile v2 / `3c3d62d` migration / `e79de97` decision-support). ADR-0003 Accepted, ADR-0002 extension note. Pane 2 second-opinion 다회 라운드 build-ready + positive/negative fixture 독립 검증. 회고 `docs/retros/2026-05-19-eng-dep-closure-profile-v2-summary.md`. 후속(별 사이클) — `/nf-eng-design nssf` 첫 실행(NSSF 13 slot+7 register, C/Go/Python language 등 decision-support→사람 ratify) → eng_frozen PASS → 자율 코드 생성(프로젝트 최종 목표).
 Current objective: `engineering-core-slots.yaml` v1→v2 — software-using slot 에 library/package/version closure 를 강제해 `eng_frozen` 이 *코드 생성 가능 수준의 닫힌 결정* 을 요구하게 한다. 신 `ADR-0003`(profile policy 강화), validator/skill/문서 v2 동기화. **본 사이클 종료 후 별도 사이클로** `/nf-eng-design nssf` 첫 실행(본 사이클 명시적 제외 — 메커니즘만).
 
 선행: Engineering Design Freeze skill-build (PR #28 `d71f76e`, ADR-0002 Accepted). 본 사이클은 그 retro 가 식별한 후속 — slot typed shape 가 *어느 단계 결정* 은 강제하나 *library/version 닫힘* 은 약했던 gap. Pane 2 second-opinion 다회 라운드로 build-ready 승인.
