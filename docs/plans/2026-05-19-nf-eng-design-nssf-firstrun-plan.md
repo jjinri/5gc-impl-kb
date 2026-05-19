@@ -1,6 +1,7 @@
 # `/nf-eng-design nssf` 첫 실행 사이클 — 2026-05-19
 
-Status: open
+Status: closed (2026-05-19)
+종결: P1~P5 완료. PR #31 머지 (`4ac102f` — `9f30ec4` plan / `4279a8b` engineering-design freeze). NSSF 20 inventory(13 slot + 7 register) jjinri ratify, `gates.eng_frozen` PASS 8/0 = 자율 코드 생성 GO 달성. Pane 2 second-opinion ×4 (plan/rdbms/full-draft/PR#31) 반영 — SELECT regex blocker·stale 산문·json_runtime semantic gap fix, Lore-trailer finding 기각. 회고 `docs/retros/2026-05-19-nf-eng-design-nssf-firstrun-summary.md`. 후속(별 사이클) — 자율 코드 생성(프로젝트 최종 목표), profile v3 runtime-dep 강제 후보.
 Pane 2 second-opinion (codex gpt-5.5, 2026-05-19): 조건부 승인 — 보정 6건 (A→R-arch / embedded-TLS=rejected / oauth2 inbound·outbound 분리 / persistence 단일 backend / register slug 정합 / 산출 worktree 거주) 반영 완료.
 Current objective: NSSF 에 대해 `/nf-eng-design nssf` 첫 실행 — 13 core slot + per-NF 연기 레지스터 7행의 engineering decision 을 AI 초안 + slot 성격별 decision-support 로 작성, 사람 ratify 후 `engineering/nssf/engineering-design.md` freeze, `/nf-eng-status nssf` `gates.eng_frozen` PASS 달성. eng_frozen PASS = 자율 코드 생성 GO 신호 (프로젝트 최종 목표의 진입 게이트).
 
