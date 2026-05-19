@@ -15,8 +15,8 @@ inbound 8 operation 의 처리 시퀀스와 outbound notification 의 발송 시
 ## Inputs (contract)
 
 - 8 API topics — method · path · request body · response 정의.
-- `interface` topic — security scheme, server URL, 공통 SBI header.
-- `error-handling` topic — operation × response code 매트릭스.
+- `interface` topic — security scheme, server URL, 공통 SBI header (fresh-full 주의: 현 generated `interface` output 은 materializer `auto_interface` first-YAML-only 구현이라 첫 primary YAML 기반 partial — `overview.md` `## Inputs` 참조).
+- `error-handling` topic — status code 목록 (operation×cause 매트릭스는 spec/manual augmentation — `error-propagation.md` `## Inputs` 참조).
 
 ## Boundaries
 

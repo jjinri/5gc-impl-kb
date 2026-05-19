@@ -15,8 +15,8 @@ NSSF 의 두 service · 8 operation 책임을 4 모듈로 분해하고 seam 을 
 ## Inputs (contract)
 
 - 8 API topics — operation → 모듈 매핑의 입력.
-- `interface` topic — 모든 모듈이 공유하는 HTTP/2·OAuth2·SBI header 전제.
-- `error-handling` topic — 모든 모듈의 ProblemDetails 매핑 책임 공통.
+- `interface` topic — 모든 모듈이 공유하는 HTTP/2·OAuth2·SBI header 전제 (fresh-full 주의: 현 generated `interface` output 은 materializer `auto_interface` first-YAML-only 구현이라 첫 primary YAML 기반 partial — `overview.md` `## Inputs` 참조).
+- `error-handling` topic — 모든 모듈의 ProblemDetails 매핑 책임 공통 (fresh-full 주의: 현 generated error-handling output 은 status code 목록만 — `error-propagation.md` `## Inputs` 참조).
 
 ## Boundaries
 

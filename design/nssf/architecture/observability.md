@@ -15,7 +15,7 @@ NSSF 의 log · metric · trace · audit point 와 correlation 전파 정책을 
 ## Inputs (contract)
 
 - 8 API topics — operation 별 호출 signal.
-- `interface` topic — `3gpp-Sbi-Correlation-Info` / `3gpp-Sbi-Producer-Id` 등 SBI header.
+- `interface` topic — `3gpp-Sbi-Correlation-Info` / `3gpp-Sbi-Producer-Id` 등 SBI header (fresh-full 주의: 현 generated `interface` output 은 materializer `auto_interface` first-YAML-only 구현이라 첫 primary YAML 기반 partial — `overview.md` `## Inputs` 참조).
 
 ## Boundaries
 
