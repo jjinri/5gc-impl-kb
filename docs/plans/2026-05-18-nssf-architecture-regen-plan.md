@@ -1,6 +1,7 @@
 # NSSF architecture 재생성 — 2026-05-18
 
-Status: in progress (2026-05-18)
+Status: closed (2026-05-19)
+종결: (E)~(F) 완료. PR #25 (arch caveat + plan/follow-up, merge `b1694ab`) + PR #26 (CLAUDE.md 의사결정 제시 정책, merge `04d3ea9`) 머지. PR #25 Pane 2 review Medium 1건 반영 후 approve-ready 재확인. 사이클 회고는 `docs/retros/2026-05-19-nssf-architecture-regen-summary.md`. tooling follow-up (auto_interface/auto_error) 은 본 plan `## Follow-up` 기록대로 별도 사이클. local main sync 는 메인 repo 에 Pane2 미커밋 작업 존재로 자동 제외 — Pane2/사용자 수동.
 Current objective: fresh-full materialization 사이클(PR #24)로 재생성된 NSSF contract 를 입력으로 `/nf-arch-design nssf` 를 실행해 architecture 를 재생성하고, PR #16/#20 으로 머지된 canonical architecture baseline 과 diff 를 *의도적으로* 검토한 뒤 `/nf-arch-status nssf` (gate `arch_consistent`) 로 검증, 별도 PR 로 올린다.
 
 직전 fresh-full materialization 사이클(PR #24 `4967274`, retro+plan-close `a56e333`)의 *의도적 후속* — 그 사이클에서 tooling/contract-generator 작업과 architecture 재생성을 분리하기로 결정됨. 본 plan 은 tooling 변경 없이 NSSF 적용 (E)~(F) 만 수행한다.
