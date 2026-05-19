@@ -325,7 +325,12 @@ def _shape_fields(slotdef: dict, row: dict) -> tuple[list[str], str | None]:
         if val is None:
             return [], f"discriminant `{disc}` 값 없음"
         variants = slotdef.get("variants", {})
-        var = variants.get(str(val))
+        # PyYAML 은 bare `enabled: true|false` 를 bool 로 읽어 str(True)=="True"
+        # 가 되므로 variant 키("true"/"false")와 안 맞는다. 정상 YAML boolean
+        # 결정문이 false-negative 로 eng_frozen 을 막지 않게 정규화한다.
+        # profile variant 키는 전부 lowercase 라 .lower() 매칭이 안전.
+        key = str(val).strip().lower()
+        var = variants.get(key)
         if var is None:
             return [], (f"discriminant {disc}={val!r} 가 variants "
                         f"{sorted(variants)} 에 없음")
