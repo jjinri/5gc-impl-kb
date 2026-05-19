@@ -50,6 +50,8 @@ Engineering Design Freeze 단계의 산출 생성 skill 이다 (ADR-0002). `/nf-
 ## 핵심 원칙 (이유 포함)
 
 - **AI 초안 ≠ frozen.** AI 는 F/G+contract 를 근거로 13 slot + register 행의 결정을 *초안 자동생성* 할 수 있다 (특히 contract data model/API/lifecycle 로부터 persistence backend 후보와 DB schema 초안 `tables/columns/primary_key/indexes/constraints/migration_policy` 생성). 그러나 engineering decision 은 spec-derived 가 아니라 *사람 소유* — `ratified_by`/`date` 가 채워지기 전엔 frozen 이 아니며 `eng_frozen` 은 FAIL 이다. 사용자에게 초안 제시 후 ratify 를 명시적으로 받는다.
+- **decision support 의무 (비개발자 전제).** 사용자가 언어(C/Go/Python 등)·library·version·DB/HTTP/OAuth stack 을 *모를 수 있다*. 따라서 ratify 를 받기 전, AI 는 각 미결정 slot 에 대해 **considered 후보 ≥2**, **selection criteria**, **recommendation(+이유)**, **rejected alternatives(+기각 사유)**, **consequence(구현·운영 영향)** 를 제시해 사용자가 *정보에 근거해* 선택하도록 돕는다. "알아서 골라줘" 도 사용자가 추천을 ratify 하는 형태로 처리하되 후보·트레이드오프를 *먼저 보여준다*. 이 안내 산물은 해당 row 의 `rationale`/`consequence` + (선택) `## References` 에 압축 기록한다. 단순 단일값 통보 금지 — 그건 사람 ratify 의 의미를 비운다.
+- **language/runtime — constraint vs choice.** 언어/런타임이 *프로젝트 고정 제약* 이면 `CONTEXT.md`/ADR 에 project constraint 로 *먼저* 기록하고 본 skill 은 그것을 *consume* (재선택 안 함). 선택 여지가 있으면 위 decision support 규칙대로 `language`/`runtime` slot 을 considered/criteria/recommendation/rejected/consequence 로 안내·ratify. F architecture 는 language-neutral 유지 — 선택·ratify 위치는 본 Engineering Design 단계다.
 - **DB schema 확정 위치는 본 단계.** F architecture 는 persistent state *필요성만* 식별하고, G impl-plan 은 persistence 결정을 *연기만* 한다. DB schema 를 자율 코드 생성 단계에서 임의 생성하게 두면 이미 GO 신호가 난 뒤라 너무 늦다 — 본 단계에서 초안→ratify 로 확정한다.
 - **제외도 결정이다.** 구현 안 하는 항목은 빈칸·`보류` 가 아니라 `explicitly_out_of_scope` + 실질 rationale/consequence/source + 사람 ratify 로 명시한다.
 - **다음 단계 자동 호출 안 함.** 산출 정합 후 `/nf-eng-status <nf>` 를 *권고만* 한다.
