@@ -1,0 +1,78 @@
+# engineering-core-slots — eng_frozen blocking inventory profile
+#
+# ADR-0002 (Engineering Design Freeze). 사람/repo-policy 소유. PR review 필수.
+# 본 파일 변경은 단순 schema 수정이 아니라 *파이프라인 정책 변경* — 모든 NF 의
+# eng_frozen 의미를 바꾼다. nf-eng-status.py 는 slot 상수를 하드코딩하지 않고
+# 본 파일을 read-only 로 읽어 inventory 의 core 절반을 구성한다 (나머지 절반은
+# per-NF 연기 레지스터: design/<nf>/architecture/decisions/ADR-0001-architecture-baseline.md).
+#
+# 버전 규약 — 파일명 무버전, 내부 version 필드 (rename churn 회피).
+
+version: 1
+
+# 모든 inventory row (core slot + 연기 레지스터 행) 공통 계약.
+common_row_fields:
+  required: [decision, status, rationale, consequence, source, ratified_by, date]
+  status_enum: [decided, explicitly_out_of_scope]
+  # ratified_by·date 는 *모든 frozen row* (decided ∪ explicitly_out_of_scope) 에
+  # 필수 — 없으면 FAIL. AI-draft 가 status:decided 만 붙여 PASS 하는 loophole 차단.
+  ratify_required_for: [decided, explicitly_out_of_scope]
+  # explicitly_out_of_scope 는 추가로 아래가 실질 내용(비어있지 않음)이어야 함.
+  out_of_scope_substantive: [rationale, consequence, source]
+
+# core slot 12. 각 slot 은 required_shape (무조건) 또는 discriminant+variants
+# (conditional). slot 값이 `none`/`disabled`/explicitly_out_of_scope 여도 row 는
+# 존재해야 하며 rationale 이 그 제외를 정당화해야 한다 (NF-invariant 유지).
+slots:
+
+  language:
+    required_shape: { name, version }
+
+  runtime:
+    required_shape: { name, version }
+
+  sbi_http_framework:
+    required_shape: { name, http2 }
+
+  schema_codegen:
+    # strategy 예: generate | handwrite | hybrid
+    required_shape: { tool, strategy }
+
+  tls_security:
+    discriminant: mode
+    variants:
+      enabled:  { required: [mode, min_version, cipher_policy, mutual_auth] }
+      external: { required: [mode, externalized_to] }   # sidecar/mesh/ops 외부화
+      disabled: { required: [mode] }                     # dev-only; rationale 정당화 필수
+
+  oauth2_token_validation:
+    discriminant: enabled
+    variants:
+      "true":  { required: [enabled, token_source, scope_check] }
+      "false": { required: [enabled] }                   # rationale 정당화 필수
+
+  persistence:
+    discriminant: backend
+    variants:
+      rdbms:     { required: [backend, tables, columns, primary_key, indexes, constraints, migration_tool, migration_policy] }
+      kv:        { required: [backend, key_schema, durability] }
+      file:      { required: [backend, path_layout, durability] }
+      in_memory: { required: [backend, durability] }     # durability=none 명시 허용
+      none:      { required: [backend] }                 # rationale 정당화 필수
+
+  telemetry:
+    required_shape: { logging, metrics, tracing }
+
+  deployment_topology:
+    # form 예: single-process | sidecar | service-mesh
+    required_shape: { form }
+
+  module_source_layout:
+    # layout 예: 명명된 source tree 규약
+    required_shape: { layout }
+
+  test_build_tooling:
+    required_shape: { test_runner, build_tool }
+
+  configuration_management:
+    required_shape: { source, secret_strategy, override_order }

@@ -1,9 +1,9 @@
 # ADR-0002 — Engineering Design Freeze 단계와 `eng_frozen` 게이트
 
 Date: 2026-05-19
-Status: Proposed
+Status: Accepted (2026-05-19)
 
-> Proposed → Accepted 전 사람 ratify 필수 4건: (1) `engineering/<nf>/` tracking policy, (2) `engineering-core-slots.yaml` 초기 slot 목록 + version 규약, (3) `engineering-design.md` canonical 섹션 집합, (4) `explicitly_out_of_scope` ratification 필드 최종 schema. 본 4건은 Open choices 표에 대응한다.
+> Accepted — Proposed 시 요구한 사람 ratify 4건이 skill-build 사이클 (plan `docs/plans/2026-05-19-eng-design-freeze-skill-build-plan.md` R1~R5) 에서 사용자 승인으로 잠김: (1) `engineering/<nf>/` tracking policy = `engineering-design.md` 추적·`_engineering_status.yaml` gitignored, (2) core slot 12 + 내부 `version` 필드 (`design/schemas/engineering-core-slots.yaml`), (3) canonical 섹션 5, (4) `explicitly_out_of_scope` + 모든 frozen row `ratified_by`/`date` 필수 schema. 구현 = profile + `nf-eng-status.py` + `/nf-eng-design`·`/nf-eng-status`. Open choices 표는 Decided 로 해소됨.
 
 ## Context
 
@@ -46,12 +46,14 @@ Status: Proposed
 
 ## Open choices
 
-| 항목 | 상태 | 참조 |
+모두 skill-build 사이클(2026-05-19, plan R1~R5 사용자 승인)에서 **Decided** 로 해소됨.
+
+| 항목 | 상태 | 결정 |
 |---|---|---|
-| `engineering-design.md` canonical 섹션 집합 | TBD | skill-build 사이클. arch/impl canonical-section 패턴 차용 |
-| `advisory.impl_plan_alignment` 산식 (G 전파 교차검사 기준) | TBD | nf-eng-status.py 설계 시 |
-| `engineering-core-slots.yaml` 버전 규약 (`v1` 파일명 vs 내부 `version:` 필드) | TBD | profile 도입 PR |
-| core slot 초기 목록 확정 (language·runtime·SBI/HTTP fw·schema/codegen·TLS·OAuth2 검증·persistence·telemetry·deploy·module layout·test/build 후보) | TBD | profile 도입 PR + 사람 ratify |
+| `engineering-design.md` canonical 섹션 집합 | Decided | `## Purpose`·`## Decisions`·`## Out of scope`·`## Open Questions`·`## References` (nf-eng-status.py `ENG_CANON` 과 single-source). `## Open Questions` 비어야 PASS |
+| `advisory.impl_plan_alignment` 산식 | Decided | `dev/<nf>/tasks.yaml` 의 미결정 표현(`TBD`/decide/choose/select/determine)+`## Decisions` 미매칭 → WARN, tasks.yaml 부재 → SKIP, 비차단 |
+| `engineering-core-slots.yaml` 버전 규약 | Decided | 파일명 무버전, 내부 `version: 1` 필드 (rename churn 회피) |
+| core slot 초기 목록 | Decided | 12 — language·runtime·sbi_http_framework·schema_codegen·tls_security·oauth2_token_validation·persistence·telemetry·deployment_topology·module_source_layout·test_build_tooling·configuration_management. conditional slot(persistence/tls_security/oauth2)은 discriminant typed shape |
 
 ## References
 
