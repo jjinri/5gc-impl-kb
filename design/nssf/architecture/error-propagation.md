@@ -53,10 +53,25 @@ NSSF 의 8 operation × 응답 코드 × `ProblemDetails` 매핑 매트릭스를
 
 | error 위치 | 매핑 책임 |
 |---|---|
-| transport 단계 (TLS, OAuth2 실패) | transport layer / 공통 utility |
+| transport 단계 — TLS handshake / mTLS peer verify 실패 | library + nghttp2 server. NF 는 connection 거절, ProblemDetails 응답 없음 (TLS alert 단계). log/metric 기록. |
+| transport 단계 — inbound OAuth2 bearer 검증 실패 | transport layer + JWT library 호출. 401 `INVALID_TOKEN` / 403 `INSUFFICIENT_SCOPE` → 공통 `ProblemDetailsMapper`. |
 | request validation 실패 (schema, query) | 공통 `RequestValidator` utility |
 | business logic 실패 (NSSAI 인증·존재) | 해당 모듈 (SelectionEngine / AvailabilityEngine / SubscriptionStore) 이 의도된 cause 반환 → 공통 `ProblemDetailsMapper` 가 응답으로 |
+| outbound TLS / mTLS handshake 실패 | NotificationDispatcher / NRF client — library 가 raise → retry 가능 카테고리 (timeout 과 동일 처리). |
+| outbound OAuth2 token endpoint 실패 | NotificationDispatcher — token endpoint 5xx/timeout → retry 가능, token endpoint 4xx (client_secret 오류 등) → dead-letter + alert metric. |
 | 내부 unexpected (panic / null ref) | 공통 fallback → 500 `SYSTEM_FAILURE` |
+
+### Security 실패 case (ADR-0004 baseline 관련)
+
+| case | 발생 단계 | 응답 / 처리 | retry 가능 |
+|---|---|---|---|
+| `tls_handshake_fail` | inbound transport 1 | TLS alert (connection reject), NF 응답 없음 | client 측 cert/CA 재확인 후 재연결 |
+| `mtls_peer_reject` | inbound transport 1-a | TLS alert + 403-equivalent connection reject | client cert 정정 필요 |
+| `oauth2_inbound_missing_token` | inbound 1-b | 401 `MISSING_TOKEN` ProblemDetails | client 가 token 부착 후 재시도 |
+| `oauth2_inbound_invalid_token` | inbound 1-b | 401 `INVALID_TOKEN` (signature/expiry/audience 실패) | client 가 token refresh 후 재시도 |
+| `oauth2_inbound_insufficient_scope` | inbound 1-b | 403 `INSUFFICIENT_SCOPE` | client 가 scope 확장 후 재시도 |
+| `outbound_tls_handshake_fail` | outbound dispatch | retry queue 진입 (5xx 류 처리), max_attempts 초과 시 dead-letter | retry 가능 |
+| `outbound_oauth2_token_acquire_fail` | outbound 5 | retry queue 진입 (token endpoint 5xx/timeout), client_secret invalid 류는 dead-letter + alert | 조건부 |
 
 ### outbound notification 실패
 
@@ -73,7 +88,9 @@ NSSF 의 8 operation × 응답 코드 × `ProblemDetails` 매핑 매트릭스를
 
 ## References
 
-- [[request-flow]] — error 발생 시점.
+- [[request-flow]] — error 발생 시점 (TLS / mTLS / OAuth2 단계 매핑).
 - [[observability]] — error 분류별 log/metric.
 - [[module-boundaries]] — 모듈 책임.
+- [[configuration-strategy]] — `tls.*` / `mtls.*` / `oauth2_*.*` config.
 - `handoff/nssf/contract.yaml` `error-handling` topic — 진실 출처.
+- `docs/adr/ADR-0004-project-security-baseline.md` — security capability 의무 source.

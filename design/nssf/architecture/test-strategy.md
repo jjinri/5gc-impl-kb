@@ -51,10 +51,21 @@ NSSF 의 architecture-level test seam 을 정의한다 — 어떤 경계가 unit
 | `subscription-unsubscribe` | SubscriptionStore | 삭제 후 notification 미발송 |
 | `notification-retry-on-5xx` | NotificationDispatcher | callback 5xx → retry → 성공 |
 | `notification-dead-letter` | NotificationDispatcher | max_attempts 초과 → dead-letter + metric |
-| `oauth2-client-credentials-enabled` | NotificationDispatcher + transport | token 부착 outbound POST |
+| `oauth2-client-credentials-enabled` | NotificationDispatcher + transport | token acquire (NRF token endpoint) → cache → 부착 outbound POST |
 | `oauth2-client-credentials-disabled` | NotificationDispatcher + transport | token 없이 outbound |
 | `correlation-end-to-end` | (전체) | inbound `3gpp-Sbi-Correlation-Info` → 모든 log / outbound 전파 |
 | `graceful-shutdown-drain` | runtime | in-flight request + retry queue drain |
+| `tls-handshake-success` | transport | inbound TLS handshake 정상, cert/CA load 후 connection 성립 |
+| `tls-handshake-fail` | transport | server cert 미스매치 / library default cipher mismatch → TLS alert reject |
+| `mtls-peer-verify-success` | transport | client cert chain + peer identity verify 통과 |
+| `mtls-peer-reject` | transport | client cert 미제공 또는 untrusted CA → connection reject |
+| `oauth2-inbound-valid-bearer` | transport | valid JWT → handler 진입, scope 검증 통과 |
+| `oauth2-inbound-missing-token` | transport | bearer 부재 → 401 `MISSING_TOKEN` ProblemDetails |
+| `oauth2-inbound-invalid-token` | transport | signature/expiry/audience 실패 → 401 `INVALID_TOKEN` |
+| `oauth2-inbound-insufficient-scope` | transport | scope 부족 → 403 `INSUFFICIENT_SCOPE` |
+| `oauth2-outbound-token-acquire` | NotificationDispatcher | token cache miss → NRF token endpoint 호출 → cache → outbound POST 부착 |
+| `oauth2-outbound-token-endpoint-fail` | NotificationDispatcher | token endpoint 5xx → retry queue, client_secret invalid → dead-letter |
+| `outbound-tls-handshake-fail` | NotificationDispatcher | callback receiver TLS 실패 → retry queue 진입 |
 
 ### test seam 강제
 
@@ -71,7 +82,9 @@ NSSF 의 architecture-level test seam 을 정의한다 — 어떤 경계가 unit
 ## References
 
 - [[module-boundaries]] — 모듈 별 단일 책임.
-- [[request-flow]] — 시나리오 시퀀스.
-- [[error-propagation]] — error case 매트릭스.
+- [[request-flow]] — 시나리오 시퀀스 (TLS / mTLS / OAuth2 단계 포함).
+- [[error-propagation]] — error case 매트릭스 (security 실패 case).
 - [[observability]] — test 시 검증할 signal.
+- [[configuration-strategy]] — security config keys.
 - `handoff/nssf/contract.yaml` — schema · 응답 코드 진실 출처.
+- `docs/adr/ADR-0004-project-security-baseline.md` — security capability 의무 source.
