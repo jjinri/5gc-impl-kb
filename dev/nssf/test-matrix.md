@@ -9,7 +9,7 @@ generated_date: 2026-05-14
 
 # NSSF Test Matrix
 
-> **Transitional 안내** (PR3 merge ~ PR4 merge 사이). 본 inventory 의 신규 security 시나리오 (`t-tls-*`, `t-mtls-*`, `t-oauth2-inbound-*`, `t-oauth2-outbound-*`) 는 *ADR-0004 baseline + architecture target* 을 source 로 인식. `engineering/nssf/engineering-design.md` 의 TLS / inbound OAuth2 / outbound OAuth2 / sbi_client_stack slot 은 PR4 (eng_frozen 재-ratify) 에서 ADR-0004 만족 결정으로 갱신 예정. 실 test 실행은 codegen 사이클 (PR4 merge 후) 입력.
+> **Source-of-truth** (resolved 2026-05-21). 본 inventory 의 신규 security 시나리오 (`t-tls-*`, `t-mtls-*`, `t-oauth2-inbound-*`, `t-oauth2-outbound-*`) 는 ADR-0004 baseline + architecture + engineering-design (TLS=OpenSSL app_library, OAuth2=libjwt+JWKS, sbi_client_stack=nghttp2+outbound TLS/OAuth2) 3 source 정합. 실 test 실행은 codegen 사이클 입력 — `nf-eng-status` `eng_frozen` PASS (GO 신호) 후 진입.
 
 ## Purpose
 
