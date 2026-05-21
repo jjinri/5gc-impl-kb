@@ -162,7 +162,7 @@ specs/ (사람: 3GPP 원본 투입)
 | 사람 | 초안 검토 후 **각 결정·`explicitly_out_of_scope` ratify** (`ratified_by`/`date`). engineering decision 은 spec-derived 아님 — ratify 전 frozen 아님. PR 리뷰·머지. |
 | 산출 | `engineering/<nf>/engineering-design.md` (git 추적, 사람 소유). |
 
-### 단계 J — Engineering Design Freeze 검증 (게이트, 하네스 설계 완료)
+### 단계 J — Engineering Design Freeze 검증 (게이트, tech decision freeze)
 
 | 항목 | 내용 |
 |---|---|
@@ -171,7 +171,7 @@ specs/ (사람: 3GPP 원본 투입)
 | script | `design/scripts/nf-eng-status.py` → `engineering/<nf>/_engineering_status.yaml` |
 | AI agent | profile ∪ 연기 레지스터 inventory 커버, slot typed shape (conditional 포함), 공통 필드·status·ratify·미결정표현 검사 (결정론 blocking). `advisory.impl_plan_alignment` 는 비차단. |
 | 사람 | FAIL 시 `/nf-eng-design` 으로 반영·ratify. `manual_overrides.pass_anyway` 동일 규칙. |
-| gate | **`eng_frozen`** — Tier 1 binary AND, 결정론. → PASS 시 **하네스 설계 완료 = 자율 코드 생성 GO**. 이후가 *AI agents 주도 자율 코드 생성* (프로젝트 최종 목표, 본 문서 절차 범위 밖 — 입력은 `eng_frozen` PASS). 상세 ADR-0002. |
+| gate | **`eng_frozen`** — Tier 1 binary AND, 결정론. *tech decision freeze* (library / DB / runtime / tool / operator-policy) 의무. → PASS 시 다음 = **`readiness_pack_ready` aggregate gate** (PR D 신설). `eng_frozen` 단독은 autonomous 코드 생성 GO 가 아니다 — readiness 의 한 구성요소. 상세 ADR-0002 (PR D 에서 wording 정정). |
 
 ---
 

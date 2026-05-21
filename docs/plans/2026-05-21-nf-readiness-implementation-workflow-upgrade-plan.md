@@ -362,4 +362,3 @@ Workflow upgrade is complete when:
 4. Agent Execution Pack has file-level work items, tests, verification commands, and team lane ownership.
 5. `/nf-implement nssf` can start without reading original specs for implementation semantics.
 6. Tracer-bullet becomes Phase 1 inside `/nf-implement`, not standalone human-managed lifecycle.
-
