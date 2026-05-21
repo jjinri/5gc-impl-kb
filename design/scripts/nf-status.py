@@ -625,15 +625,20 @@ def _read_json(path: pathlib.Path) -> dict | None:
         return None
 
 
-def _v2_applies(handoff: dict | None, profile: str) -> tuple[bool, str]:
-    """contract_implementable checks 는 handoff-v2 + stage_3/mixed 에만 적용."""
+def _v2_applies(handoff: dict | None, profile: str) -> tuple[str, str]:
+    """contract_implementable checks 적용 여부 + 사유.
+
+    반환 status — "APPLY" (체크 진행), "NOT_APPLICABLE" (다른 profile), "FAIL" (대상 profile 인데 입력 부재).
+    Pane 2 PR #40 review Finding 1 — 미지원 profile 만 NOT_APPLICABLE, stage_3/mixed 인데 handoff
+    부재면 FAIL 로 actionable to_pass 제공 (false PASS 방지).
+    """
     if profile not in {"stage_3_only", "mixed"}:
-        return False, f"profile={profile}"
+        return "NOT_APPLICABLE", f"profile={profile}"
     if handoff is None:
-        return False, "handoff yaml 없음"
+        return "FAIL", "handoff yaml 없음 — /nf-contract-build <nf> 먼저"
     if handoff.get("schema_version") != "handoff-v2":
-        return False, f"schema={handoff.get('schema_version')}"
-    return True, ""
+        return "NOT_APPLICABLE", f"schema={handoff.get('schema_version')}"
+    return "APPLY", ""
 
 
 def check_api_operation_complete(nf: str, handoff: dict | None, profile: str) -> dict:
@@ -646,9 +651,13 @@ def check_api_operation_complete(nf: str, handoff: dict | None, profile: str) ->
         ),
         "applies_to": ["stage_3_only", "mixed"],
     }
-    ok, reason = _v2_applies(handoff, profile)
-    if not ok:
+    status, reason = _v2_applies(handoff, profile)
+    if status == "NOT_APPLICABLE":
         base.update(status="NOT_APPLICABLE", current=reason, to_pass=[])
+        return base
+    if status == "FAIL":
+        base.update(status="FAIL", current=reason,
+                    to_pass=[f"/nf-contract-build {nf} 로 contract 산출 + handoff yaml 생성"])
         return base
     topics = handoff.get("topics") or {}
     api_topics = {tid: t for tid, t in topics.items() if tid.startswith("api/")}
@@ -657,7 +666,9 @@ def check_api_operation_complete(nf: str, handoff: dict | None, profile: str) ->
                     to_pass=["/nf-contract-build <nf> --api 로 api topic 생성"])
         return base
     incomplete = []
-    required_keys = ("method", "path", "responses")
+    # Pane 2 PR #40 review Finding 2 — criterion 가 명시한 6 필드 모두 강제.
+    required_keys = ("method", "path", "responses",
+                     "security_requirements", "error_responses", "source_refs")
     for tid, t in api_topics.items():
         body = t.get("contract") or t.get("body") or t
         missing = [k for k in required_keys if not body.get(k)]
@@ -665,14 +676,14 @@ def check_api_operation_complete(nf: str, handoff: dict | None, profile: str) ->
             incomplete.append(f"{tid}: missing {missing}")
     if incomplete:
         base.update(status="FAIL",
-                    current=f"api topic 불완전 {len(incomplete)}건",
+                    current=f"api topic 불완전 {len(incomplete)}/{len(api_topics)}건",
                     to_pass=[
-                        "/nf-contract-build <nf> --api 로 api topic 재생성 (build-handoff.py 가 method/path/responses 추출)",
+                        "/nf-contract-build <nf> --api 로 api topic 재생성 (build-handoff.py 가 method/path/responses + security_requirements + error_responses + source_refs 모두 emit 필요)",
                         *incomplete[:3],
                     ])
     else:
         base.update(status="PASS",
-                    current=f"api topics {len(api_topics)}건 모두 method/path/responses 보유",
+                    current=f"api topics {len(api_topics)}건 모두 6 키 (method/path/responses/security_requirements/error_responses/source_refs) 보유",
                     to_pass=[])
     return base
 
@@ -687,9 +698,13 @@ def check_data_model_field_tables_complete(nf: str, handoff: dict | None, profil
         ),
         "applies_to": ["stage_3_only", "mixed"],
     }
-    ok, reason = _v2_applies(handoff, profile)
-    if not ok:
+    status, reason = _v2_applies(handoff, profile)
+    if status == "NOT_APPLICABLE":
         base.update(status="NOT_APPLICABLE", current=reason, to_pass=[])
+        return base
+    if status == "FAIL":
+        base.update(status="FAIL", current=reason,
+                    to_pass=[f"/nf-contract-build {nf} 로 contract 산출 + handoff yaml 생성"])
         return base
     incomplete = []
     md_count = 0
@@ -737,9 +752,13 @@ def check_external_refs_resolved_or_classified(nf: str, handoff: dict | None, pr
         ),
         "applies_to": ["stage_3_only", "mixed"],
     }
-    ok, reason = _v2_applies(handoff, profile)
-    if not ok:
+    status, reason = _v2_applies(handoff, profile)
+    if status == "NOT_APPLICABLE":
         base.update(status="NOT_APPLICABLE", current=reason, to_pass=[])
+        return base
+    if status == "FAIL":
+        base.update(status="FAIL", current=reason,
+                    to_pass=[f"/nf-contract-build {nf} 로 contract 산출 + handoff yaml 생성"])
         return base
     unclassified = []
     json_count = 0
@@ -781,9 +800,13 @@ def check_schema_complexity_classified(nf: str, handoff: dict | None, profile: s
         ),
         "applies_to": ["stage_3_only", "mixed"],
     }
-    ok, reason = _v2_applies(handoff, profile)
-    if not ok:
+    status, reason = _v2_applies(handoff, profile)
+    if status == "NOT_APPLICABLE":
         base.update(status="NOT_APPLICABLE", current=reason, to_pass=[])
+        return base
+    if status == "FAIL":
+        base.update(status="FAIL", current=reason,
+                    to_pass=[f"/nf-contract-build {nf} 로 contract 산출 + handoff yaml 생성"])
         return base
     missing = []
     json_count = 0
@@ -819,9 +842,13 @@ def check_generated_wrapper_boundary_declared(nf: str, handoff: dict | None, pro
         ),
         "applies_to": ["stage_3_only", "mixed"],
     }
-    ok, reason = _v2_applies(handoff, profile)
-    if not ok:
+    status, reason = _v2_applies(handoff, profile)
+    if status == "NOT_APPLICABLE":
         base.update(status="NOT_APPLICABLE", current=reason, to_pass=[])
+        return base
+    if status == "FAIL":
+        base.update(status="FAIL", current=reason,
+                    to_pass=[f"/nf-contract-build {nf} 로 contract 산출 + handoff yaml 생성"])
         return base
     missing_json = []
     missing_md = []
@@ -865,9 +892,13 @@ def check_problem_details_matrix_complete(nf: str, handoff: dict | None, profile
         ),
         "applies_to": ["stage_3_only", "mixed"],
     }
-    ok, reason = _v2_applies(handoff, profile)
-    if not ok:
+    status, reason = _v2_applies(handoff, profile)
+    if status == "NOT_APPLICABLE":
         base.update(status="NOT_APPLICABLE", current=reason, to_pass=[])
+        return base
+    if status == "FAIL":
+        base.update(status="FAIL", current=reason,
+                    to_pass=[f"/nf-contract-build {nf} 로 contract 산출 + handoff yaml 생성"])
         return base
     topics = handoff.get("topics") or {}
     eh_topic = topics.get("error-handling") or topics.get("error_handling")
@@ -912,9 +943,13 @@ def check_no_spec_reread_required_for_implementation(nf: str, handoff: dict | No
         ),
         "applies_to": ["stage_3_only", "mixed"],
     }
-    ok, reason = _v2_applies(handoff, profile)
-    if not ok:
+    status, reason = _v2_applies(handoff, profile)
+    if status == "NOT_APPLICABLE":
         base.update(status="NOT_APPLICABLE", current=reason, to_pass=[])
+        return base
+    if status == "FAIL":
+        base.update(status="FAIL", current=reason,
+                    to_pass=[f"/nf-contract-build {nf} 로 contract 산출 + handoff yaml 생성"])
         return base
     issues = []
     # (a) data-model json unresolved + classification
@@ -927,14 +962,17 @@ def check_no_spec_reread_required_for_implementation(nf: str, handoff: dict | No
             if not isinstance(ref, dict) or not ref.get("classification"):
                 issues.append(f"{jpath.name}: 미분류 unresolved ref")
                 break
-    # (b) api topics
+    # (b) api topics — Pane 2 PR #40 review Finding 2: 6 키 모두 필수
     topics = handoff.get("topics") or {}
+    api_required = ("method", "path", "responses",
+                    "security_requirements", "error_responses", "source_refs")
     for tid, t in topics.items():
         if not tid.startswith("api/"):
             continue
         body = t.get("contract") or t.get("body") or t
-        if not (body.get("method") and body.get("path") and body.get("responses")):
-            issues.append(f"{tid}: method/path/responses 불완전")
+        missing = [k for k in api_required if not body.get(k)]
+        if missing:
+            issues.append(f"{tid}: missing {missing}")
     # (c) AUTO section TODO/TBD scan across contract topic .md
     contract_dir = _contract_dir(nf)
     if contract_dir.is_dir():
@@ -974,6 +1012,11 @@ GATE_DEFS = [
         "validate_extraction_basic",
     ]),
     ("contract_implementable", [
+        # Pane 2 PR #40 review Finding 1 — hard prerequisites (handoff 필수).
+        "handoff_yaml_valid",
+        "handoff_yaml_self_contained",
+        "validate_extraction_basic",
+        # Implementability 7 checks.
         "api_operation_complete",
         "data_model_field_tables_complete",
         "external_refs_resolved_or_classified",
