@@ -4,12 +4,15 @@ stage: implementation-planning
 status: draft
 source_architecture: design/nssf/architecture
 source_contract: handoff/nssf/contract.yaml
+source_security_baseline: docs/adr/ADR-0004-project-security-baseline.md
+source_engineering_design: engineering/nssf/engineering-design.md
 generated_date: 2026-05-14
+# transitional 안내. ADR-0004 + architecture (PR #34) = present truth. engineering-design 의 TLS / mTLS / oauth2_token_validation / sbi_client_stack slot 은 PR4 (eng_frozen 재-ratify) 에서 재결정 예정. 본 tasks 파일의 TLS / OAuth2 production-capable 항목은 ADR-0004 baseline + architecture target 으로 인식 (codegen 은 PR4 eng_frozen 재통과 후 진입). PR #33/#34 merge 됨, PR #35 가 dev 를 선반영.
 
 tasks:
   # ─── P1 — SBI inbound transport + 공통 utility ────────────────────────────
   - id: nssf-contract-types
-    title: 8 operation 의 공통 data-model type + schema 생성 전략 결정
+    title: 8 operation 의 공통 data-model type — openapi-generator(C) + cJSON 적용 정렬
     type: implementation-planning
     status: planned
     owner: dev
@@ -20,15 +23,16 @@ tasks:
       - design/nssf/module-decomposition/AvailabilityEngine.md
       - design/nssf/module-decomposition/SubscriptionStore.md
       - design/nssf/architecture/module-boundaries.md
+      - engineering/nssf/engineering-design.md
     acceptance:
       - 핵심 data-model (Snssai, Tai, PlmnId, NfInstanceId, NFType, SupportedFeatures, PatchDocument 등) 의 type inventory 가 contract topic 과 1:1 매핑.
-      - schema 생성 전략 (generated vs hand-written) 이 결정되거나 명시적 TBD.
-      - 결정이 P2~P5 task 의 type 의존성에 일관되게 전파.
+      - engineering decision (openapi-generator(C) generated type + cJSON pinned/vendored serializer) 이 모든 type 의존성에 일관 적용 — 임의 JSON 라이브러리 도입 금지.
+      - 생성물 repo commit + CI drift gate 가 P1 build harness 의 acceptance 에 포함.
     notes:
-      - 실제 코드 생성 또는 hand-written type 작성은 본 planning phase 의 책임 아님 — 결정 + 인터페이스 시그니처만.
+      - 본 task 는 적용 정책 + 인터페이스 시그니처만 산출. 실제 generated 산출물 commit·drift gate 구성은 codegen 사이클의 책임.
 
   - id: nssf-transport-server
-    title: SBI inbound HTTP/2 + TLS + OAuth2 token verify 골격
+    title: SBI inbound HTTP/2 + TLS + mTLS + inbound OAuth2 production-capable transport 골격
     type: implementation-planning
     status: planned
     owner: dev
@@ -36,13 +40,19 @@ tasks:
     trace_to:
       - design/nssf/architecture/runtime-model.md
       - design/nssf/architecture/configuration-strategy.md
+      - design/nssf/architecture/request-flow.md
       - handoff/nssf/contract.yaml
+      - docs/adr/ADR-0004-project-security-baseline.md
+      - engineering/nssf/engineering-design.md
     acceptance:
-      - HTTP/2 prior-knowledge 또는 ALPN h2 ingress 가 가능한 경계 정의.
-      - OAuth2 access token 검증을 transport 단계에서 처리하고 모듈로 비즈니스 책임 누출 없음.
+      - HTTP/2 server = nghttp2 (engineering-design 결정). prior-knowledge + ALPN h2 ingress 양쪽 지원.
+      - inbound TLS code path 가 *production-capable* 으로 존재 (ADR-0004 의무 1). cert/key/CA load via library context (start-up), `tls.enabled` config 가 enable/disable. dev disable 가능, production-capable path 항상 존재.
+      - inbound mTLS code path 가 *production-capable* 으로 존재 (ADR-0004 의무 2). client cert chain + peer identity verification, `mtls.enabled` + `mtls.client_cert_required` config.
+      - inbound OAuth2 bearer validation code path 가 *production-capable* 으로 존재 (ADR-0004 의무 3). JWKS fetch + signature/expiry/audience/scope 검증 via third-party JWT library, `oauth2_inbound.enabled` config.
       - 3gpp-Sbi-Correlation-Info / 3gpp-Sbi-Producer-Id 등 헤더가 inbound context 에 도달.
+      - TLS/JWT primitive 직접 구현 금지 (ADR-0004 의무 6) — maintained third-party library 만 사용.
     notes:
-      - 라이브러리 선택은 본 task 의 결정 사항.
+      - 라이브러리 후보 비교는 engineering-design.md `sbi_server_stack` (server lib, 현 ratify 완료 = nghttp2) / `tls_security` (TLS lib, PR4 재-ratify 예정) / `oauth2_token_validation` (inbound OAuth2 lib, PR4 재-ratify 예정) slot 의 책임. 본 task 는 결정된 library 를 적용 — TLS / inbound OAuth2 lib 는 PR4 merge 전까지 ADR-0004 baseline + architecture target 으로 인식, codegen 은 PR4 eng_frozen 재통과 후 진입.
 
   - id: nssf-request-validator
     title: 8 operation 의 공통 request validation utility
@@ -197,14 +207,16 @@ tasks:
       - design/nssf/architecture/error-propagation.md
     acceptance:
       - correlation-id 가 outbound `3gpp-Sbi-Correlation-Info` header 와 W3C traceparent 양쪽 전파.
-      - OAuth2 client credentials 부착이 config 옵션 (`oauth2.enabled` true 시).
-      - retry default — max_attempts=3, initial=1s, max=16s exponential backoff.
-      - 4xx → no retry. 5xx / timeout / connection error → retry. max 초과 → dead-letter (log + metric).
+      - outbound TLS / mTLS code path 가 *production-capable* 으로 존재 (ADR-0004 의무 1·2). `tls.enabled` / `mtls.enabled` config 가 enable/disable.
+      - "outbound OAuth2 client credentials / token attach code path 가 *production-capable* 으로 존재 (ADR-0004 의무 4). token cache miss → NRF (또는 별도 authz server) token endpoint 호출 → cache → `Authorization: Bearer <token>` 부착. `oauth2_outbound.enabled` config 가 enable/disable."
+      - retry default — max_attempts=10, initial=1s, cap=60s exponential backoff (engineering-design 결정).
+      - retry queue persist = `nssf_notification_retry_queue` (PostgreSQL, FOR UPDATE SKIP LOCKED row-lock dequeue). subscription 변경 + enqueue 1 트랜잭션 (at-least-once 보장).
+      - 4xx → no retry. 5xx / timeout / connection error / outbound TLS handshake fail / OAuth2 token endpoint 5xx → retry. OAuth2 client_secret invalid → 즉시 dead-letter + alert. max 초과 → dead-letter (log + metric).
       - ordering 보장 없음 (callback receiver idempotent 가정).
 
   # ─── P6 — repository ───────────────────────────────────────────────────────
   - id: nssf-repo-availability
-    title: availability repository interface + in-memory + persistent 1 종
+    title: availability repository interface + PostgreSQL(libpq) backend
     type: implementation-planning
     status: planned
     owner: dev
@@ -212,13 +224,15 @@ tasks:
       - nssf-transport-server
     trace_to:
       - design/nssf/architecture/state-persistence.md
+      - engineering/nssf/engineering-design.md
     acceptance:
-      - in-memory 와 persistent (file 권고) 두 backend 가 같은 interface.
+      - production backend = PostgreSQL via libpq (engineering-design 결정). 임의 backend 추가 금지.
+      - schema = `nssf_availability` table (state-persistence.md Schema section 참조) — core key column (tai_mcc/tai_mnc/tai_tac/tai_nid) + JSONB payload (availability_json / supported_snssai_json) 병행.
       - TAI 단위 atomic operation 지원.
-      - golden interface test — 두 backend 가 같은 동작.
+      - interface contract test — repository abstraction 이 PostgreSQL backend 와 일치. test seam 의 in-memory mock 은 unit/module-integration 한정.
 
   - id: nssf-repo-subscription
-    title: subscription repository interface + in-memory + persistent 1 종
+    title: subscription repository interface + PostgreSQL(libpq) backend
     type: implementation-planning
     status: planned
     owner: dev
@@ -226,10 +240,13 @@ tasks:
       - nssf-transport-server
     trace_to:
       - design/nssf/architecture/state-persistence.md
+      - engineering/nssf/engineering-design.md
     acceptance:
-      - subscription resource + filter 의 CRUD.
-      - 만료 / expiry index 지원 (background sweep 옵션).
-      - golden interface test.
+      - production backend = PostgreSQL via libpq (engineering-design 결정). 임의 backend 추가 금지.
+      - schema = `nssf_subscriptions` table (state-persistence.md Schema section 참조) — subscription resource + filter (JSONB) + expiry column + `(expiry)` index.
+      - 만료 / expiry index 지원 — default = lazy delete (lookup 시 expire), background sweep 옵션.
+      - filter 매칭 = JSONB GIN index (`filter_json`) — naive scan fallback.
+      - interface contract test — repository abstraction 이 PostgreSQL backend 와 일치. test seam 의 in-memory mock 은 unit/module-integration 한정.
 
   # ─── P7 — scenario + e2e ───────────────────────────────────────────────────
   - id: nssf-scenario-contract-tests
