@@ -45,10 +45,10 @@ NSSF 가 어떤 runtime 책임을 가지는지 정의한다 — request-response
 
 | stage | 책임 |
 |---|---|
-| start-up | configuration 로드, OAuth2 client 초기화 (옵션), SubscriptionStore backend 연결, NotificationDispatcher worker pool 기동 |
-| running | inbound handler + outbound dispatcher 동시 동작 |
-| graceful shutdown | inbound listener 종료 → in-flight request drain → NotificationDispatcher worker 가 retry queue flush 또는 timeout 후 종료 |
-| crash recovery | SubscriptionStore backend 가 persistent 면 restart 후 복원. retry queue 의 미발송 notification 은 backend 정책에 따라 (전송 보장 vs 손실 허용) — `## Open Questions` |
+| start-up | configuration 로드 → **TLS context init** (`tls.enabled=true` 시 cert/key/CA load via library context, library default cipher/version) → **mTLS peer config** (`mtls.enabled=true` 시 client cert config, peer verify mode) → **inbound OAuth2 token validator init** (`oauth2_inbound.enabled=true` 시 JWKS fetch from `issuer.jwks_uri`, validator + key cache 초기화) → **outbound OAuth2 token cache init** (`oauth2_outbound.enabled=true` 시 cache 초기화, lazy token acquire) → SubscriptionStore (PostgreSQL/libpq) 연결 → NotificationDispatcher worker pool 기동. 본 단계의 cert/JWKS load 실패는 fail-fast (해당 capability enable 시). |
+| running | inbound handler + outbound dispatcher 동시 동작. TLS context · token validator/cache 는 thread-safe shared resource (HTTP/2 multiplexing 가정). JWKS background refresh (default TTL 5 min) + outbound token TTL 기반 refresh. |
+| graceful shutdown | inbound listener 종료 → in-flight request drain → outbound NotificationDispatcher worker 가 retry queue flush 또는 timeout → TLS context · token cache · DB pool close 후 종료 |
+| crash recovery | SubscriptionStore (PostgreSQL) restart 후 복원. retry queue (`nssf_notification_retry_queue`) row-lock dequeue 로 미발송 notification 자연스 재개. TLS / token validator 는 stateless restart. |
 
 ### sync vs async 분리
 
@@ -59,12 +59,14 @@ NSSF 가 어떤 runtime 책임을 가지는지 정의한다 — request-response
 ## Open Questions
 
 - NotificationDispatcher 의 worker pool 크기 default 권고 여부.
-- 변경 이벤트 → outbound POST 의 *전송 보장 수준* (at-most-once / at-least-once / exactly-once) — backend 선택에 의존.
+- 변경 이벤트 → outbound POST 의 *전송 보장 수준* — 같은 PostgreSQL backend 의 `nssf_notification_retry_queue` 가 *at-least-once* 보장 (subscription 변경 + enqueue 1 트랜잭션 + row-lock dequeue). exactly-once 는 callback receiver idempotency 가정 필요.
 - HTTP/2 connection pool 의 *per-AMF* vs *shared* 정책.
 
 ## References
 
 - [[module-boundaries]] — 모듈 정의.
-- [[request-flow]] — sync · async 시점.
-- [[state-persistence]] — SubscriptionStore · retry queue persistence.
+- [[request-flow]] — sync · async 시점, TLS / mTLS / OAuth2 단계 매핑.
+- [[state-persistence]] — SubscriptionStore · retry queue persistence (PostgreSQL).
 - [[observability]] — runtime metric (active connections, in-flight requests, queue depth).
+- [[configuration-strategy]] — `tls.*` / `mtls.*` / `oauth2_inbound.*` / `oauth2_outbound.*` config.
+- `docs/adr/ADR-0004-project-security-baseline.md` — security capability 의무 source.
