@@ -59,7 +59,7 @@ NSSF 가 어떤 runtime 책임을 가지는지 정의한다 — request-response
 ## Open Questions
 
 - NotificationDispatcher 의 worker pool 크기 default 권고 여부.
-- 변경 이벤트 → outbound POST 의 *전송 보장 수준* (at-most-once / at-least-once / exactly-once) — backend 선택에 의존.
+- 변경 이벤트 → outbound POST 의 *전송 보장 수준* — 같은 PostgreSQL backend 의 `nssf_notification_retry_queue` 가 *at-least-once* 보장 (subscription 변경 + enqueue 1 트랜잭션 + row-lock dequeue). exactly-once 는 callback receiver idempotency 가정 필요.
 - HTTP/2 connection pool 의 *per-AMF* vs *shared* 정책.
 
 ## References

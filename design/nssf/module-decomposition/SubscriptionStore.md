@@ -37,8 +37,8 @@ NSSF inbound `Nnssf_NSSAIAvailability` 의 *subscription lifecycle* persistence 
 |---|---|
 | 책임 경계 | subscription resource 와 그 lifecycle 만. callback URI 호출은 NotificationDispatcher. |
 | id 발급 | spec 강제 형식 (UUID 또는 NSSF 정책) 따름. 본 architecture 는 형식 강제 안 함. |
-| lifetime 관리 | spec 의 `validityTime` 만료 시 lazy delete 또는 background sweep — backend 선택에 의존. |
-| filter 매칭 알고리즘 | 변경 이벤트의 `tai` + `change_type` 을 subscription 의 filter 와 매칭. naive scan 또는 indexed (backend 결정). |
+| lifetime 관리 | spec 의 `validityTime` 만료 시 lazy delete (default) 또는 background sweep — PostgreSQL `expiry` column 기반, `(expiry)` index 가 lookup 시 expire 또는 sweep 둘 다 지원. |
+| filter 매칭 알고리즘 | 변경 이벤트의 `tai` + `change_type` 을 subscription 의 filter 와 매칭. naive scan 또는 JSONB GIN index (`filter_json`) — PostgreSQL 인덱싱 정책. |
 | etag 지원 | 옵션. SubModifyPatch 에서 412 정책 (`error-propagation.md` 와 연동). |
 
 ## Open Questions

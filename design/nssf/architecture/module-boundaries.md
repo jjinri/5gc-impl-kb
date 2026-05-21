@@ -33,7 +33,7 @@ NSSF 의 두 service · 8 operation 책임을 4 모듈로 분해하고 seam 을 
 
 - `RequestValidator` 책임 — 8 operation 의 query·body schema validation. 별도 모듈 격상 안 함. 각 entry handler 안 함수 또는 공통 utility.
 - `ProblemDetailsMapper` 책임 — error → ProblemDetails 응답 매핑. 같은 위치 (공통 utility).
-- HTTP/2·OAuth2·SBI header 처리 — 모듈 외부의 transport 레이어 책임. dev 단계가 라이브러리로 처리.
+- 공통 transport capability — HTTP/2 (nghttp2 server/client) + TLS (cert/key/CA load + library handshake) + mTLS peer verify + inbound OAuth2 bearer validation + outbound OAuth2 token acquire/attach + SBI header parse. 모듈 외부의 transport 레이어 책임. ADR-0004 baseline 의무 production-capable code path 가 항상 존재 — config 가 enable/disable 만 결정. 구현 lib 후보 비교는 engineering-design.
 
 ## Decisions
 
@@ -47,12 +47,12 @@ NSSF 의 두 service · 8 operation 책임을 4 모듈로 분해하고 seam 을 
 ## Open Questions
 
 - AvailabilityEngine ↔ SubscriptionStore 의 *변경 이벤트* 가 in-process call 인지 message bus 인지 — 본 architecture 단계는 *추상 이벤트* 로만 명시, dev 가 선택.
-- NotificationDispatcher 의 retry queue 가 SubscriptionStore 와 같은 backend 공유하는지 분리하는지 — `state-persistence.md` `## Open Questions` 와 연동.
 
 ## References
 
 - [[overview]] — full scope 정의.
 - [[request-flow]] — 모듈 간 호출 시퀀스.
 - [[runtime-model]] — long-lived state 와 request-response 분리.
-- [[state-persistence]] — SubscriptionStore backend.
+- [[state-persistence]] — `nssf_subscriptions` / `nssf_availability` / `nssf_notification_retry_queue` PostgreSQL schema (단일 backend, retry queue 같은 DB).
+- `docs/adr/ADR-0004-project-security-baseline.md` — 공통 transport capability 의무 source.
 - `handoff/nssf/contract.yaml` — 8 API topics 의 method / path / depends_on.

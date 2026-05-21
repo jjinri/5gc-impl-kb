@@ -15,8 +15,8 @@ NSSF contract 가 `handoff_ready` 까지 도달 (PR #14 fresh tracking 정책 + 
 `design/nssf/architecture/` 의 문서 set (9 문서 + 본 ADR) 을 contract extraction 과 implementation planning 사이의 경계로 사용한다.
 
 - 모듈 분해 — `SelectionEngine`, `AvailabilityEngine`, `SubscriptionStore`, `NotificationDispatcher` 4 모듈. `RequestValidator` / `ProblemDetailsMapper` 는 공통 utility, 모듈 미격상.
-- outbound notification client — NotificationDispatcher 모듈에 *outbound HTTP/2 client* 책임 부속. OAuth2 client credentials 부착은 *config 옵션 (enable/disable)*. correlation-id 전파는 *필수* (inbound `3gpp-Sbi-Correlation-Info` → outbound 동일 header + log/trace 전파).
-- subscription persistence — SubscriptionStore 가 책임. backend 후보 (in-memory / file / external KV / RDBMS) 는 `state-persistence.md` 의 `## Open Questions` 에 보류, dev 단계가 *repository interface* 추상화 후 선정.
+- outbound notification client — NotificationDispatcher 모듈에 *outbound HTTP/2 client* 책임 부속. outbound TLS / mTLS / OAuth2 client credentials production-capable code path 는 *항상 존재* (ADR-0004 의무 1·2·4), config (`tls.enabled` / `mtls.enabled` / `oauth2_outbound.enabled`) 가 enable/disable 만 결정. correlation-id 전파는 *필수* (inbound `3gpp-Sbi-Correlation-Info` → outbound 동일 header + log/trace 전파).
+- subscription persistence — SubscriptionStore 가 책임. backend = PostgreSQL/libpq 단일 (engineering-design `persistence` slot 결정). `state-persistence.md` 의 `nssf_subscriptions` table schema 참조. repository interface 추상화 + test seam 의 in-memory mock 은 unit/module-integration 한정.
 - 33.501 spec 은 *project security baseline ADR-0004* 으로 흡수 (lifecycle dependency 아님). SBA TLS / mTLS / inbound OAuth2 / outbound OAuth2 *production-capable code path 의무* 는 본 architecture 가 명시 반영 (request-flow / runtime-model / configuration-strategy / error-propagation / test-strategy 참조). 38.413 spec 은 `_manifest.yaml` `manual_overrides.exclude` 로 운영 결정 보류 — AMF reallocation via RAN 미구현이 default.
 
 ## Consequences
