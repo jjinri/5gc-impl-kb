@@ -25,7 +25,7 @@ Status: Accepted (2026-05-19)
 
 4. **단계 의존성 (g3).** `eng_frozen` 의 hard 입력 = F architecture + per-NF 연기 레지스터(`design/<nf>/architecture/decisions/ADR-0001-architecture-baseline.md`) + engineering-core-slots profile + 사람 결정(`engineering-design.md`). G(impl-plan/tasks/test-matrix/traceability) 는 *soft advisory* — 결정이 task/build 에 전파됐는지 비차단 교차검사. validator 출력은 namespace 분리: `gates.eng_frozen = PASS/FAIL`, `advisory.impl_plan_alignment = PASS/WARN`. G advisory 가 blocking 으로 오염되지 않게 강제한다.
 
-5. **`보류`·`TBD`·`owner: dev` 처리.** `eng_frozen` PASS 는 모든 인벤토리 항목이 `decided` 또는 `explicitly_out_of_scope`. `TBD`·구현영향 없는 `보류`·결정 없는 `owner: dev`·agent 재량 잔존 = FAIL. `explicitly_out_of_scope` 는 *사람 ratify 필수* — agent 단독 선언 금지, 각 행에 `ratified_by`·`date`·`rationale`·`consequence`·`source/reference`. NSSF 의 33.501·38.413·AMF reallocation 보류는 `engineering-design.md` 작성 시 ratify 한다.
+5. **`보류`·`TBD`·`owner: dev` 처리.** `eng_frozen` PASS 는 모든 인벤토리 항목이 `decided` 또는 `explicitly_out_of_scope`. `TBD`·구현영향 없는 `보류`·결정 없는 `owner: dev`·agent 재량 잔존 = FAIL. `explicitly_out_of_scope` 는 *사람 ratify 필수* — agent 단독 선언 금지, 각 행에 `ratified_by`·`date`·`rationale`·`consequence`·`source/reference`. NSSF 의 33.501·38.413·AMF reallocation 보류는 `engineering-design.md` 작성 시 ratify 한다. (2026-05-21 update — 33.501 보류는 `docs/adr/ADR-0004-project-security-baseline.md` 으로 흡수되어 *project-wide security baseline* 으로 재해석됨. NSSF engineering-design 의 `tls_security`/`oauth2_token_validation` 등 slot 은 baseline 의무 만족 결정으로 재-ratify.)
 
 6. **검증 skill.** `/nf-eng-design`(산출 생성)·`/nf-eng-status`(측정) + `design/scripts/nf-eng-status.py`. 기존 contract/arch/impl status skill 의 책임분리 패턴(생성 ≠ 측정)을 따른다.
 

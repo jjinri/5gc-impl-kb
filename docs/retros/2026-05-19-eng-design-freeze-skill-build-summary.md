@@ -1,5 +1,7 @@
 # Engineering Design Freeze skill-build — 사이클 회고 (2026-05-19)
 
+> **Historical record — 2026-05-21 note.** 본 사이클의 skill/메커니즘 (`/nf-eng-design` + `/nf-eng-status` + `eng_frozen` 게이트) 자체는 유효. 본 retro 가 후속으로 가리킨 "NSSF 실 ratify (33.501/38.413/AMF 포함)" 작업은 2026-05-19 첫 실행 (PR #31) → 2026-05-21 security re-ratify (PR #33~#36) 2 사이클로 진행됨. 첫 실행의 `tls_security=external` / `oauth2=false` 결정은 ADR-0004 baseline 으로 재해석되어 NF 내부 production-capable code path 로 갱신.
+
 plan: `docs/plans/2026-05-19-eng-design-freeze-skill-build-plan.md` (closed)
 PR: #28 (`d71f76e` — `ce20baf` profile / `207e09b` mechanism / `de7f242` bool fix)
 선행: grill-with-docs 2026-05-19 (PR #27 `032ab80`, ADR-0002 Proposed + CONTEXT.md). 본 사이클이 그 의도된 후속 구현.

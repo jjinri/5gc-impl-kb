@@ -4,6 +4,7 @@
 **프로젝트 최종 목표는 AI agent 가 3GPP spec 을 입력으로 완성된 NSSF 구현 코드를 자율 생성·빌드하는 것이다.** 본 문서는 그 목표로 가는 *개발 하네스 설계* 절차 — 3GPP spec 파일 준비부터 implementation-planning + 자기 일관성 검증 + Engineering Design Freeze 까지 — 를 **사람이 하는 일** 과 **AI agent 가 하는 일** 로 나눠 정리한다. 자율 코드 생성 단계 *자체* 의 절차는 본 문서가 다루지 않으며(범위 밖), `eng_frozen` PASS 가 그 단계로 넘어가는 입력 GO 신호다. 즉 코드 생성은 프로젝트의 목표지 제외 대상이 아니다 — 본 문서는 그 GO 게이트까지의 하네스를 다룬다.
 
 > 용어·단계 이름은 `docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md` 를 따른다. 정책은 `CLAUDE.md`, Git 원칙은 `AGENTS.md`.
+> 파일 관리 기준은 `docs/artifact-management.md` 를 따른다 — 원본, 로컬 재생성 산출물, git 추적 lifecycle 산출물, 작업 계획/회고를 구분한다.
 
 ---
 
@@ -53,7 +54,7 @@ specs/ (사람: 3GPP 원본 투입)
 | skill | `/nf-spec-discover` (호환 alias `/nf-init`) |
 | script | `design/scripts/nf-manifest.py` (의존 spec 자동 검출 → `_manifest.yaml`), `design/scripts/nf-seed-gen.py` (ready 면 `_contract_seed.yaml` auto-gen) |
 | AI agent | skill 실행, manifest refresh, ready 판정, seed 생성, 부족 spec 을 priority 순 보고. |
-| 사람 | (1) 부족 spec 을 `specs/` 에 추가 후 재호출 (반복 가능). (2) `_manifest.yaml` `manual_overrides.exclude` 결정 — NF 컨텍스트 외 spec (예 33.501 SBA TLS, 38.413 NGAP) 지원 여부는 *정책 결정*, agent 독단 금지. (3) stale seed 의심·도구 fix 후 `nf-seed-gen.py --force` 판단. |
+| 사람 | (1) 부족 spec 을 `specs/` 에 추가 후 재호출 (반복 가능). (2) `_manifest.yaml` `manual_overrides.exclude` 결정 — 33.501 / 33.310 / 33.210 등 *project-wide security/profile spec* 은 `docs/adr/ADR-0004-project-security-baseline.md` 으로 흡수 (lifecycle extraction dependency 아님). 그 외 cross-NF/operational spec (예 38.413 NGAP) 지원 여부는 *정책 결정*, agent 독단 금지. (3) stale seed 의심·도구 fix 후 `nf-seed-gen.py --force` 판단. |
 | 산출 | `design/<nf>/_manifest.yaml`, `design/<nf>/_contract_seed.yaml` (둘 다 재생성물). |
 | gate | manifest `status.ready_for_build == true`. |
 
@@ -166,8 +167,8 @@ specs/ (사람: 3GPP 원본 투입)
 
 **사람만 하는 일.**
 - 3GPP spec 원본 확보·`specs/` 투입 (단계 A).
-- 정책·범위 결정 — `manual_overrides.exclude` (cross-NF/보안 spec 지원 여부), scope (full vs 축소), 운영 보류 (33.501 SBA TLS profile, 38.413 AMF reallocation via RAN).
-- 구현 기술 선택 (`TBD` owner: dev) — 언어·런타임·HTTP/TLS 라이브러리·persistence·telemetry·배포.
+- 정책·범위 결정 — `manual_overrides.exclude` (33.501/33.310/33.210 = ADR-0004 흡수, 38.413 AMF reallocation 운영 보류), scope (full vs 축소).
+- 구현 기술 선택 — engineering-design.md 의 사람 ratify (언어·런타임·HTTP/TLS 라이브러리·persistence·telemetry·배포). ADR-0004 security baseline (TLS/mTLS/OAuth2 production-capable code path) 의무.
 - PR 리뷰·머지 결정, `manual_overrides.pass_anyway` 명시 우회 결정.
 - 단계 진행 결정 (skill 은 다음 단계 자동 호출 안 함).
 

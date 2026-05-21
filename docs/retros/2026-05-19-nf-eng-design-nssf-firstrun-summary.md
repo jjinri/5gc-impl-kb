@@ -1,5 +1,7 @@
 # `/nf-eng-design nssf` 첫 실행 — 사이클 회고 (2026-05-19)
 
+> **Historical record — 2026-05-21 update.** 본 사이클의 `tls_security=external` / `oauth2_token_validation=false` (33.501 manifest exclude → mesh 외부화) frozen 결정은 *project 의 자율 코드 생성 목표* (production-capable code path 의무) 와 충돌함이 후속 검토에서 식별됨. 2026-05-21 사이클 (PR #33~#36) 에서 `docs/adr/ADR-0004-project-security-baseline.md` 신설 + NSSF engineering-design `tls_security=enabled (OpenSSL app_library)` / `oauth2_token_validation=enabled (libjwt+JWKS)` / `sbi_client_stack` outbound TLS·OAuth2 production-capable 으로 재-ratify. 본 retro 는 *첫 실행 시점의 결정 기록* 으로 보존, 현재 baseline 은 ADR-0004 가 진실 source.
+
 plan: `docs/plans/2026-05-19-nf-eng-design-nssf-firstrun-plan.md` (closed)
 PR: #31 (`4ac102f` merge — `9f30ec4` plan / `4279a8b` engineering-design freeze)
 선행: PR #25~#30 (ADR-0002/0003, profile v2, nf-eng-design/status skill). 본 사이클이 그 메커니즘의 첫 실 NF 적용.

@@ -54,5 +54,6 @@ python3 -m venv .venv
 
 - [`CLAUDE.md`](./CLAUDE.md) — repo-local agent 정책.
 - [`docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`](./docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md) — lifecycle 단계와 skill vocabulary 결정.
+- [`docs/artifact-management.md`](./docs/artifact-management.md) — 원본·재생성 산출물·reviewed lifecycle 산출물·작업 계획 문서의 파일 관리 기준.
 - [`docs/plans/2026-05-13-lifecycle-structure-skill-rename-plan.md`](./docs/plans/2026-05-13-lifecycle-structure-skill-rename-plan.md) — 구조 변경 실행 계획.
 - 세부 schema/gate/tool 동작은 `design/scripts/*` docstring 과 `.claude/skills/*/SKILL.md` 가 진실 출처다.
