@@ -9,6 +9,8 @@ generated_date: 2026-05-14
 
 # NSSF Test Matrix
 
+> **Transitional 안내** (PR3 merge ~ PR4 merge 사이). 본 inventory 의 신규 security 시나리오 (`t-tls-*`, `t-mtls-*`, `t-oauth2-inbound-*`, `t-oauth2-outbound-*`) 는 *ADR-0004 baseline + architecture target* 을 source 로 인식. `engineering/nssf/engineering-design.md` 의 TLS / inbound OAuth2 / outbound OAuth2 / sbi_client_stack slot 은 PR4 (eng_frozen 재-ratify) 에서 ADR-0004 만족 결정으로 갱신 예정. 실 test 실행은 codegen 사이클 (PR4 merge 후) 입력.
+
 ## Purpose
 
 본 문서는 NSSF 의 8 inbound operation + outbound notification + e2e 시나리오를 검증하는 test inventory 다. `design/nssf/architecture/test-strategy.md` 의 시나리오 카탈로그가 입력. 본 inventory 의 각 항목은 `dev/nssf/tasks.yaml` 의 task 와 `dev/nssf/traceability.md` 의 매핑으로 추적된다.

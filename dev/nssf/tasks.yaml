@@ -4,7 +4,10 @@ stage: implementation-planning
 status: draft
 source_architecture: design/nssf/architecture
 source_contract: handoff/nssf/contract.yaml
+source_security_baseline: docs/adr/ADR-0004-project-security-baseline.md
+source_engineering_design: engineering/nssf/engineering-design.md
 generated_date: 2026-05-14
+# transitional 안내. ADR-0004 + architecture (PR #34) = present truth. engineering-design 의 TLS / mTLS / oauth2_token_validation / sbi_client_stack slot 은 PR4 (eng_frozen 재-ratify) 에서 재결정 예정. 본 tasks 파일의 TLS / OAuth2 production-capable 항목은 ADR-0004 baseline + architecture target 으로 인식 (codegen 은 PR4 eng_frozen 재통과 후 진입). PR #33/#34 merge 됨, PR #35 가 dev 를 선반영.
 
 tasks:
   # ─── P1 — SBI inbound transport + 공통 utility ────────────────────────────
@@ -49,7 +52,7 @@ tasks:
       - 3gpp-Sbi-Correlation-Info / 3gpp-Sbi-Producer-Id 등 헤더가 inbound context 에 도달.
       - TLS/JWT primitive 직접 구현 금지 (ADR-0004 의무 6) — maintained third-party library 만 사용.
     notes:
-      - 라이브러리 후보 비교는 engineering-design.md `sbi_server_stack` / `tls_security` / `oauth2_token_validation` slot 의 책임 — 본 task 는 결정된 library 를 적용.
+      - 라이브러리 후보 비교는 engineering-design.md `sbi_server_stack` (server lib, 현 ratify 완료 = nghttp2) / `tls_security` (TLS lib, PR4 재-ratify 예정) / `oauth2_token_validation` (inbound OAuth2 lib, PR4 재-ratify 예정) slot 의 책임. 본 task 는 결정된 library 를 적용 — TLS / inbound OAuth2 lib 는 PR4 merge 전까지 ADR-0004 baseline + architecture target 으로 인식, codegen 은 PR4 eng_frozen 재통과 후 진입.
 
   - id: nssf-request-validator
     title: 8 operation 의 공통 request validation utility
@@ -205,7 +208,7 @@ tasks:
     acceptance:
       - correlation-id 가 outbound `3gpp-Sbi-Correlation-Info` header 와 W3C traceparent 양쪽 전파.
       - outbound TLS / mTLS code path 가 *production-capable* 으로 존재 (ADR-0004 의무 1·2). `tls.enabled` / `mtls.enabled` config 가 enable/disable.
-      - outbound OAuth2 client credentials / token attach code path 가 *production-capable* 으로 존재 (ADR-0004 의무 4). token cache miss → NRF (또는 별도 authz server) token endpoint 호출 → cache → `Authorization: Bearer <token>` 부착. `oauth2_outbound.enabled` config 가 enable/disable.
+      - "outbound OAuth2 client credentials / token attach code path 가 *production-capable* 으로 존재 (ADR-0004 의무 4). token cache miss → NRF (또는 별도 authz server) token endpoint 호출 → cache → `Authorization: Bearer <token>` 부착. `oauth2_outbound.enabled` config 가 enable/disable."
       - retry default — max_attempts=10, initial=1s, cap=60s exponential backoff (engineering-design 결정).
       - retry queue persist = `nssf_notification_retry_queue` (PostgreSQL, FOR UPDATE SKIP LOCKED row-lock dequeue). subscription 변경 + enqueue 1 트랜잭션 (at-least-once 보장).
       - 4xx → no retry. 5xx / timeout / connection error / outbound TLS handshake fail / OAuth2 token endpoint 5xx → retry. OAuth2 client_secret invalid → 즉시 dead-letter + alert. max 초과 → dead-letter (log + metric).

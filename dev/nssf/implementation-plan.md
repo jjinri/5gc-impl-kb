@@ -15,6 +15,21 @@ generated_date: 2026-05-14
 
 본 plan 은 `docs/adr/ADR-0004-project-security-baseline.md` (TLS/mTLS/OAuth2 capability 의무 source) + `engineering/nssf/engineering-design.md` (선택된 lib/구조) 두 source 를 따른다.
 
+### Transitional source-of-truth (PR3 merge ~ PR4 merge 사이)
+
+본 PR (#35) 머지 시점에 `engineering/nssf/engineering-design.md` 의 `tls_security` / `oauth2_token_validation` / `sbi_client_stack` slot 은 *옛 결정 (external / false / 부재)* 을 유지한다. PR4 (`/nf-eng-design` + `/nf-eng-status` 재실행) 에서 ADR-0004 baseline 만족하는 *internal-capable / configurable / TLS-capable client lib* 으로 재-ratify 된다.
+
+| slot | 현 engineering-design | dev 가 따르는 source (transitional) | PR4 merge 후 |
+|---|---|---|---|
+| `sbi_server_stack` | nghttp2 (확정) | engineering-design (변경 없음) | 동일 |
+| `tls_security` | external (mesh sidecar) | **ADR-0004 + architecture (PR #34) target** — NF 내부 TLS production-capable | engineering-design 재-ratify 결과 |
+| `oauth2_token_validation` (inbound) | false (NF 미구현) | **ADR-0004 + architecture target** — inbound bearer validation production-capable | engineering-design 재-ratify 결과 |
+| `sbi_client_stack` | 부재 | **engineering-design 재-ratify 에서 신설 예정** (libcurl HTTP/2+TLS / nghttp2 direct / nghttp2+libuv 후보) | engineering-design 재-ratify 결과 |
+| `persistence` | PostgreSQL/libpq (확정) | engineering-design (변경 없음) | 동일 |
+| `schema_codegen` | openapi-generator+cJSON (확정) | engineering-design (변경 없음) | 동일 |
+
+**codegen 시작은 PR4 eng_frozen 재통과 전까지 blocked.** 본 transitional 상태는 PR4 merge 시 해소.
+
 포함 범위.
 
 - inbound SBI handler (8 operation), request validation, ProblemDetails 매핑, observability.
