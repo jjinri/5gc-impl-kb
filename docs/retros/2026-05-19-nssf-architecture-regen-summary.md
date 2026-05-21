@@ -1,5 +1,7 @@
 # NSSF architecture 재생성 — 사이클 회고 (2026-05-19)
 
+> **Historical record — 2026-05-21 update.** 본 사이클 시점의 NSSF architecture 의 "33.501 mesh 외부화 / tls_security=external / oauth2 외부화" 가정은 2026-05-21 사이클 (PR #33~#36) 에서 `docs/adr/ADR-0004-project-security-baseline.md` 신설 + architecture security flow 재정렬 (PR #34) 로 재해석됨. 본 retro 의 architecture 상태는 *재생성 시점의 기록* 으로 보존, 현재 architecture 는 NF 내부 TLS/mTLS/OAuth2 production-capable code path 가 진실.
+
 plan: `docs/plans/2026-05-18-nssf-architecture-regen-plan.md` (closed)
 PR: #25 (arch caveat + plan/follow-up, merge `b1694ab`) · #26 (CLAUDE.md 의사결정 제시 정책, merge `04d3ea9`)
 직전 사이클: `docs/retros/2026-05-18-nf-build-fresh-full-materialization-summary.md` (fresh-full materialization — 본 사이클의 의도적 후속)

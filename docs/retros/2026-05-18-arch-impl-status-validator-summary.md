@@ -1,5 +1,7 @@
 # 2026-05-18 — nf-arch-status / nf-impl-status validator skill summary
 
+> **Historical record — 2026-05-21 note.** 본 retro 후속 항목의 "33.501·38.413 운영 결정 외부 입력 대기" 는 2026-05-21 사이클 (PR #33~#36) 에서 33.501 만 `docs/adr/ADR-0004-project-security-baseline.md` 으로 흡수 (38.413 운영 보류 유지). 본 retro 의 validator skill 작업 자체는 변동 없음.
+
 Status: complete
 Current objective: architecture·implementation-planning 산출의 자기 일관성을 측정하는 read-only validator skill 2 개를 신설한 사이클을 한 문서로 남긴다.
 

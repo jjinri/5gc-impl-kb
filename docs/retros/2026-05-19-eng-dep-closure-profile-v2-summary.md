@@ -1,5 +1,7 @@
 # Engineering Dependency Closure profile v2 — 사이클 회고 (2026-05-19)
 
+> **Historical record — 2026-05-21 note.** 본 사이클의 profile v2 (slot typed shape) 자체는 유효. 단 본 retro 의 후속 작업 항목 (33.501/38.413/AMF ratify) 중 33.501 결정은 2026-05-21 사이클 (PR #33~#36) 에서 `docs/adr/ADR-0004-project-security-baseline.md` 으로 흡수되어 NSSF engineering-design 재-ratify 됨. profile v3 강화 (typed shape level enforcement) 는 ADR-0004 의 Deferred follow-up.
+
 plan: `docs/plans/2026-05-19-eng-dep-closure-profile-v2-plan.md` (closed)
 PR: #29 (`3cf1aed` — `162e487` profile v2 / `3c3d62d` migration / `e79de97` decision-support)
 ADR: `docs/adr/ADR-0003-engineering-dependency-closure.md` (Accepted), ADR-0002 extension note

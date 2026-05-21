@@ -1,5 +1,7 @@
 # 2026-05-18 — 표준 섹션 templates 영구화 summary
 
+> **Historical record — 2026-05-21 note.** 본 retro 후속 항목의 "33.501·38.413 운영 결정 외부 입력 대기" 는 2026-05-21 사이클 (PR #33~#36) 에서 33.501 만 `docs/adr/ADR-0004-project-security-baseline.md` 으로 흡수 (38.413 운영 보류 유지). 본 retro 의 templates 작업 자체는 변동 없음.
+
 Status: complete
 Current objective: NSSF arch/dev full scope 사이클 (PR #16/#17, retro `docs/retros/2026-05-14-nssf-arch-dev-full-scope-summary.md`) 에서 검증된 표준 섹션 구조를 skill template + SKILL.md 에 영구화한 사이클을 한 문서로 남긴다.
 
