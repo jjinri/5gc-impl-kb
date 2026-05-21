@@ -1,7 +1,9 @@
 
-# 5gc-impl-kb — NF 개발 온보딩 (spec 준비 → dev harness 설계)
+# 5gc-impl-kb — NF 개발 온보딩 (specs → 자율 구현)
 
-**프로젝트 최종 목표는 AI agent 가 3GPP spec 을 입력으로 완성된 NSSF 구현 코드를 자율 생성·빌드하는 것이다.** 본 문서는 그 목표로 가는 *개발 하네스 설계* 절차 — 3GPP spec 파일 준비부터 implementation-planning + 자기 일관성 검증 + Engineering Design Freeze 까지 — 를 **사람이 하는 일** 과 **AI agent 가 하는 일** 로 나눠 정리한다. 자율 코드 생성 단계 *자체* 의 절차는 본 문서가 다루지 않으며(범위 밖), `eng_frozen` PASS 가 그 단계로 넘어가는 입력 GO 신호다. 즉 코드 생성은 프로젝트의 목표지 제외 대상이 아니다 — 본 문서는 그 GO 게이트까지의 하네스를 다룬다.
+**프로젝트 최종 목표는 AI agent 가 3GPP spec 을 입력으로 완성된 NSSF 구현 코드를 자율 생성·빌드하는 것이다.** 사람의 public workflow 는 *3 행위* 로 축소된다 — (1) `specs/` 에 3GPP 원본 투입, (2) `/nf-readiness <nf>` 요청, (3) `/nf-implement <nf>` 요청. 세부 lifecycle skill (`/nf-spec-discover`, `/nf-contract-build`, `/nf-arch-design`, `/nf-impl-plan`, `/nf-eng-design` 등) 은 `/nf-readiness` 내부 subroutine 으로 재배치되며 사람의 주 작업 surface 가 아니다.
+
+> **2026-05-21 workflow upgrade pending.** 본 문서의 lifecycle 흐름은 in-progress upgrade 사이클의 *현재 상태* 를 반영한다. 최종 public workflow (`/nf-readiness` + `/nf-implement`) 는 `docs/plans/2026-05-21-nf-readiness-implementation-workflow-upgrade-plan.md` 의 PR A~G 사이클로 단계적으로 도입된다. 본 PR (PR A) 는 정책/문서 layer 만 — 신규 wrapper skill 자체는 PR E 에서 신설.
 
 > 용어·단계 이름은 `docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md` 를 따른다. 정책은 `CLAUDE.md`, Git 원칙은 `AGENTS.md`.
 > 파일 관리 기준은 `docs/artifact-management.md` 를 따른다 — 원본, 로컬 재생성 산출물, git 추적 lifecycle 산출물, 작업 계획/회고를 구분한다.
@@ -10,26 +12,51 @@
 
 ## 0. 큰 그림
 
+### Target public workflow (upgrade 완료 후)
+
+```
+specs/ (사람: 3GPP 원본 투입)
+  └─ /nf-readiness <nf>  ─→  implementation readiness pack 자동 생성
+        └─ 내부 pipeline (spec discovery → contract build → contract implementability check
+            → arch design/status → impl-plan + readiness pack → impl-status
+            → eng-design/status → readiness_pack_ready)
+              └─ ★ readiness_pack_ready PASS ★
+                    └─ /nf-implement <nf>  ─→  장기 autonomous 구현
+                          └─ Phase 1 tracer-bullet proof
+                          └─ Phase 2 feedback integration
+                          └─ Phase 3 full feature waves
+                          └─ Phase 4 contract/security/e2e verification
+                          └─ Phase 5 hardening/review/merge
+                                └─ ★ full_nf_done ★
+```
+
+**최종 GO gate = `readiness_pack_ready`** (이전 `eng_frozen` 단독 GO 폐기). `eng_frozen` 은 readiness 의 한 구성요소 (tech decision freeze) 일 뿐, 단독으로 autonomous implementation GO 가 아니다.
+
+### Current internal pipeline (PR A 시점)
+
 ```
 specs/ (사람: 3GPP 원본 투입)
   └─ /nf-spec-discover ─→ _manifest.yaml + _contract_seed.yaml
         └─ /nf-contract-build ─→ design/<nf>/contract/ + handoff/<nf>/contract.yaml
-              └─ /nf-contract-check ──[gate: handoff_ready]
+              └─ /nf-contract-check ──[gate: handoff_ready · contract_implementable (PR B)]
                     └─ /nf-arch-design ─→ design/<nf>/architecture/ + module-decomposition/
                           └─ /nf-arch-status ──[gate: arch_consistent]
-                                └─ /nf-impl-plan ─→ dev/<nf>/ (plan·tasks·test-matrix·traceability)
-                                      └─ /nf-impl-status ──[gate: impl_consistent]
+                                └─ /nf-impl-plan ─→ dev/<nf>/ (impl-plan + tasks + test-matrix + traceability + readiness pack PR C)
+                                      └─ /nf-impl-status ──[gate: impl_consistent · impl_ready_for_codegen (PR C)]
                                             └─ /nf-eng-design ─→ engineering/<nf>/engineering-design.md (사람 ratify)
                                                   └─ /nf-eng-status ──[gate: eng_frozen]
-                                                        └─ ★ eng_frozen PASS — 자율 코드 생성 GO ★
+                                                        └─ readiness_pack_ready (PR D aggregate)
 ```
+
+본 lifecycle 단계들은 *PR E 에서 `/nf-readiness` 내부 subroutine 으로 재배치* 된다. 그때 사람은 더이상 단계별 skill 을 직접 호출하지 않는다 (third-party library 교체 / DBMS 교체 / security policy 변경 / spec 추가·제외 등 "새 계약" 시에만 예외적으로 직접 호출).
 
 핵심 원칙.
 
-- **lifecycle skill 은 다음 skill 을 자동 호출하지 않는다.** 각 단계는 자기 script/check 만 실행하고 다음 단계는 *추천* 으로 보고. 사람이 단계 진행을 결정한다.
+- **lifecycle skill 은 다음 skill 을 자동 호출하지 않는다.** 각 단계는 자기 script/check 만 실행하고 다음 단계는 *추천* 으로 보고. 사람이 단계 진행을 결정한다. (PR E `/nf-readiness` wrapper 신설 후엔 wrapper 가 단계 호출 책임.)
 - **산출물은 로컬 재생성물** (`_manifest.yaml`, `_contract_seed.yaml`, `contract/`, `handoff/`, `_*_status.yaml`) — git 비추적. 도구가 진실 출처. fresh checkout 후 skill 재실행으로 복원.
-- **architecture/dev 산출은 git 추적** — PR 사이클로 머지.
+- **architecture/dev/engineering 산출은 git 추적** — PR 사이클로 머지.
 - **status skill 은 측정만 (read-only).** 산출 수정은 생성 skill 의 책임.
+- **codegen agent 가 원본 OpenAPI YAML 을 *semantic rediscovery* 용도로 다시 읽으면 실패다.** 허용 = drift / regen / source trace 확인. 비허용 = 구현 판단 / data model 의미 재추출 / API operation matrix 재구성. 이 기준은 PR B (`contract_implementable`) + PR C (`impl_ready_for_codegen`) validator 가 강제한다.
 
 ---
 
@@ -135,7 +162,7 @@ specs/ (사람: 3GPP 원본 투입)
 | 사람 | 초안 검토 후 **각 결정·`explicitly_out_of_scope` ratify** (`ratified_by`/`date`). engineering decision 은 spec-derived 아님 — ratify 전 frozen 아님. PR 리뷰·머지. |
 | 산출 | `engineering/<nf>/engineering-design.md` (git 추적, 사람 소유). |
 
-### 단계 J — Engineering Design Freeze 검증 (게이트, 하네스 설계 완료)
+### 단계 J — Engineering Design Freeze 검증 (게이트, tech decision freeze)
 
 | 항목 | 내용 |
 |---|---|
@@ -144,7 +171,7 @@ specs/ (사람: 3GPP 원본 투입)
 | script | `design/scripts/nf-eng-status.py` → `engineering/<nf>/_engineering_status.yaml` |
 | AI agent | profile ∪ 연기 레지스터 inventory 커버, slot typed shape (conditional 포함), 공통 필드·status·ratify·미결정표현 검사 (결정론 blocking). `advisory.impl_plan_alignment` 는 비차단. |
 | 사람 | FAIL 시 `/nf-eng-design` 으로 반영·ratify. `manual_overrides.pass_anyway` 동일 규칙. |
-| gate | **`eng_frozen`** — Tier 1 binary AND, 결정론. → PASS 시 **하네스 설계 완료 = 자율 코드 생성 GO**. 이후가 *AI agents 주도 자율 코드 생성* (프로젝트 최종 목표, 본 문서 절차 범위 밖 — 입력은 `eng_frozen` PASS). 상세 ADR-0002. |
+| gate | **`eng_frozen`** — Tier 1 binary AND, 결정론. *tech decision freeze* (library / DB / runtime / tool / operator-policy) 의무. → PASS 시 다음 = **`readiness_pack_ready` aggregate gate** (PR D 신설). `eng_frozen` 단독은 autonomous 코드 생성 GO 가 아니다 — readiness 의 한 구성요소. 상세 ADR-0002 (PR D 에서 wording 정정). |
 
 ---
 
