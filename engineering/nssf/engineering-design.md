@@ -19,7 +19,7 @@ inputs:
 
 ## Decisions
 
-아래 `inventory_id: {row}` 매핑이 기계 계약(validator 파싱 대상). 20행 모두 **jjinri / 2026-05-19 ratify 완료 — frozen 상태** (`nf-eng-status` `gates.eng_frozen` PASS). 결정 변경 시 해당 행 재-ratify(`ratified_by`/`date` 갱신) 필요.
+아래 `inventory_id: {row}` 매핑이 기계 계약(validator 파싱 대상). 본 사이클의 *security re-ratify* (2026-05-21) — `tls_security` / `oauth2_token_validation` / `deployment_topology` / `sbi_server_stack` / `sbi_client_stack` / `configuration_management` 6 core slot + per-NF 연기 레지스터 (8행, architecture/ADR-0001 ## Open choices 와 정합) 가 `docs/adr/ADR-0004-project-security-baseline.md` baseline (TLS / mTLS / OAuth2 production-capable code path 의무) 을 반영해 갱신됐다. 변경 행은 `ratified_by: jjinri / date: 2026-05-21`. 미변경 행은 `2026-05-19` 유지. `nf-eng-status` `gates.eng_frozen` PASS 가 자율 코드 생성 GO.
 
 ```yaml
 language:
@@ -45,14 +45,14 @@ runtime:
   date: "2026-05-19"
 
 deployment_topology:
-  decision: "배포 = standalone container pod + service-mesh sidecar (mesh 가 TLS 종단·inbound authN)"
+  decision: "배포 = standalone container pod with NF internal TLS production-capable; mesh sidecar 는 선택적 layer (NF 의존 아님)"
   status: decided
-  form: "standalone container pod behind service-mesh sidecar; single native binary; TLS·inbound-auth externalized to mesh"
-  rationale: "선택가능. considered=[mesh-sidecar standalone, embedded-TLS NF]. embedded-TLS=rejected (tls_security=external 와 충돌 — TLS 외부화 시 NF 내장 TLS 실후보 아님). mesh 외부화가 33.501 SBA security 외부화 권고와 정합."
-  consequence: "NF 는 h2c(cleartext HTTP/2) listen, mesh sidecar 가 TLS·peer authN. NF 바이너리 TLS stack 불요 — 의존 축소."
-  source: "design/nssf/architecture/module-boundaries.md; design/nssf/_manifest.yaml manual_overrides.exclude 33.501."
+  form: "standalone container pod; single native binary with internal TLS stack (tls_security=enabled, app_library). service-mesh sidecar 는 추가 보안·관찰 layer 로 *선택적* 배치 가능 — NF 는 mesh 부재에도 production-capable (ADR-0004 의무 1·5). mesh 배치 시 sidecar 와의 통신은 mTLS or h2c (운영 정책)."
+  rationale: "ADR-0004 baseline 의무 1·5 반영. 이전 'mesh 외부화 단일값 close' 결정 폐기 — NF 가 mesh 의존 단일값으로 close 되면 mesh 없는 환경 (dev, edge, peer-to-peer) 에서 production-capable 아님. considered=[NF-internal-TLS standalone (채택), mesh-sidecar standalone (rejected: 단일값 close 위반), NF-internal-TLS + optional mesh (채택과 동일)]. NF 내장 TLS 가 default — mesh 는 추가 layer."
+  consequence: "NF 는 TLS 내장 (sbi_server_stack 에 nghttp2 + OpenSSL backend). mesh 부재에서도 inbound HTTPS/h2 + mTLS + OAuth2 bearer validation 가능. mesh 배치 시 sidecar 가 추가 외부 layer (NF 의존 아님). 33.310/33.210 세부는 operator-provided cert/config + library compliance (ADR-0004 의무 7)."
+  source: "docs/adr/ADR-0004-project-security-baseline.md 의무 1·5; design/nssf/architecture/module-boundaries.md; design/nssf/architecture/overview.md."
   ratified_by: "jjinri"
-  date: "2026-05-19"
+  date: "2026-05-21"
 
 module_source_layout:
   decision: "단일 CMake project, arch 4 모듈별 src/ 디렉터리"
@@ -65,39 +65,39 @@ module_source_layout:
   date: "2026-05-19"
 
 sbi_server_stack:
-  decision: "SBI server = nghttp2 기반 h2c, epoll 단일 프로세스"
+  decision: "SBI server = nghttp2 기반 h2 + h2c configurable, epoll 단일 프로세스. TLS 는 tls_security app_library backend (OpenSSL) 와 통합."
   status: decided
   server_runtime: "single-process event loop (epoll), C native"
-  http2_mode: "h2c (cleartext HTTP/2 prior-knowledge; TLS 는 mesh sidecar 종단)"
+  http2_mode: "h2 (HTTP/2 over TLS) when tls.enabled=true; h2c (prior-knowledge cleartext) fallback when tls.enabled=false (dev profile). production-capable code path 항상 존재 (ADR-0004 의무 1·5)."
   framework:
     dependency_source: third_party
     version_policy: externalized
     package: nghttp2
-  rationale: "선택가능. C HTTP/2 server 후보=[nghttp2, libh2o, custom]. nghttp2=성숙·3GPP SBI 적합·표준 추종. rejected — libh2o(통합 복잡), custom(재발명 위험). h2c 는 deployment_topology mesh-TLS 외부화 귀결."
-  consequence: "nghttp2 system/container package(externalized) 의존. TLS 미내장 — mesh 필수. HTTP/2 prior-knowledge cleartext."
-  source: "design/nssf/architecture/runtime-model.md; deployment_topology 결정."
+  rationale: "선택가능. C HTTP/2 server 후보=[nghttp2, libh2o, custom]. nghttp2=성숙·3GPP SBI 적합·TLS backend (OpenSSL/BoringSSL/mbedTLS) 와 통합 지원. rejected — libh2o(통합 복잡, TLS backend 선택 자유 적음), custom(재발명 위험, ADR-0004 의무 6 위반)."
+  consequence: "nghttp2 system/container package(externalized) 의존. TLS 적용 시 nghttp2 가 tls_security 의 app_library (OpenSSL) 와 통합. dev 에서 h2c 가능하나 production code path 는 항상 보유."
+  source: "design/nssf/architecture/runtime-model.md; design/nssf/architecture/request-flow.md; docs/adr/ADR-0004-project-security-baseline.md 의무 1·5."
   ratified_by: "jjinri"
-  date: "2026-05-19"
+  date: "2026-05-21"
 
 sbi_client_stack:
-  decision: "outbound SBI client 필요 (NotificationDispatcher→AMF callback, NRF discovery). nghttp2 client, mesh egress."
+  decision: "outbound SBI client 필요 (NotificationDispatcher→AMF callback, NRF discovery + token endpoint). nghttp2 client + tls_security app_library (OpenSSL) backend + outbound OAuth2 token attach production-capable."
   status: decided
   required: true
   source_arch_ref: "design/nssf/architecture/module-boundaries.md#boundaries"
   targets:
     - "AMF — NSSAIAvailability 변경 통지 subscription callback URI (outbound POST)"
-    - "NRF — NF discovery"
-  http2_mode: "h2 to peer via mesh egress (TLS externalized to sidecar); NF emits h2c, sidecar upgrades"
-  timeout_retry_policy: "connect 2s / request 5s; notification retry exponential backoff base 1s cap 60s max 10 attempts, persisted in nssf_notification_retry_queue (status+next_attempt_at, row-lock dequeue via FOR UPDATE SKIP LOCKED)"
+    - "NRF — NF discovery + OAuth2 token endpoint (client_credentials grant)"
+  http2_mode: "h2 (HTTPS/HTTP/2) to peer with NF-internal TLS (tls_security app_library); h2c fallback when tls.enabled=false (dev profile). outbound mTLS production-capable (ADR-0004 의무 2). outbound OAuth2 token acquire/attach production-capable (ADR-0004 의무 4)."
+  timeout_retry_policy: "connect 2s / request 5s; notification retry exponential backoff base 1s cap 60s max 10 attempts, persisted in nssf_notification_retry_queue (status+next_attempt_at, row-lock dequeue via FOR UPDATE SKIP LOCKED). outbound TLS handshake fail / OAuth2 token endpoint 5xx → retry; client_secret invalid → 즉시 dead-letter + alert."
   client:
     dependency_source: third_party
     version_policy: externalized
     package: nghttp2
-  rationale: "required=true 는 R/F-derived requirement trace — arch NotificationDispatcher 가 availability 변경을 subscription callback URI 로 outbound POST. client lib/http2/retry 는 S — nghttp2 선택(sbi_server 와 동일 stack 재사용)."
-  consequence: "retry queue 가 persistence(rdbms) 와 동일 backend → subscription 변경+enqueue 1 트랜잭션(arch Open Q 해소). mesh egress 가 outbound TLS·peer authN."
-  source: "design/nssf/architecture/module-boundaries.md#boundaries (NotificationDispatcher row)."
+  rationale: "required=true 는 R/F-derived requirement trace — arch NotificationDispatcher 가 availability 변경을 subscription callback URI 로 outbound POST + NRF discovery. client lib 후보=[libcurl HTTP/2+TLS, nghttp2 direct + OpenSSL, nghttp2+libuv + OpenSSL]. criteria=server stack 재사용·TLS backend 일관·dependency 폭. nghttp2 client 선택 — sbi_server (nghttp2 server) + tls_security (OpenSSL) 와 동일 stack 재사용. rejected — libcurl (HTTP client 편의 크나 nghttp2 stack 과 lib 중복, dependency 폭 증가), nghttp2+libuv (event loop 추가 필요 — current epoll 단순성과 충돌)."
+  consequence: "retry queue 가 persistence(rdbms) 와 동일 backend → subscription 변경+enqueue 1 트랜잭션. outbound TLS = NF 내부 OpenSSL backend (tls_security app_library). outbound OAuth2 token cache + endpoint 호출 NF 내부 — production-capable code path 항상 존재, config 가 enable/disable."
+  source: "design/nssf/architecture/module-boundaries.md#boundaries (NotificationDispatcher row); design/nssf/architecture/request-flow.md (outbound 시퀀스 5); docs/adr/ADR-0004-project-security-baseline.md 의무 2·4."
   ratified_by: "jjinri"
-  date: "2026-05-19"
+  date: "2026-05-21"
 
 schema_codegen:
   decision: "OpenAPI codegen = openapi-generator(C), 생성물 repo commit + CI drift gate"
@@ -118,25 +118,37 @@ schema_codegen:
   date: "2026-05-19"
 
 tls_security:
-  decision: "TLS = 외부화 (mesh sidecar 종단). NF 내 TLS stack 미구현."
+  decision: "TLS = NF internal (app_library backend OpenSSL). production-capable code path 항상 존재 (ADR-0004 의무 1). mTLS production-capable (ADR-0004 의무 2). config 가 enable/disable + cert/key/CA/peer policy 만 결정."
   status: decided
-  mode: external
-  externalized_to: "service-mesh sidecar (mTLS 종단·peer authN at mesh)"
-  rationale: "R requirement trace. 33.501 manifest exclude — SBA TLS·token 정책 운영/배포 정책으로 외부화, 구현 깊이 0. arch 'config 외부화 권고'. 비교 생략(외부 고정)."
-  consequence: "NF 는 h2c. TLS version/cipher 는 mesh 정책. NF 바이너리 TLS 의존 0. NF 내장 TLS 전환 시 본 행 재결정 + tls_provider/tls_dependency 추가."
-  source: "design/nssf/_manifest.yaml manual_overrides.exclude 33.501; design/nssf/architecture/decisions/ADR-0001-architecture-baseline.md ## Open choices."
+  mode: enabled
+  min_version: "TLSv1.2 (default; operator config 로 TLSv1.3 강제 가능)"
+  cipher_policy: "library default (OpenSSL secure defaults); operator-provided `tls.cipher_suites` config 로 명시 시 그에 따름. NF 가 cipher suite 를 hard-code 하지 않음 (ADR-0004 의무 7)."
+  mutual_auth: "configurable (server-side: `mtls.enabled` + `mtls.client_cert_required`; client-side: `mtls.client_cert_path` + `mtls.client_key_path`). peer identity verify = X.509 SAN/CN 매칭 via library default + operator CA bundle."
+  tls_provider: "app_library"
+  tls_dependency:
+    dependency_source: third_party
+    version_policy: externalized
+    package: openssl
+  rationale: "ADR-0004 baseline 의무 1·2·6 반영. 이전 'TLS external (mesh sidecar)' 결정 폐기 — NF 가 mesh 의존 단일값으로 close 되면 mesh 없는 환경 production-capable 아님 (ADR-0004 의무 5). TLS lib 후보=[openssl, boringssl, mbedtls]. criteria=성숙도·TLS1.3 지원·NF cert/PKI 사용처·nghttp2 통합·widespread audit. openssl 선택 — 가장 광범위·nghttp2 통합 표준·system package externalized 가능. rejected — boringssl (Google fork; system package 부재·build 복잡), mbedtls (소형 임베디드 적합하나 nghttp2 통합 less standard, RSA/ECDSA 외 curve set 적음). TLS/X.509 primitive 직접 구현 금지 (ADR-0004 의무 6)."
+  consequence: "NF 바이너리에 OpenSSL externalized 의존. nghttp2 server/client 가 TLS context 사용. cert/key/CA load = configuration_management 의 cert/key/CA path config. TLS version/cipher 세부는 operator/library default — NF hard-code 금지. mTLS server reject / client cert 실패는 error-propagation.md 의 transport 단계 처리 (응답 없음, log/metric 만)."
+  source: "docs/adr/ADR-0004-project-security-baseline.md 의무 1·2·6·7; design/nssf/architecture/configuration-strategy.md (TLS / mTLS row); design/nssf/architecture/runtime-model.md (start-up TLS context init)."
   ratified_by: "jjinri"
-  date: "2026-05-19"
+  date: "2026-05-21"
 
 oauth2_token_validation:
-  decision: "inbound OAuth2 token validation = NF 미구현 (mesh/gateway 외부화)"
+  decision: "inbound OAuth2 bearer token validation = NF internal production-capable (ADR-0004 의무 3). config 가 enable/disable. token signature 는 third-party JWT library (libjwt + OpenSSL backend)."
   status: decided
-  enabled: false
-  rationale: "NSSF 자체 OAuth2 scope 정의 없음(manifest 33.501 exclude). inbound access-token validation 은 mesh/gateway 위임(외부화). outbound OAuth2 client credentials(NSSF→NRF token endpoint, NotificationDispatcher POST token 부착)는 별개 — arch configuration-strategy.md oauth2.enabled=false default, 구현은 sbi_client_stack/configuration 영역. 본 slot 은 inbound validation 만."
-  consequence: "NF 는 access token 검증 안 함 — mesh/gateway 가 보장. outbound client-credentials 는 configuration_management 의 oauth2.* 옵션, default off — enable 은 별도 결정·구현 범위(token endpoint 호출·secret 주입)로 본 frozen 결정 밖. inbound 검증 NF 내재화 전환 시 enabled=true + token_validation_strategy + lib (본 행 재결정)."
-  source: "design/nssf/_manifest.yaml manual_overrides.exclude 33.501; design/nssf/architecture/configuration-strategy.md."
+  enabled: true
+  token_validation_strategy: "jwks (JSON Web Key Set 기반). issuer/jwks_uri 는 configuration_management 의 `oauth2_inbound.*` config 로 외부 주입. JWKS background refresh (default TTL 5 min). signature/expiry/audience/scope 검증 NF 내부 수행."
+  lib:
+    dependency_source: third_party
+    version_policy: externalized
+    package: libjwt
+  rationale: "ADR-0004 baseline 의무 3·6 반영. 이전 'enabled=false (mesh/gateway 외부화)' 결정 폐기 — NF 가 mesh 의존 단일값으로 close 되면 mesh 없는 환경 production-capable 아님 (ADR-0004 의무 5). JWT library 후보=[libjwt, cjose, pico_jose]. criteria=OpenSSL backend 호환·JWKS 지원·active maintenance·C native API. libjwt 선택 — OpenSSL backend 표준·JWKS 지원·system package externalized 가능·simple C API. rejected — cjose (less active, JWKS 지원 약), pico_jose (소형이나 production audit 부족). JWT primitive 직접 구현 금지 (ADR-0004 의무 6). outbound OAuth2 client credentials 는 sbi_client_stack 의 책임 (별 slot)."
+  consequence: "NF 바이너리에 libjwt externalized 의존. inbound bearer validation = transport 단계 (request-flow 1-b). dev profile 에서 `oauth2_inbound.enabled=false` 가능하나 production code path 항상 보유 (ADR-0004 의무 5). JWKS load 실패는 fail-fast (start-up). 실패 case = 401 INVALID_TOKEN / 403 INSUFFICIENT_SCOPE (error-propagation.md)."
+  source: "docs/adr/ADR-0004-project-security-baseline.md 의무 3·5·6; design/nssf/architecture/configuration-strategy.md (OAuth2 inbound row); design/nssf/architecture/request-flow.md (inbound 1-b)."
   ratified_by: "jjinri"
-  date: "2026-05-19"
+  date: "2026-05-21"
 
 persistence:
   decision: "persistence = PostgreSQL(RDBMS) 단일 backend, libpq 드라이버"
@@ -179,19 +191,19 @@ telemetry:
   date: "2026-05-19"
 
 configuration_management:
-  decision: "config = inih(INI) 파서 + env override; secret 외부화(ref-only)"
+  decision: "config = inih(INI) 파서 + env override; secret 외부화(ref-only). security capability keys (TLS / mTLS / inbound OAuth2 / outbound OAuth2) 가 config 로 enable/disable + 외부 자원 주입."
   status: decided
-  secret_strategy: "secret 미저장 — oauth2.client_secret_ref 등 ref 만 보유, 실제 secret 은 배포(env/vault) 외부 주입"
+  secret_strategy: "secret 미저장 — `oauth2_outbound.client_secret_ref` / `mtls.client_key_path` 등 ref 만 보유, 실제 secret/key 는 배포(env/vault/file) 외부 주입. cert/key load 는 NF 가 file path 받아 library 에 전달."
   override_order: "compiled defaults < config file < environment variables (env 최우선)"
   config:
     dependency_source: third_party
     version_policy: pinned
     package: inih
-  rationale: "선택가능. C config 후보=[inih vendored, libconfig, stdlib getenv-only]. inih=초경량 vendoring·INI 단순. override 순서 defaults<file<env. secret 은 ref-only(arch: 형식 강제 안 함). rejected — libconfig(과대), getenv-only(파일 config 부재)."
-  consequence: "inih pinned vendored. secret 평문 미보유 — 배포가 env/vault 주입. config 누락 시 compiled default."
-  source: "design/nssf/architecture/configuration-strategy.md"
+  rationale: "선택가능. C config 후보=[inih vendored, libconfig, stdlib getenv-only]. inih=초경량 vendoring·INI 단순. override 순서 defaults<file<env. secret 은 ref-only(arch: 형식 강제 안 함). rejected — libconfig(과대), getenv-only(파일 config 부재). ADR-0004 baseline 의무 5 (dev disable + production-capable path) 가 *config-driven enable/disable* 로 표현됨 — 본 slot 이 security capability 의 단일 control point."
+  consequence: "inih pinned vendored. secret 평문 미보유 — 배포가 env/vault 주입. config 누락 시 compiled default. security config key 그룹 (configuration-strategy.md 참조): `tls.*` (enabled/cert_path/key_path/ca_bundle/min_version/cipher_suites), `mtls.*` (enabled/client_cert_required/client_cert_path/client_key_path/peer_verify), `oauth2_inbound.*` (enabled/issuer/jwks_uri/expected_audience/required_scopes), `oauth2_outbound.*` (enabled/token_url/client_id/client_secret_ref/scope/token_cache_ttl). dev disable 가능, production-capable code path 항상 보유."
+  source: "design/nssf/architecture/configuration-strategy.md; docs/adr/ADR-0004-project-security-baseline.md 의무 5."
   ratified_by: "jjinri"
-  date: "2026-05-19"
+  date: "2026-05-21"
 
 test_build_tooling:
   decision: "build=CMake, test=Unity, lint=clang-tidy, static-analysis=clang-analyzer; 의존 container-pinned/vendored"
@@ -237,23 +249,41 @@ persistence_backend_subscription_availability:
   ratified_by: "jjinri"
   date: "2026-05-19"
 
-http_2_tls_oauth2_client_library:
-  decision: "HTTP/2=nghttp2, TLS=외부화(mesh), OAuth2 client=옵션(default off) — slot sbi_client_stack·tls_security·oauth2_token_validation 참조"
+http_2_server_client_library:
+  decision: "HTTP/2 server + client library = nghttp2 (단일 stack 재사용) — core slot sbi_server_stack·sbi_client_stack 참조"
   status: decided
-  rationale: "연기 레지스터 #3 해소. sbi_client_stack(nghttp2 client)·tls_security(external)·oauth2_token_validation(inbound false; outbound client-cred 는 config 옵션) 종합."
-  consequence: "nghttp2 client/server 단일 stack. TLS mesh. outbound OAuth2 default off, config 로 enable."
-  source: "본 문서 sbi_client_stack/tls_security/oauth2_token_validation slot; design/nssf/architecture/configuration-strategy.md."
+  rationale: "연기 레지스터 (architecture/ADR-0001 ## Open choices row 'HTTP/2 server / client library') 해소. sbi_server_stack (nghttp2 server) + sbi_client_stack (nghttp2 client) 동일 stack 으로 닫음. PR2 architecture/ADR-0001 splited TLS / OAuth2 lib 를 별 행으로 — 본 행은 HTTP/2 lib 만."
+  consequence: "nghttp2 client/server 단일 externalized 의존. epoll 단일 프로세스. TLS backend 통합은 tls_library slot 의 책임."
+  source: "본 문서 sbi_server_stack/sbi_client_stack slot; design/nssf/architecture/decisions/ADR-0001-architecture-baseline.md ## Open choices."
   ratified_by: "jjinri"
-  date: "2026-05-19"
+  date: "2026-05-21"
+
+tls_library:
+  decision: "TLS library = OpenSSL (NF internal app_library backend) — core slot tls_security 참조"
+  status: decided
+  rationale: "연기 레지스터 (architecture/ADR-0001 ## Open choices row 'TLS library') 해소. PR2 architecture 가 TLS lib 결정을 engineering 단계로 위임. tls_security slot 이 후보 비교 (openssl/boringssl/mbedtls) 후 openssl 채택 — 본 행은 그 결정 참조. ADR-0004 의무 1·2·6 (third-party library 의무)."
+  consequence: "OpenSSL externalized 의존. nghttp2 (server+client) 와 통합. mTLS production-capable. cipher/TLS version 은 operator-provided config + OpenSSL default (ADR-0004 의무 7)."
+  source: "본 문서 tls_security slot; design/nssf/architecture/decisions/ADR-0001-architecture-baseline.md ## Open choices; docs/adr/ADR-0004-project-security-baseline.md."
+  ratified_by: "jjinri"
+  date: "2026-05-21"
+
+oauth2_jwt_library:
+  decision: "OAuth2 / JWT library = libjwt (inbound bearer validation; OpenSSL backend) — core slot oauth2_token_validation 참조"
+  status: decided
+  rationale: "연기 레지스터 (architecture/ADR-0001 ## Open choices row 'OAuth2 / JWT library') 해소. PR2 architecture 가 JWT lib 결정을 engineering 단계로 위임. oauth2_token_validation slot 이 후보 비교 (libjwt/cjose/pico_jose) 후 libjwt 채택 — 본 행은 그 결정 참조. ADR-0004 의무 3·6."
+  consequence: "libjwt externalized 의존 (OpenSSL backend 공유). inbound bearer = JWKS 기반 validation. outbound OAuth2 client_credentials 는 sbi_client_stack 의 책임 (token endpoint 호출 + Bearer attach)."
+  source: "본 문서 oauth2_token_validation slot; design/nssf/architecture/decisions/ADR-0001-architecture-baseline.md ## Open choices; docs/adr/ADR-0004-project-security-baseline.md."
+  ratified_by: "jjinri"
+  date: "2026-05-21"
 
 배포_토폴로지_service_mesh_nf_내장_tls:
-  decision: "배포 = service-mesh sidecar (NF 내장 TLS 미채택) — core slot deployment_topology·tls_security 참조"
+  decision: "배포 = standalone container pod with NF 내장 TLS production-capable (mesh sidecar optional) — core slot deployment_topology·tls_security 참조"
   status: decided
-  rationale: "연기 레지스터 #4 해소. deployment_topology=mesh-sidecar standalone, NF 내장 TLS=rejected(tls_security=external 정합)."
-  consequence: "h2c NF + mesh TLS. NF 바이너리 TLS 의존 0."
-  source: "본 문서 deployment_topology/tls_security slot."
+  rationale: "연기 레지스터 (architecture/ADR-0001 ## Open choices row '배포 토폴로지') 해소. 이전 'mesh-sidecar 단일' 결정 폐기 (ADR-0004 의무 1·5 충돌). NF 내장 TLS 가 default — mesh 는 추가 layer 로 선택적. deployment_topology=enabled+app_library(OpenSSL) 정합."
+  consequence: "NF 바이너리 TLS stack 보유. mesh 부재 production-capable. mesh 배치 시 추가 layer (NF 의존 아님)."
+  source: "본 문서 deployment_topology/tls_security slot; design/nssf/architecture/overview.md; docs/adr/ADR-0004-project-security-baseline.md 의무 1·5."
   ratified_by: "jjinri"
-  date: "2026-05-19"
+  date: "2026-05-21"
 
 amf_reallocation_via_ran_지원_ngap_reroute_nas_request:
   decision: "AMF reallocation via RAN (NGAP REROUTE NAS REQUEST §8.6.5) 지원 = 범위 외 (미구현 default)"
@@ -264,29 +294,20 @@ amf_reallocation_via_ran_지원_ngap_reroute_nas_request:
   ratified_by: "jjinri"
   date: "2026-05-19"
 
-sba_security_profile_깊이_tls_version_cipher:
-  decision: "SBA security profile 깊이(TLS version, cipher) = 범위 외 (config 외부화)"
+tls_version_cipher_세부:
+  decision: "TLS version / cipher 세부 = 외부 처리 (operator-provided config + library compliance assumption)"
   status: explicitly_out_of_scope
-  rationale: "33.501 manifest exclude. TLS version/cipher 는 mesh/배포 정책 — NF 구현이 cipher suite 를 고정하면 안 됨(외부화). arch 'config 외부화 권고' 와 동일."
-  consequence: "NF 는 TLS 미내장(tls_security=external). version/cipher 결정은 mesh 운영. 자율 코드 생성이 TLS/cipher 코드 생성 금지."
-  source: "design/nssf/_manifest.yaml manual_overrides.exclude 33.501; 본 문서 tls_security slot; design/nssf/architecture/decisions/ADR-0001-architecture-baseline.md ## Open choices."
+  rationale: "연기 레지스터 (architecture/ADR-0001 ## Open choices row 'TLS version / cipher 세부') — ADR-0004 의무 7 흡수. 33.310 / 33.210 certificate / cipher profile 세부는 NF 가 직접 결정하지 않는다 (operator/library default). tls_security 의 `cipher_policy` 가 library default + operator config 로 표현."
+  consequence: "NF 바이너리에 cipher suite / TLS version hard-code 금지. operator 가 `tls.min_version` / `tls.cipher_suites` config 로 명시 가능, 미명시 시 OpenSSL secure defaults. 자율 코드 생성이 cipher/version 고정 코드 생성 금지."
+  source: "docs/adr/ADR-0004-project-security-baseline.md 의무 7; 본 문서 tls_security slot; design/nssf/architecture/decisions/ADR-0001-architecture-baseline.md ## Open choices."
   ratified_by: "jjinri"
-  date: "2026-05-19"
-
-subscription_store_backend_default_권고:
-  decision: "Subscription store backend default = rdbms(PostgreSQL) — core slot persistence 단일 backend 결정 참조"
-  status: decided
-  rationale: "연기 레지스터 #7 해소. arch 가 default 권고를 연기했으나 본 단계서 persistence=rdbms 단일로 닫음(in-memory default 권고 폐기 — eng_frozen 은 단일 backend 요구). #2 와 다른 register 행이나 같은 slot 결정 참조(중복 아님)."
-  consequence: "subscription store = nssf_subscriptions table(PostgreSQL). dev 추상 repo 는 코드 관심사, frozen 결정은 단일 rdbms."
-  source: "본 문서 persistence slot; design/nssf/architecture/state-persistence.md ## Open Questions."
-  ratified_by: "jjinri"
-  date: "2026-05-19"
+  date: "2026-05-21"
 ```
 
 ## Out of scope
 
 - **AMF reallocation via RAN (NGAP REROUTE NAS REQUEST §8.6.5)** — `explicitly_out_of_scope` (register `amf_reallocation_via_ran_지원_ngap_reroute_nas_request`). 38.413 manifest exclude. 자율 코드 생성이 본 경로 코드 생성 금지.
-- **SBA security profile 깊이 (TLS version/cipher)** — `explicitly_out_of_scope` (register `sba_security_profile_깊이_tls_version_cipher`). 33.501 manifest exclude, mesh 외부화.
+- **TLS version / cipher 세부 정책** — `explicitly_out_of_scope` (register `tls_version_cipher_세부`). ADR-0004 의무 7 — operator-provided config + OpenSSL library compliance assumption. NF 바이너리에 cipher suite/version hard-code 금지.
 - **자율 코드 생성** — eng_frozen PASS 후 별 단계(파이프라인 밖). 본 문서는 결정 freeze 까지.
 
 ## Open Questions
@@ -297,9 +318,10 @@ subscription_store_backend_default_권고:
 
 - `docs/adr/ADR-0002-engineering-design-freeze.md` — Engineering Design Freeze 단계·eng_frozen gate.
 - `docs/adr/ADR-0003-engineering-dependency-closure.md` — profile v2 dependency closure.
+- `docs/adr/ADR-0004-project-security-baseline.md` — TLS / mTLS / OAuth2 production-capable code path 의무 source (본 사이클 security re-ratify 입력).
 - `design/schemas/engineering-core-slots.yaml` — 13 core slot typed shape (inventory core).
-- `design/nssf/architecture/decisions/ADR-0001-architecture-baseline.md` `## Open choices` — 연기 레지스터 7행(inventory NF-specific).
-- `design/nssf/architecture/{module-boundaries,state-persistence,observability,configuration-strategy,runtime-model}.md` — 결정 근거.
+- `design/nssf/architecture/decisions/ADR-0001-architecture-baseline.md` `## Open choices` — 연기 레지스터 8행(inventory NF-specific, PR2 에서 TLS/OAuth lib split 반영).
+- `design/nssf/architecture/{overview,module-boundaries,state-persistence,observability,configuration-strategy,runtime-model,request-flow,error-propagation,test-strategy}.md` — 결정 근거.
 - `handoff/nssf/contract.yaml` + `design/nssf/contract/data-model/` — DB schema 도출 근거.
-- `design/nssf/_manifest.yaml` `manual_overrides.exclude` — 33.501·38.413 out-of-scope 근거.
-- `docs/plans/2026-05-19-nf-eng-design-nssf-firstrun-plan.md` — 본 사이클 plan(Pane 2 second-opinion ×2 반영).
+- `design/nssf/_manifest.yaml` `manual_overrides.exclude` — 33.501 (ADR-0004 흡수) · 38.413 (운영 보류) 사유.
+- `docs/plans/2026-05-19-nf-eng-design-nssf-firstrun-plan.md` — 첫 ratify 사이클 plan(Pane 2 second-opinion ×2 반영).
