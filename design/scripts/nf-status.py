@@ -585,6 +585,381 @@ def maybe_load_v2_handoff(nf: str) -> dict | None:
         return None
 
 
+# ─── Tier 2/3 — contract_implementable (PR B, 2026-05-21) ───────────
+# Pane 2 plan §4.2 의 7 checks. handoff-v2 NF 에만 적용. SKILL.md 의
+# nf-contract-check `contract_implementable` gate 와 single-source.
+
+def _contract_dir(nf: str) -> pathlib.Path:
+    return REPO / "design" / nf / "contract"
+
+
+def _iter_data_model_jsons(nf: str):
+    d = _contract_dir(nf) / "data-model"
+    if not d.is_dir():
+        return
+    for path in sorted(d.glob("*.json")):
+        yield path
+
+
+def _iter_data_model_mds(nf: str):
+    d = _contract_dir(nf) / "data-model"
+    if not d.is_dir():
+        return
+    for path in sorted(d.glob("*.md")):
+        yield path
+
+
+def _iter_api_mds(nf: str):
+    d = _contract_dir(nf) / "api"
+    if not d.is_dir():
+        return
+    for path in sorted(d.glob("*.md")):
+        yield path
+
+
+def _read_json(path: pathlib.Path) -> dict | None:
+    import json
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+
+
+def _v2_applies(handoff: dict | None, profile: str) -> tuple[bool, str]:
+    """contract_implementable checks 는 handoff-v2 + stage_3/mixed 에만 적용."""
+    if profile not in {"stage_3_only", "mixed"}:
+        return False, f"profile={profile}"
+    if handoff is None:
+        return False, "handoff yaml 없음"
+    if handoff.get("schema_version") != "handoff-v2":
+        return False, f"schema={handoff.get('schema_version')}"
+    return True, ""
+
+
+def check_api_operation_complete(nf: str, handoff: dict | None, profile: str) -> dict:
+    base = {
+        "id": "api_operation_complete", "tier": 2,
+        "name": "각 api operation 이 method/path/security/response 매트릭스/error 매트릭스/spec source 보유",
+        "criterion": (
+            "handoff yaml api topics 각각이 method/path/security_requirements/responses/"
+            "error_responses/source_refs 키를 보유, 빈 값 또는 TBD 없음."
+        ),
+        "applies_to": ["stage_3_only", "mixed"],
+    }
+    ok, reason = _v2_applies(handoff, profile)
+    if not ok:
+        base.update(status="NOT_APPLICABLE", current=reason, to_pass=[])
+        return base
+    topics = handoff.get("topics") or {}
+    api_topics = {tid: t for tid, t in topics.items() if tid.startswith("api/")}
+    if not api_topics:
+        base.update(status="FAIL", current="api topics 0",
+                    to_pass=["/nf-contract-build <nf> --api 로 api topic 생성"])
+        return base
+    incomplete = []
+    required_keys = ("method", "path", "responses")
+    for tid, t in api_topics.items():
+        body = t.get("contract") or t.get("body") or t
+        missing = [k for k in required_keys if not body.get(k)]
+        if missing:
+            incomplete.append(f"{tid}: missing {missing}")
+    if incomplete:
+        base.update(status="FAIL",
+                    current=f"api topic 불완전 {len(incomplete)}건",
+                    to_pass=[
+                        "/nf-contract-build <nf> --api 로 api topic 재생성 (build-handoff.py 가 method/path/responses 추출)",
+                        *incomplete[:3],
+                    ])
+    else:
+        base.update(status="PASS",
+                    current=f"api topics {len(api_topics)}건 모두 method/path/responses 보유",
+                    to_pass=[])
+    return base
+
+
+def check_data_model_field_tables_complete(nf: str, handoff: dict | None, profile: str) -> dict:
+    base = {
+        "id": "data_model_field_tables_complete", "tier": 2,
+        "name": "각 data-model topic .md 에 field table AUTO section 채워짐 (TBD/빈 0)",
+        "criterion": (
+            "design/<nf>/contract/data-model/*.md 의 AUTO:field-table marker 안에 "
+            "최소 1행, 'TBD'/'TODO' 표현 없음, 빈 행 없음."
+        ),
+        "applies_to": ["stage_3_only", "mixed"],
+    }
+    ok, reason = _v2_applies(handoff, profile)
+    if not ok:
+        base.update(status="NOT_APPLICABLE", current=reason, to_pass=[])
+        return base
+    incomplete = []
+    md_count = 0
+    for md in _iter_data_model_mds(nf):
+        md_count += 1
+        text = md.read_text(encoding="utf-8", errors="replace")
+        m = re.search(r"<!--\s*AUTO:field-table:start\s*-->(.*?)<!--\s*AUTO:field-table:end\s*-->",
+                      text, re.DOTALL)
+        if not m:
+            incomplete.append(f"{md.name}: field-table AUTO marker 없음")
+            continue
+        block = m.group(1)
+        if re.search(r"\bTBD\b|\bTODO\b", block):
+            incomplete.append(f"{md.name}: TBD/TODO 잔존")
+            continue
+        # at least one table data row (excluding header/sep)
+        rows = [l for l in block.splitlines() if l.strip().startswith("|") and "---" not in l]
+        if len(rows) < 2:  # header + at least 1 data row
+            incomplete.append(f"{md.name}: field table 빈/header only")
+    if md_count == 0:
+        base.update(status="FAIL", current="data-model topic .md 0",
+                    to_pass=["/nf-contract-build <nf> --data-model 로 생성"])
+        return base
+    if incomplete:
+        base.update(status="FAIL",
+                    current=f"불완전 {len(incomplete)}/{md_count}",
+                    to_pass=[
+                        "field-table AUTO section 을 build-handoff.py 가 schema field 로 채우도록 보강",
+                        *incomplete[:3],
+                    ])
+    else:
+        base.update(status="PASS",
+                    current=f"data-model {md_count}건 field table 완성",
+                    to_pass=[])
+    return base
+
+
+def check_external_refs_resolved_or_classified(nf: str, handoff: dict | None, profile: str) -> dict:
+    base = {
+        "id": "external_refs_resolved_or_classified", "tier": 2,
+        "name": "data-model json 의 unresolved_refs 0건 또는 classification 보유",
+        "criterion": (
+            "각 design/<nf>/contract/data-model/<schema>.json 의 unresolved_refs 가 빈 list "
+            "이거나, 각 entry 에 classification ∈ {external, operator-provided, deferred} + rationale 보유."
+        ),
+        "applies_to": ["stage_3_only", "mixed"],
+    }
+    ok, reason = _v2_applies(handoff, profile)
+    if not ok:
+        base.update(status="NOT_APPLICABLE", current=reason, to_pass=[])
+        return base
+    unclassified = []
+    json_count = 0
+    for jpath in _iter_data_model_jsons(nf):
+        json_count += 1
+        data = _read_json(jpath)
+        if data is None:
+            unclassified.append(f"{jpath.name}: json 파싱 실패")
+            continue
+        refs = data.get("unresolved_refs") or []
+        for ref in refs:
+            if not isinstance(ref, dict) or not ref.get("classification") or not ref.get("rationale"):
+                unclassified.append(f"{jpath.name}: ref {ref!r} 미분류")
+    if json_count == 0:
+        base.update(status="FAIL", current="data-model json 0",
+                    to_pass=["/nf-contract-build <nf> --data-model"])
+        return base
+    if unclassified:
+        base.update(status="FAIL",
+                    current=f"미분류 unresolved ref {len(unclassified)}건",
+                    to_pass=[
+                        "각 unresolved_refs entry 에 classification (external/operator-provided/deferred) + rationale 추가",
+                        *unclassified[:3],
+                    ])
+    else:
+        base.update(status="PASS",
+                    current=f"data-model json {json_count}건 unresolved 0 또는 분류 완료",
+                    to_pass=[])
+    return base
+
+
+def check_schema_complexity_classified(nf: str, handoff: dict | None, profile: str) -> dict:
+    base = {
+        "id": "schema_complexity_classified", "tier": 2,
+        "name": "data-model json 에 complexity_flags 키 존재 (빈 list 가능)",
+        "criterion": (
+            "각 design/<nf>/contract/data-model/<schema>.json 에 complexity_flags 키 존재. "
+            "값은 list (빈 list = simple schema). resolve-yaml-refs.py 가 emit 책임."
+        ),
+        "applies_to": ["stage_3_only", "mixed"],
+    }
+    ok, reason = _v2_applies(handoff, profile)
+    if not ok:
+        base.update(status="NOT_APPLICABLE", current=reason, to_pass=[])
+        return base
+    missing = []
+    json_count = 0
+    for jpath in _iter_data_model_jsons(nf):
+        json_count += 1
+        data = _read_json(jpath)
+        if data is None or "complexity_flags" not in data:
+            missing.append(jpath.name)
+    if json_count == 0:
+        base.update(status="FAIL", current="data-model json 0", to_pass=["/nf-contract-build <nf> --data-model"])
+        return base
+    if missing:
+        base.update(status="FAIL",
+                    current=f"complexity_flags 누락 {len(missing)}/{json_count}",
+                    to_pass=[
+                        "resolve-yaml-refs.py --emit-json 이 complexity_flags 키 emit 하도록 보강",
+                        *missing[:3],
+                    ])
+    else:
+        base.update(status="PASS",
+                    current=f"data-model json {json_count}건 complexity_flags 보유", to_pass=[])
+    return base
+
+
+def check_generated_wrapper_boundary_declared(nf: str, handoff: dict | None, profile: str) -> dict:
+    base = {
+        "id": "generated_wrapper_boundary_declared", "tier": 2,
+        "name": "data-model json 에 wrapper_required 키 + md 에 generated-vs-wrapper 권고",
+        "criterion": (
+            "각 design/<nf>/contract/data-model/<schema>.json 에 wrapper_required (bool) 키 존재. "
+            "각 design/<nf>/contract/data-model/<schema>.md 에 'generated-vs-wrapper' 또는 "
+            "'wrapper recommendation' 어휘 존재."
+        ),
+        "applies_to": ["stage_3_only", "mixed"],
+    }
+    ok, reason = _v2_applies(handoff, profile)
+    if not ok:
+        base.update(status="NOT_APPLICABLE", current=reason, to_pass=[])
+        return base
+    missing_json = []
+    missing_md = []
+    json_count = 0
+    for jpath in _iter_data_model_jsons(nf):
+        json_count += 1
+        data = _read_json(jpath)
+        if data is None or "wrapper_required" not in data:
+            missing_json.append(jpath.name)
+    md_count = 0
+    for mdpath in _iter_data_model_mds(nf):
+        md_count += 1
+        text = mdpath.read_text(encoding="utf-8", errors="replace")
+        if not re.search(r"generated[-\s]vs[-\s]wrapper|wrapper recommendation|wrapper_required",
+                         text, re.IGNORECASE):
+            missing_md.append(mdpath.name)
+    if json_count == 0 and md_count == 0:
+        base.update(status="FAIL", current="data-model topic 0", to_pass=["/nf-contract-build <nf> --data-model"])
+        return base
+    if missing_json or missing_md:
+        base.update(status="FAIL",
+                    current=f"json wrapper_required 누락 {len(missing_json)}/{json_count}, md 권고 누락 {len(missing_md)}/{md_count}",
+                    to_pass=[
+                        "resolve-yaml-refs.py --emit-json 이 wrapper_required bool emit",
+                        "build-handoff.py 가 data-model md 에 generated-vs-wrapper 권고 AUTO section 추가",
+                        *(missing_json[:2] + missing_md[:2]),
+                    ])
+    else:
+        base.update(status="PASS",
+                    current=f"json/md 모두 wrapper boundary 선언", to_pass=[])
+    return base
+
+
+def check_problem_details_matrix_complete(nf: str, handoff: dict | None, profile: str) -> dict:
+    base = {
+        "id": "problem_details_matrix_complete", "tier": 2,
+        "name": "error-handling topic 이 op × cause 매트릭스 보유 (status code 만 X)",
+        "criterion": (
+            "handoff yaml error-handling topic 또는 error_handling 섹션에 "
+            "operation 별 causes 목록 보유 (3GPP cause enum). status code 단순 나열은 불충분."
+        ),
+        "applies_to": ["stage_3_only", "mixed"],
+    }
+    ok, reason = _v2_applies(handoff, profile)
+    if not ok:
+        base.update(status="NOT_APPLICABLE", current=reason, to_pass=[])
+        return base
+    topics = handoff.get("topics") or {}
+    eh_topic = topics.get("error-handling") or topics.get("error_handling")
+    if eh_topic is None:
+        base.update(status="FAIL", current="error-handling topic 없음",
+                    to_pass=["/nf-contract-build <nf> --error-handling"])
+        return base
+    body = eh_topic.get("contract") or eh_topic.get("body") or eh_topic
+    operations = body.get("operations") or {}
+    if not isinstance(operations, dict) or not operations:
+        base.update(status="FAIL",
+                    current="error-handling 에 operations 매핑 없음 (status code 만 추정)",
+                    to_pass=[
+                        "build-handoff.py 의 error-handling 추출이 operation × cause 매트릭스 emit 하도록 보강",
+                        "현 generated error-handling 은 status code 나열만 (error-propagation.md fresh-full 주의 참조)",
+                    ])
+        return base
+    incomplete = [op for op, info in operations.items()
+                  if not info or not info.get("causes")]
+    if incomplete:
+        base.update(status="FAIL",
+                    current=f"operation cause 누락 {len(incomplete)}/{len(operations)}",
+                    to_pass=[
+                        "각 operation 의 causes 목록을 spec 또는 architecture error-propagation 에서 manual augmentation",
+                        *incomplete[:3],
+                    ])
+    else:
+        base.update(status="PASS",
+                    current=f"{len(operations)} operation cause matrix 완성", to_pass=[])
+    return base
+
+
+def check_no_spec_reread_required_for_implementation(nf: str, handoff: dict | None, profile: str) -> dict:
+    base = {
+        "id": "no_spec_reread_required_for_implementation", "tier": 3,
+        "name": "구현 시 원본 OpenAPI YAML 재독해 불필요 (aggregate sentinel)",
+        "criterion": (
+            "(a) 모든 data-model json 의 unresolved_refs 가 빈 list 또는 분류됨, "
+            "(b) api topics 모두 method/path/responses 보유, "
+            "(c) contract topic 본문 AUTO section 에 'TODO'/'TBD' 토큰 0건. "
+            "본 check 는 PR B 의 implementability mandate 가 enforced 됐는지의 final sentinel."
+        ),
+        "applies_to": ["stage_3_only", "mixed"],
+    }
+    ok, reason = _v2_applies(handoff, profile)
+    if not ok:
+        base.update(status="NOT_APPLICABLE", current=reason, to_pass=[])
+        return base
+    issues = []
+    # (a) data-model json unresolved + classification
+    for jpath in _iter_data_model_jsons(nf):
+        data = _read_json(jpath)
+        if data is None:
+            issues.append(f"{jpath.name}: json 파싱 실패")
+            continue
+        for ref in data.get("unresolved_refs") or []:
+            if not isinstance(ref, dict) or not ref.get("classification"):
+                issues.append(f"{jpath.name}: 미분류 unresolved ref")
+                break
+    # (b) api topics
+    topics = handoff.get("topics") or {}
+    for tid, t in topics.items():
+        if not tid.startswith("api/"):
+            continue
+        body = t.get("contract") or t.get("body") or t
+        if not (body.get("method") and body.get("path") and body.get("responses")):
+            issues.append(f"{tid}: method/path/responses 불완전")
+    # (c) AUTO section TODO/TBD scan across contract topic .md
+    contract_dir = _contract_dir(nf)
+    if contract_dir.is_dir():
+        for md in contract_dir.rglob("*.md"):
+            text = md.read_text(encoding="utf-8", errors="replace")
+            # AUTO blocks
+            for m in re.finditer(r"<!--\s*AUTO:[^:]+:start\s*-->(.*?)<!--\s*AUTO:[^:]+:end\s*-->",
+                                  text, re.DOTALL):
+                if re.search(r"\bTBD\b|\bTODO\b", m.group(1)):
+                    issues.append(f"{md.relative_to(REPO)}: AUTO TBD/TODO 잔존")
+                    break
+    if issues:
+        base.update(status="FAIL",
+                    current=f"implementability gap {len(issues)}건",
+                    to_pass=[
+                        "위 sub-check (api_operation_complete / data_model_field_tables_complete / external_refs_resolved_or_classified) 의 to_pass 우선 해소",
+                        *issues[:5],
+                    ])
+    else:
+        base.update(status="PASS",
+                    current="data-model resolved + api complete + AUTO TBD-free",
+                    to_pass=[])
+    return base
+
+
 # ─── Acceptance gates ───────────────────────────────────────────────
 
 GATE_DEFS = [
@@ -597,6 +972,15 @@ GATE_DEFS = [
         "no_korean_colon_end",
         "handoff_yaml_valid", "handoff_yaml_self_contained",
         "validate_extraction_basic",
+    ]),
+    ("contract_implementable", [
+        "api_operation_complete",
+        "data_model_field_tables_complete",
+        "external_refs_resolved_or_classified",
+        "schema_complexity_classified",
+        "generated_wrapper_boundary_declared",
+        "problem_details_matrix_complete",
+        "no_spec_reread_required_for_implementation",
     ]),
     ("canonical", [
         "frontmatter_valid", "sections_complete", "manifest_ready",
@@ -717,6 +1101,17 @@ def main() -> None:
 
     v2_handoff = maybe_load_v2_handoff(nf)
     checks.append(check_validate_extraction(nf, v2_handoff))
+
+    # PR B (2026-05-21) — contract_implementable 7 checks. handoff-v2 + stage_3/mixed 만 적용.
+    checks.extend([
+        check_api_operation_complete(nf, v2_handoff, profile),
+        check_data_model_field_tables_complete(nf, v2_handoff, profile),
+        check_external_refs_resolved_or_classified(nf, v2_handoff, profile),
+        check_schema_complexity_classified(nf, v2_handoff, profile),
+        check_generated_wrapper_boundary_declared(nf, v2_handoff, profile),
+        check_problem_details_matrix_complete(nf, v2_handoff, profile),
+        check_no_spec_reread_required_for_implementation(nf, v2_handoff, profile),
+    ])
 
     # v2 NF 는 토픽 디렉터리 layout 이라 단일 페이지 기반 check 들이 false-FAIL 한다.
     # 본 MVP 에서는 v2 schema 감지 시 그 check 들을 NOT_APPLICABLE 로 강등.
