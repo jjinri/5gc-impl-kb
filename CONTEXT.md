@@ -40,12 +40,17 @@ _Avoid_: **구현 작업 계획** 과 동일시 (G 는 결정 연기, 본 단계
 **개발 설계 Freeze 단계** 의 게이트이자 **자율 코드 생성** 의 유일한 GO 신호. *blocking 판정은 결정론적 구조 검사* (slot 별 typed closed-form schema), *의미 sub-judge 는 비차단 advisory* (GO/STOP 미결정). 인벤토리 = engineering-core-slots profile + **연기 레지스터** 행.
 _Avoid_: LLM/sub-agent judge 를 blocking 판정자로 둠 (최종 barrier 는 결정론)
 
+**프로젝트 보안 베이스라인 (Project Security Baseline)**:
+NF spec dependency 와 *독립* 하게 모든 NF codegen 산출이 따라야 하는 보안 capability 의무 — 내부 HTTPS/TLS · mTLS · inbound/outbound OAuth2 code path 의무, dev disable 가능하되 production-capable path 의무 보유, TLS/X.509/JWT primitive 직접 구현 금지 (maintained library). source = `docs/adr/ADR-0004-project-security-baseline.md`. 33.501/33.310/33.210 등 security/profile spec 의 결론을 흡수하며, NF 별 `_manifest.yaml` 의 lifecycle extraction dependency 로는 끌어들이지 않는다.
+_Avoid_: NF 별 engineering-design 만의 결정으로 분산 (재발견·일관성 위험), 33.501 을 NF spec lifecycle dependency 로 추가
+
 ## Relationships
 
 - **명세-파생 산출** (B~F) 은 **개발 설계** 의 입력이다 — 담지는 않는다.
 - **개발 설계** 는 **자율 코드 생성** 의 입력이며 그 전에 freeze 되어야 한다.
 - **구현 작업 계획** (stage G) 은 **개발 설계** 를 *연기* 한다 — 그 사이를 **개발 설계 Freeze 단계**(게이트 `eng_frozen`)가 메운다.
 - `handoff_ready` 는 *의미 게이트*, `arch_consistent`·`impl_consistent` 는 *구조 게이트* — 동급 peer 가 아니다.
+- **프로젝트 보안 베이스라인** 은 **개발 설계** 와 **자율 코드 생성** 의 *추가 의무 source* 다 — NF spec dependency 가 아니라 project ADR 이 진실이다. **개발 설계** 는 baseline 을 만족시키는 lib/구조를 결정하고, codegen 은 baseline + **개발 설계** 두 source 합집합을 따른다.
 
 ## Example dialogue
 
