@@ -202,4 +202,3 @@
 | agent/runtime/cache/log/local state | `.omx/`, ignored cache dirs |
 | repo 도구/검증 script | `design/scripts/`, `tests/` |
 | repo workflow skill/template | `.claude/skills/`, `.codex/skills/` |
-
