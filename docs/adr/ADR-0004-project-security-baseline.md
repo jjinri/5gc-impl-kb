@@ -28,7 +28,7 @@ NSSF 첫 사이클의 engineering-design.md 는 `tls_security = external (mesh s
 4. **outbound OAuth2 client credentials / token attach code path 의무.** NF 가 outbound 호출에 access token 을 *부착할 수 있는* code path 가 존재한다 (NRF token endpoint 호출 + AMF callback 등 peer NF 호출 양쪽).
 5. **dev/local disable 가능, production-capable path 존재.** 1~4 의 capability 는 config 로 enable/disable 할 수 있으나, *production-capable code path 자체는 항상 존재* 한다. dev profile 에서 disable 했다는 이유로 production code path 를 누락 금지.
 6. **third-party library 사용 의무.** TLS / X.509 / JWT / JWS / OAuth2 primitive 는 NF 가 *직접 구현하지 않는다*. maintained library 선택 (예 OpenSSL/BoringSSL/mbedTLS, libcurl, libjwt, jansson) — 후보 비교는 NF 별 engineering-design.md 의 `sbi_server_stack`/`sbi_client_stack`/관련 slot 에서 수행.
-7. **profile spec 깊이 외부 처리.** 33.310 (certificate enrollment, CMPv2 등) / 33.210 (cipher suite profile, IPsec 등) 수준의 세부 — *operator-provided compliant cert/config + library compliance assumption* 으로 처리한다. NF 바이너리 안에 cipher suite, TLS version, profile 별 검증 로직을 *고정* 하지 않는다 (library 의 default + config 외부화).
+7. **profile spec 깊이 외부 처리.** 33.310 (certificate enrollment, CMPv2 등) / 33.210 (cipher suite profile, IPsec 등) 수준의 세부 — *operator-provided compliant cert/config + library compliance assumption* 으로 처리한다. NF 는 cipher suite / TLS version / profile 별 검증을 *직접 결정* 하지 않고, *operator/library default + config policy 로 설정 가능* 하게 둔다. compliance 는 library + operator-provided config 책임.
 
 ### Source-of-truth
 
@@ -38,10 +38,28 @@ NSSF 첫 사이클의 engineering-design.md 는 `tls_security = external (mesh s
 - NF 별 `dev/<nf>/` = task/test 분해.
 - codegen agent = 본 ADR (의무) + engineering-design (선택된 lib) + architecture (flow) + dev (task) 4 source 합집합을 따른다.
 
+### Source precedence (normative)
+
+충돌 시 *normative precedence / enforcement order* (생성 순서가 아니라 강제 순서):
+
+> **ADR-0004 baseline > engineering-design > architecture > dev**
+
+- 하위 산출이 시간상 *먼저 작성* 됐어도 ADR baseline 항목을 *override 못 한다*.
+- 하위 산출은 baseline 항목을 *약화* 할 수 없다 — 예: production-capable code path 누락 금지, third-party library 의무 회피 금지, dev disable 을 production 으로 확장 금지.
+- 하위 산출은 baseline 을 *강화·세부화* 할 수 있다 — 예: NF 가 추가 cipher suite 제약, NF-specific OAuth2 scope, 더 엄격한 cert validation 요구.
+
+### NF-specific security role
+
+본 baseline 은 *모든 NF 공통 minimum*. NF-specific security role 은 추가될 수 있다 — 예: NRF = OAuth2 token issuer / authorization server, SCP/SEPP = mediation + peer auth gateway, AMF = NAS security context manager. 추가된 role 은 baseline 항목을 *약화* 할 수 없다. NF-specific role 추가는 NF 별 `engineering/<nf>/engineering-design.md` 또는 별 ADR 에서 닫힌다.
+
 ### Spec dependency 정책
 
-- 33.501 / 33.310 / 33.210 등 *project-wide security/profile spec* 은 NF 별 `_manifest.yaml.deps.security` 에서 `present: false` + `excluded` reason 으로 *명시 외부화* 한다. excluded reason 은 "project security baseline ADR-0004 으로 흡수, lifecycle extraction dependency 아님" 형식.
-- NF 별 spec discovery (`/nf-spec-discover`) 는 본 정책을 자동 적용한다 — security/profile spec 발견 시 ADR-0004 reference 로 자동 exclude.
+- 33.501 / 33.310 / 33.210 등 *project-wide security/profile spec* 은 NF 별 `_manifest.yaml.deps.security` 에서 `excluded` reason 으로 *명시 외부화* 한다. excluded reason 은 "project security baseline ADR-0004 으로 흡수, lifecycle extraction dependency 아님" 형식.
+- **manifest `present` vs `excluded` 의미 분리** (현 `nf-manifest.py` 는 두 의미를 *섞어* 표기해 정정 대상):
+  - `present` = *spec 파일 보유 여부*. `specs/<spec>/` 안에 docx/yaml 가 존재하면 `true`. 사용자가 cp 했는지의 사실 정보.
+  - `excluded` / `manual_overrides.exclude` = *lifecycle extraction scope 여부*. 본 spec 을 contract extraction 의 입력으로 *사용* 하느냐.
+  - 두 의미는 직교 — 33.501 docx 가 `specs/33.501/` 에 cp 되면 `present=true`, 동시에 ADR-0004 흡수로 `excluded=true` 가능 (가장 정확한 상태). 현재 manifest 의 `present:false + excluded` 표기는 *implementation bug* 로 follow-up PR 에서 정정.
+- NF 별 spec discovery (`/nf-spec-discover`) 는 본 정책을 자동 적용한다 — security/profile spec 발견 시 ADR-0004 reference 로 자동 exclude (present 는 사실대로 표기).
 - 추후 33.501 본문 인용이 필요한 결정 (예 특정 OAuth2 scope 정의) 은 본 ADR 의 amendment 로 추가한다. NF spec dependency 로 끌어들이지 않는다.
 
 ## Considered options
@@ -60,17 +78,25 @@ NSSF 첫 사이클의 engineering-design.md 는 `tls_security = external (mesh s
 - **`/nf-spec-discover` 정책 적용.** 새 NF (AMF/NRF/...) 의 spec discovery 가 security/profile spec 을 ADR-0004 reference 로 자동 exclude. NF 별 manifest exclude reason 통일.
 - **engineering-core-slots.yaml v3 후보.** 본 ADR 의 의무 5 (dev disable + production path 의무) 는 *모든 NF 의 eng_frozen 의미* 에 영향. `tls_security` / `oauth2_token_validation` slot 의 typed shape 가 *internal-capable 만 PASS* 로 강화되어야 할 수 있다 — profile v3 사이클의 입력 (본 ADR 의 follow-up).
 - **history alignment.** 기존 `ONBOARDING.md` / `docs/adr/ADR-0001~0003` / `docs/retros/2026-05-*` 의 "33.501 externalized" / "구현 깊이 0" 취지 문구는 본 ADR 가 정정함을 cross-reference 로 명시 (원본 보존 + 후속 cleanup note).
+- **manifest tool update required (follow-up PR).** `design/scripts/nf-manifest.py` 의 `present` vs `excluded` 의미 혼용 정정 — `present` = spec 파일 보유 여부, `excluded` = lifecycle extraction scope 여부 두 독립 필드로 분리. `/nf-spec-discover` 가 security/profile spec 에 ADR-0004 reference reason 을 자동 적용하도록 갱신. 본 PR 는 *정책 명시* 만, tool 구현 반영은 별 PR.
 - **codegen 사이클 시작 차단 해소.** baseline 명시 후 NSSF engineering-design 재-ratify 가 eng_frozen 재통과 → codegen 사이클의 의무 source 가 확정된다.
+- **transitional 안전 (본 PR merge ~ PR4 사이).** 본 PR merge 후 NSSF `eng_frozen` 은 일시적으로 ADR-0004 와 불일치 상태 (tls_security=external + oauth2_token_validation=false 가 frozen 으로 남음). *codegen 사이클 시작은 PR4 (engineering-design 재-ratify, eng_frozen 재통과) 완료 전까지 blocked* 한다. 본 transitional mismatch 는 의도된 단계적 정정이며 PR4 merge 시 해소.
 
 ## Open choices
 
-본 ADR 의 baseline 7 항목은 모두 Decided. profile v3 강화 (slot shape level enforcement) 는 *후속 ADR* 의 책임이며, 본 ADR 의 Open choices 가 아니다.
+없음. 본 ADR 의 baseline 7 항목 + spec dependency 정책 + source precedence + NF-specific role 정책 모두 Decided (2026-05-21, Pane 2 second-opinion 수렴).
 
-| 항목 | 상태 |
+## Deferred follow-up
+
+본 ADR 의 결정에서 *파생* 되지만 본 ADR 의 책임은 아닌 후속 작업.
+
+| 항목 | 처리 |
 |---|---|
-| baseline 7 항목 | Decided (2026-05-21, Pane 2 second-opinion 수렴) |
-| 33.501 / 33.310 / 33.210 dependency 정책 | Decided (외부화, 본 ADR 흡수) |
-| engineering-core-slots.yaml v3 typed shape 강화 | Deferred (별도 사이클의 입력) |
+| `engineering-core-slots.yaml` v3 typed shape 강화 (`tls_security` / `oauth2_token_validation` slot 의 internal-capable 만 PASS 로) | 별 ADR + profile v3 사이클 |
+| `nf-manifest.py` 의 `present` vs `excluded` 의미 분리 + `/nf-spec-discover` 자동 reason 적용 | follow-up PR (Consequences §manifest tool update) |
+| NSSF engineering-design.md 재-ratify + eng_frozen 재통과 | PR4 (본 5-PR 사이클의 4 번째) |
+| NSSF architecture / dev 정합 | PR2 / PR3 (본 5-PR 사이클) |
+| history cross-reference (ONBOARDING / ADR-0001~0003 / retros) | PR5 (본 5-PR 사이클) |
 
 ## References
 
