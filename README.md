@@ -1,28 +1,25 @@
 # 5gc-impl-kb
 
-3GPP spec 으로부터 LLM agent 가 NF 개발 입력물을 단계적으로 생산하는 **5gc design-to-dev knowledge base**. 현재 repo 의 핵심 산출은 spec-derived NF contract 이며, 이후 상세 아키텍처 설계와 구현 계획 단계로 이어진다.
+3GPP spec 으로부터 AI agent 가 NF (Network Function) 구현 코드를 *자율 생성* 하는 **5gc design-to-dev knowledge base**. 사람의 public workflow 는 *3 행위* 로 축소된다: (1) `specs/` 에 3GPP 원본 투입, (2) `/nf-readiness <nf>` 요청 (implementation readiness pack 생성), (3) `/nf-implement <nf>` 요청 (장기 autonomous 구현). 세부 lifecycle skill (`/nf-spec-discover`, `/nf-contract-build`, `/nf-arch-design`, `/nf-impl-plan`, `/nf-eng-design` 등) 은 `/nf-readiness` 내부 subroutine 으로 재배치되며 사람의 주 작업 surface 가 아니다.
+
+> **2026-05-21 workflow upgrade pending.** 최종 public workflow (`/nf-readiness` + `/nf-implement`) 는 `docs/plans/2026-05-21-nf-readiness-implementation-workflow-upgrade-plan.md` 의 PR A~G 사이클로 단계적으로 도입된다. 본 PR (PR A) 는 정책/문서 layer — 신규 wrapper skill 자체는 PR E 에서 신설.
 
 ```text
-specs/{spec}/{file}.{pdf,docx,doc,yaml}
+Target public workflow:
+  specs/{spec}/{file}.{docx,yaml}        ← 사람 입력
         │
-        ▼  spec discovery
-   design/<nf>/_manifest.yaml
+        ▼  /nf-readiness <nf>            ← 사람 호출 1
+   dev/<nf>/ readiness pack              ← Agent Execution Pack + Human Review Pack
         │
-        ▼  contract extraction
-   design/<nf>/contract/...        # handoff-v2 topic contract artifacts
-   handoff/<nf>/contract.yaml      # 현재 machine-readable dev contract
+        ▼  readiness_pack_ready PASS     ← 최종 GO gate (eng_frozen 단독 GO 폐기)
         │
-        ▼  contract validation
-   design/<nf>/_contract_status.yaml
+        ▼  /nf-implement <nf>            ← 사람 호출 2
+   src/, generated/, sql/, tests/        ← autonomous code generation 산출
         │
-        ▼  architecture design
-   design/<nf>/architecture/*
-        │
-        ▼  implementation planning
-   dev/<nf>/implementation-plan.md
+        ▼  full_nf_done                  ← merge/release
 ```
 
-정확한 lifecycle 용어와 canonical skill 이름은 [`docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`](./docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md) 를 따른다.
+정확한 lifecycle 용어와 canonical skill 이름은 [`docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`](./docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md) 를 따른다. 8 gate 의미 정정 (`specs_ready`, `contract_implementable`, `arch_consistent`, `impl_ready_for_codegen`, `eng_frozen`, `readiness_pack_ready`, `tracer_bullet_passed`, `full_nf_done`) 는 위 upgrade plan §3 참조.
 
 ## Quick start
 
@@ -37,16 +34,29 @@ python3 -m venv .venv
 
 ## 사람이 호출하는 lifecycle skill
 
-현재 호환 명령과 canonical 이름을 분리한다. `/nf-spec-discover`, `/nf-contract-build`, `/nf-contract-check` 는 현재 wrapper 로 제공되며, 기존 `/nf-init`, `/nf-build`, `/nf-status` 도 호환 alias 로 유지한다. README 는 사용자 trigger 표면만 보여주고, 각 skill 이 내부에서 실행할 script/check 절차는 `.claude/skills/<name>/SKILL.md` 가 맡는다.
+### Target public surface (upgrade 완료 후)
+
+| 단계 | skill | 기능 | 주요 산출물 |
+|---|---|---|---|
+| Readiness | `/nf-readiness <nf>` (PR E 신설) | spec → contract → arch → impl → eng-design 전체 내부 pipeline 실행, implementation readiness pack 생성, `readiness_pack_ready` 검사 | `dev/<nf>/` readiness pack (Agent Execution Pack 5 + Human Review Pack 4) |
+| Implementation | `/nf-implement <nf>` (PR E 신설) | readiness pack 입력 autonomous code generation. Phase 1 tracer-bullet → Phase 2~5 feature/verification/hardening | `src/`, `generated/`, `sql/`, `tests/`, `vendored/`, CI 산출 |
+
+### Internal subroutine skills (현재 PR A 시점에서는 사람이 직접 호출, PR E 이후 wrapper 가 내부 호출)
 
 | 단계 | 호환 skill | canonical skill | 기능 | 주요 산출물 |
 |---|---|---|---|---|
 | Spec discovery | `/nf-init <nf> --primary <spec>` | `/nf-spec-discover <nf> --primary <spec>` | primary/ref spec 식별, manifest 생성·보강, ready 시 seed auto-gen | `design/<nf>/_manifest.yaml`, `design/<nf>/_contract_seed.yaml` |
 | Reset + rediscovery | `/nf-init <nf> --primary <spec> --reset` | `/nf-spec-discover <nf> --primary <spec> --reset` | contract 산출만 archive 후 manifest refresh + seed auto-gen | `design/<nf>/_archive/<ts>/`, manifest/seed 보존·갱신 |
-| Contract extraction | `/nf-build <nf>` | `/nf-contract-build <nf>` | spec-derived contract markdown/json 과 handoff contract 생성 | `design/<nf>/contract/...`, `handoff/<nf>/contract.yaml` |
-| Contract validation | `/nf-status <nf>` | `/nf-contract-check <nf>` | contract 가 architecture 설계 입력으로 충분한지 검사 | `design/<nf>/_contract_status.yaml` |
-| Architecture design | 없음 | `/nf-arch-design <nf>` | contract 를 상세 아키텍처로 변환 | `design/<nf>/architecture/*` |
-| Implementation planning | 없음 | `/nf-impl-plan <nf>` | 아키텍처를 구현 작업·테스트 계획으로 분해 | `dev/<nf>/implementation-plan.md`, `tasks.yaml` |
+| Contract extraction | `/nf-build <nf>` | `/nf-contract-build <nf>` | spec-derived contract markdown/json 과 handoff contract 생성 (PR B 에서 data-model field table / generated-vs-wrapper 판단 추가) | `design/<nf>/contract/...`, `handoff/<nf>/contract.yaml` |
+| Contract validation | `/nf-status <nf>` | `/nf-contract-check <nf>` | contract 가 implementation 입력으로 충분한지 검사 (PR B 에서 `contract_implementable` gate 추가) | `design/<nf>/_contract_status.yaml` |
+| Architecture design | 없음 | `/nf-arch-design <nf>` | contract 를 module/flow/state/error/test seam 으로 변환 | `design/<nf>/architecture/*` |
+| Architecture validation | 없음 | `/nf-arch-status <nf>` | architecture 자기 일관성 검사 (`arch_consistent`) | `design/<nf>/_arch_status.yaml` |
+| Implementation planning | 없음 | `/nf-impl-plan <nf>` | 아키텍처를 implementation readiness pack 으로 변환 (PR C 에서 Agent Execution Pack + Human Review Pack 9 파일 산출 추가) | `dev/<nf>/implementation-plan.md`, `tasks.yaml`, `test-matrix.md`, `traceability.md`, readiness pack 9 파일 |
+| Implementation validation | 없음 | `/nf-impl-status <nf>` | impl plan 자기 일관성 + codegen 진입 가능 검사 (PR C 에서 `impl_ready_for_codegen` gate 추가) | `dev/<nf>/_impl_status.yaml` |
+| Engineering design | 없음 | `/nf-eng-design <nf>` | tech decision freeze (library / DB / runtime / tool / policy) | `engineering/<nf>/engineering-design.md` |
+| Engineering validation | 없음 | `/nf-eng-status <nf>` | engineering decision freeze 검사 (`eng_frozen`) | `engineering/<nf>/_engineering_status.yaml` |
+
+세부 wrapper skill 직접 호출은 *예외 경우* — third-party library 교체, DBMS 교체, security policy 변경, spec 추가/제외, public contract 변경 등 "새 계약" 이 필요할 때만. 일반 NF 작업은 `/nf-readiness` + `/nf-implement` 2 행위로 처리.
 
 `nf-reset` 은 별도 skill 이 아니라 `/nf-init --reset` 으로 통합된 destructive option 이다.
 
@@ -54,6 +64,8 @@ python3 -m venv .venv
 
 - [`CLAUDE.md`](./CLAUDE.md) — repo-local agent 정책.
 - [`docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`](./docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md) — lifecycle 단계와 skill vocabulary 결정.
+- [`docs/adr/ADR-0002-engineering-design-freeze.md`](./docs/adr/ADR-0002-engineering-design-freeze.md) — `eng_frozen` 게이트 (PR D 에서 readiness 구성요소로 의미 좁힘 예정).
+- [`docs/adr/ADR-0004-project-security-baseline.md`](./docs/adr/ADR-0004-project-security-baseline.md) — TLS / mTLS / OAuth2 production-capable code path 의무 source.
 - [`docs/artifact-management.md`](./docs/artifact-management.md) — 원본·재생성 산출물·reviewed lifecycle 산출물·작업 계획 문서의 파일 관리 기준.
-- [`docs/plans/2026-05-13-lifecycle-structure-skill-rename-plan.md`](./docs/plans/2026-05-13-lifecycle-structure-skill-rename-plan.md) — 구조 변경 실행 계획.
+- [`docs/plans/2026-05-21-nf-readiness-implementation-workflow-upgrade-plan.md`](./docs/plans/2026-05-21-nf-readiness-implementation-workflow-upgrade-plan.md) — `/nf-readiness` + `/nf-implement` workflow upgrade 마스터 plan (PR A~G 사이클).
 - 세부 schema/gate/tool 동작은 `design/scripts/*` docstring 과 `.claude/skills/*/SKILL.md` 가 진실 출처다.
