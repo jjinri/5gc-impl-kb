@@ -16,7 +16,7 @@ NSSF inbound `Nnssf_NSSAIAvailability` service 의 *동기 CRUD* 처리 — TA �
 
 - inbound — `api/NSSAIAvailabilityPut`, `api/NSSAIAvailabilityPatch`, `api/NSSAIAvailabilityDelete`, `api/NSSAIAvailabilityOptions`.
 - contract data-model — `NssaiAvailabilityInfo`, `AuthorizedNssaiAvailabilityInfo`, `PatchDocument`, `Tai`, `Snssai`, `SupportedFeatures`.
-- persistence — availability repository interface (`state-persistence.md` 의 backend 후보 추상화).
+- persistence — availability repository interface (`state-persistence.md` 의 `nssf_availability` PostgreSQL table).
 
 ## Outputs
 
@@ -28,7 +28,7 @@ NSSF inbound `Nnssf_NSSAIAvailability` service 의 *동기 CRUD* 처리 — TA �
 ## State
 
 - *AMF 가 본 NSSF 에 등록한* TAI × S-NSSAI availability map 의 *논리적 소유자*.
-- 실제 backend 는 repository interface 뒤로 격리. memory · file · KV · RDBMS 어느 backend 든 동일 API.
+- 실제 backend 는 repository interface 뒤로 격리. production backend = PostgreSQL/libpq (engineering-design 결정). test seam 의 in-memory mock 은 unit/module-integration 한정.
 - 모듈 자체는 *runtime cache* 보유 안 함 (cache 가 필요하면 repository 가 내부적으로).
 
 ## Decisions
@@ -51,7 +51,7 @@ NSSF inbound `Nnssf_NSSAIAvailability` service 의 *동기 CRUD* 처리 — TA �
 
 - [[../architecture/module-boundaries]] — 4 모듈 책임.
 - [[../architecture/request-flow]] — Put/Patch/Delete 시퀀스 + 변경 이벤트.
-- [[../architecture/state-persistence]] — availability repository backend 후보.
+- [[../architecture/state-persistence]] — availability repository PostgreSQL table.
 - `handoff/nssf/contract.yaml` `api/NSSAIAvailability{Put,Patch,Delete,Options}` topics.
 - [[SubscriptionStore]] — 변경 이벤트 consumer.
 - [[NotificationDispatcher]] — outbound 발송.

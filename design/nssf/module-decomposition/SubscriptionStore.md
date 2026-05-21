@@ -28,8 +28,8 @@ NSSF inbound `Nnssf_NSSAIAvailability` 의 *subscription lifecycle* persistence 
 ## State
 
 - subscription resource set — id, callbackUri, filter (TAI · S-NSSAI · event type), lifetime / expiry, etag (옵션).
-- 영속성 — backend 후보 (`state-persistence.md`).
-- *crash 후 복원 필수* — subscription 손실 시 AMF 가 재구독 필요.
+- 영속성 — `nssf_subscriptions` PostgreSQL table (`state-persistence.md`).
+- *crash 후 복원 필수* — subscription 손실 시 AMF 가 재구독 필요. PostgreSQL restart 후 자연스 복원.
 
 ## Decisions
 
@@ -43,8 +43,7 @@ NSSF inbound `Nnssf_NSSAIAvailability` 의 *subscription lifecycle* persistence 
 
 ## Open Questions
 
-- 만료 처리 정책 — eager (background sweep) vs lazy (lookup 시 expire).
-- callback URI 의 *재인증* — token 부착 정책 (`configuration-strategy.md` 의 OAuth2 옵션 참고).
+- 만료 처리 정책 — eager (background sweep) vs lazy (lookup 시 expire). default = lazy (engineering-design 결정).
 - subscription cardinality 한도 — 동일 AMF 가 무제한 등록 vs limit 적용.
 - AMF deregistration 시 본 NSSF 의 subscription 자동 정리 정책.
 
@@ -52,7 +51,7 @@ NSSF inbound `Nnssf_NSSAIAvailability` 의 *subscription lifecycle* persistence 
 
 - [[../architecture/module-boundaries]] — 4 모듈 책임.
 - [[../architecture/request-flow]] — Subscribe / SubModifyPatch / Unsubscribe 시퀀스.
-- [[../architecture/state-persistence]] — subscription repository backend 후보.
+- [[../architecture/state-persistence]] — `nssf_subscriptions` PostgreSQL table.
 - `handoff/nssf/contract.yaml` `api/NSSAIAvailability{Post,SubModifyPatch,Unsubscribe}` + data-model `NssfEventSubscriptionCreate{,d}Data`.
 - [[AvailabilityEngine]] — 변경 이벤트 source.
 - [[NotificationDispatcher]] — subscription lookup consumer.
