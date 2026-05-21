@@ -9,7 +9,7 @@ generated_date: 2026-05-14
 
 # NSSF Traceability
 
-> **Transitional 안내** (PR3 merge ~ PR4 merge 사이). 본 traceability 의 TLS / mTLS / inbound OAuth2 / outbound OAuth2 production-capable code path 매핑은 *ADR-0004 baseline + architecture target* 을 source 로 인식한다. `engineering/nssf/engineering-design.md` 의 해당 slot (`tls_security` / `oauth2_token_validation` / `sbi_client_stack`) 은 PR4 (eng_frozen 재-ratify) 에서 ADR-0004 만족 결정으로 갱신 예정. PostgreSQL/libpq, nghttp2 server, openapi-generator+cJSON, retry 10/60 등은 *기존 engineering-design ratify 결정* 으로 변동 없음. codegen 시작은 PR4 merge 후.
+> **Source-of-truth** (resolved 2026-05-21). 본 traceability 의 TLS / mTLS / inbound OAuth2 / outbound OAuth2 production-capable code path 매핑은 ADR-0004 baseline + architecture + engineering-design (TLS=OpenSSL app_library, OAuth2=libjwt, sbi_client_stack=nghttp2 outbound) 3 source 정합. PostgreSQL/libpq, nghttp2 server, openapi-generator+cJSON, retry 10/60 등은 기존 engineering-design ratify 유지. codegen 사이클 진입 가능 — `nf-eng-status` `eng_frozen` PASS (GO 신호) 후.
 
 ## Contract → Module
 
