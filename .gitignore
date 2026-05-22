@@ -18,6 +18,8 @@ dev/*/_impl_status.yaml
 engineering/*/_engineering_status.yaml
 # readiness aggregate status (재생성 가능 — design/scripts/nf-readiness-status.py)
 dev/*/_readiness_status.yaml
+# /nf-implement run state (실행 중간 상태 — gitignored, PR E3 schema)
+dev/*/_implementation_run_state.yaml
 
 # /nf-build 산출 (재생성 가능 — design/scripts/build-handoff.py + nf-build SKILL)
 design/*/contract/
