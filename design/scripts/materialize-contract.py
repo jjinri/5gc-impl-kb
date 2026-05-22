@@ -35,6 +35,11 @@ PYEXE = sys.executable
 
 SPEC_DERIVED = {"api", "data-model", "interface", "error-handling"}
 
+# PR F1.2 — status code topic 패턴 (data-model/<status-code>). resolve-yaml-refs.py 의
+# STATUS_CODE_RE 와 동일 정의 (sibling 코드라 inline 복사). chain-tree text 모드 호출 시
+# yaml.components.schemas 에 없어서 SystemExit 발생 → 본 패턴 매칭 시 placeholder 사용.
+STATUS_CODE_RE = re.compile(r"^(default|[1-5][0-9][0-9])$")
+
 # 카테고리 → (AUTO id 목록, USER id 목록). nf-build SKILL.md marker schema 와 1:1.
 SCHEMA = {
     "interface": (["auth-block", "transport-block"], ["implementation-notes"]),
@@ -249,6 +254,53 @@ def auto_index(category: str, topic_id: str, seed: dict) -> dict[str, str]:
     return {aid: "\n".join(body)}
 
 
+def _fallback_classified_json(topic_id: str, schema: str, status: str, note: str) -> dict:
+    """PR F1.2 — resolve-yaml-refs.py 가 정말 실패한 경우의 fallback JSON.
+
+    PR B 이후 모든 data-model json 은 codegen-친화 메타데이터 키 (complexity_flags /
+    wrapper_required / c_type_hint / validation_hint) + classified unresolved_refs entry 를
+    포함해야 nf-status implementability check 가 PASS. fallback 도 같은 shape 으로
+    emit — 단, implementation_blocker 분류로 promotion 차단 신호 유지.
+    """
+    return {
+        "schema_version": "data-model-v1",
+        "nf": "",
+        "topic_id": topic_id,
+        "status": status,
+        "classification": "implementation_blocker",
+        "source": {"spec_refs": [], "openapi_refs": [], "source_yaml": ""},
+        "root_schema": schema,
+        "root": None,
+        "fields": [],
+        "dependencies": [],
+        "unresolved_refs": [{
+            "ref": schema,
+            "classification": "implementation_blocker",
+            "rationale": note or "resolve-yaml-refs.py emit failed",
+            "implementation_action": "Investigate generator failure; register missing spec or fix schema reference.",
+            "phase": "phase1",
+        }],
+        "complexity_flags": [],
+        "wrapper_required": True,
+        "c_type_hint": "void*",
+        "validation_hint": None,
+        "normalized_schema": None,
+    }
+
+
+def _is_real_blocker(unresolved_entries: list[dict]) -> bool:
+    """PR F1.2 — unresolved 중 implementation_blocker 분류만 promotion 막는다.
+
+    problem_details_response · external_common_data · responses_only_schema 등은 codegen
+    agent 가 처리 방침 닫혔다고 본다 (Pane 2 권장 정책 C). promotion 차단은 진짜 막힘만.
+    """
+    for e in unresolved_entries or []:
+        cls = (e or {}).get("classification")
+        if cls is None or cls == "implementation_blocker":
+            return True
+    return False
+
+
 def materialize_datamodel(topic_id: str, topic: dict, nf: str,
                           yamls, all_dm: list[str],
                           status: str) -> tuple[dict[str, str], list]:
@@ -267,30 +319,75 @@ def materialize_datamodel(topic_id: str, topic: dict, nf: str,
             mf.write_text(js.stdout, encoding="utf-8")
             unresolved = (json.loads(js.stdout) or {}).get("unresolved_refs", [])
         else:
-            mf.write_text(json.dumps({
-                "schema_version": "datamodel-v1", "topic_id": topic_id,
-                "status": status, "fields": [], "dependencies": [],
-                "unresolved_refs": [{"ref": schema, "note": "resolve failed"}],
-            }, ensure_ascii=False, indent=2), encoding="utf-8")
-            unresolved = [{"ref": schema, "note": "resolve failed"}]
+            note = (js.stderr or "").strip()[:200] or "resolve failed"
+            fb = _fallback_classified_json(topic_id, schema, status, note)
+            fb["nf"] = nf
+            mf.write_text(json.dumps(fb, ensure_ascii=False, indent=2), encoding="utf-8")
+            unresolved = fb["unresolved_refs"]
     except subprocess.TimeoutExpired:
-        unresolved = [{"ref": schema, "note": "timeout"}]
-    # chain-tree (text 모드)
+        fb = _fallback_classified_json(topic_id, schema, status, "timeout")
+        fb["nf"] = nf
+        mf.write_text(json.dumps(fb, ensure_ascii=False, indent=2), encoding="utf-8")
+        unresolved = fb["unresolved_refs"]
+    # chain-tree (text 모드). status code 패턴은 schema 정의 없어서 text 모드도 빈 출력 → placeholder.
     tree = "TODO(AUTO chain-tree)"
-    try:
-        tx = subprocess.run([PYEXE, str(RESOLVE), str(yp), schema, "--depth", "6"],
-                            capture_output=True, text=True, timeout=120)
-        if tx.returncode == 0 and tx.stdout.strip():
-            tree = tx.stdout.strip()
-    except subprocess.TimeoutExpired:
-        pass
-    # field-table (JSON top-level fields)
-    rows = ["| field | type | required |", "|---|---|---|"]
+    if STATUS_CODE_RE.match(schema):
+        tree = (
+            f"# status code response slot (data-model/{schema})\n"
+            f"본 토픽은 OpenAPI components.schemas 가 아니라 paths.{{op}}.responses 의 "
+            f"status code 슬롯이다. 응답 body 는 shared ProblemDetails 래퍼로 처리한다."
+        )
+    else:
+        try:
+            tx = subprocess.run([PYEXE, str(RESOLVE), str(yp), schema, "--depth", "6"],
+                                capture_output=True, text=True, timeout=120)
+            if tx.returncode == 0 and tx.stdout.strip():
+                tree = tx.stdout.strip()
+        except subprocess.TimeoutExpired:
+            pass
+    # field-table — PR F1.2 column 보강 (name/type/required/source/default/validation/generated-vs-wrapper).
+    rows = [
+        "| field | type | required | source | default | validation | generated-vs-wrapper |",
+        "|---|---|---|---|---|---|---|",
+    ]
     try:
         j = json.loads(mf.read_text(encoding="utf-8"))
+        wrapper_required = bool(j.get("wrapper_required"))
+        gvw = "wrapper" if wrapper_required else "generated"
         for f in (j.get("fields") or [])[:200]:
-            rows.append(f"| {f.get('name','')} | {f.get('type','')} | "
-                        f"{f.get('required', False)} |")
+            ftype = f.get("type", "") or ("topic" if f.get("topic") else "")
+            source = f.get("topic", "") or f.get("_inlined_from", "") or "primary yaml"
+            default = f.get("default", "") if isinstance(f.get("default"), (str, int, float, bool)) else ""
+            validation = f.get("pattern") or f.get("format") or ("enum" if f.get("enum") else "")
+            rows.append(
+                f"| {f.get('name','')} | {ftype} | {f.get('required', False)} | "
+                f"{source} | {default} | {validation} | {gvw} |"
+            )
+        if not (j.get("fields") or []):
+            # PR F1.2 — scalar/enum root schema (NFType/NfInstanceId/PatchDocument/SupportedFeatures 등)
+            # 와 status code topic. fields list 가 빈 list 라도 placeholder 가 아닌 root scalar/wrapper
+            # 본질 정보로 1행 emit. data_model_field_tables_complete check 가 header-only 차단함.
+            root_node = j.get("root") or j.get("normalized_schema") or {}
+            if STATUS_CODE_RE.match(schema):
+                rows.append(
+                    f"| (response body) | ProblemDetails | false | "
+                    f"TS29571_CommonData#/components/schemas/ProblemDetails | - | - | wrapper |"
+                )
+            elif isinstance(root_node, dict) and (
+                root_node.get("type") or root_node.get("enum") or root_node.get("format")
+            ):
+                rtype = root_node.get("type", "scalar")
+                renum = "enum" if root_node.get("enum") else ""
+                rfmt = root_node.get("format", "") or root_node.get("pattern", "")
+                validation = j.get("validation_hint") or renum or rfmt or "-"
+                rows.append(
+                    f"| (root scalar) | {rtype} | true | primary yaml | - | "
+                    f"{validation} | {gvw} |"
+                )
+            else:
+                rows.append(
+                    f"| (root opaque) | {j.get('c_type_hint', 'void*')} | true | primary yaml | - | - | {gvw} |"
+                )
     except Exception:
         pass
     return ({"chain-tree": tree, "field-table": "\n".join(rows)}, unresolved)
@@ -373,7 +470,9 @@ def main() -> None:
             continue
         if not preflight_ok(REPO / topic["file"], category):
             continue
-        if category == "data-model" and dm_unresolved.get(tid):
+        # PR F1.2 — implementation_blocker 만 promotion 차단. problem_details_response /
+        # external_common_data 같이 처리 방침 닫힌 classification 은 promote 허용.
+        if category == "data-model" and _is_real_blocker(dm_unresolved.get(tid)):
             continue
         promoted.append(tid)
 

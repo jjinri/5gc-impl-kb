@@ -742,13 +742,27 @@ def check_data_model_field_tables_complete(nf: str, handoff: dict | None, profil
     return base
 
 
+_CLASSIFICATION_ENUM = {
+    "external_common_data",
+    "responses_only_schema",
+    "problem_details_response",
+    "callback_or_notification_only",
+    "optional_not_in_phase1",
+    "operator_policy_external",
+    "implementation_blocker",
+}
+
+
 def check_external_refs_resolved_or_classified(nf: str, handoff: dict | None, profile: str) -> dict:
     base = {
         "id": "external_refs_resolved_or_classified", "tier": 2,
-        "name": "data-model json 의 unresolved_refs 0건 또는 classification 보유",
+        "name": "data-model json 의 unresolved_refs 0건 또는 classification 보유 (blocker 0)",
         "criterion": (
             "각 design/<nf>/contract/data-model/<schema>.json 의 unresolved_refs 가 빈 list "
-            "이거나, 각 entry 에 classification ∈ {external, operator-provided, deferred} + rationale 보유."
+            "이거나, 각 entry 에 classification ∈ {external_common_data, responses_only_schema, "
+            "problem_details_response, callback_or_notification_only, optional_not_in_phase1, "
+            "operator_policy_external, implementation_blocker} + rationale 보유. "
+            "단 'implementation_blocker' 1건이라도 있으면 FAIL — codegen 시작 전 사람 결정 신호."
         ),
         "applies_to": ["stage_3_only", "mixed"],
     }
@@ -761,6 +775,8 @@ def check_external_refs_resolved_or_classified(nf: str, handoff: dict | None, pr
                     to_pass=[f"/nf-contract-build {nf} 로 contract 산출 + handoff yaml 생성"])
         return base
     unclassified = []
+    invalid_enum = []
+    blockers = []
     json_count = 0
     for jpath in _iter_data_model_jsons(nf):
         json_count += 1
@@ -772,20 +788,35 @@ def check_external_refs_resolved_or_classified(nf: str, handoff: dict | None, pr
         for ref in refs:
             if not isinstance(ref, dict) or not ref.get("classification") or not ref.get("rationale"):
                 unclassified.append(f"{jpath.name}: ref {ref!r} 미분류")
+                continue
+            cls = ref.get("classification")
+            if cls not in _CLASSIFICATION_ENUM:
+                invalid_enum.append(f"{jpath.name}: classification {cls!r} 미정 enum")
+                continue
+            if cls == "implementation_blocker":
+                blockers.append(f"{jpath.name}: blocker {ref.get('rationale','')[:60]}")
     if json_count == 0:
         base.update(status="FAIL", current="data-model json 0",
                     to_pass=["/nf-contract-build <nf> --data-model"])
         return base
-    if unclassified:
+    if unclassified or invalid_enum or blockers:
+        parts = []
+        if unclassified:
+            parts.append(f"미분류 {len(unclassified)}")
+        if invalid_enum:
+            parts.append(f"enum 외 {len(invalid_enum)}")
+        if blockers:
+            parts.append(f"implementation_blocker {len(blockers)}")
         base.update(status="FAIL",
-                    current=f"미분류 unresolved ref {len(unclassified)}건",
+                    current=", ".join(parts),
                     to_pass=[
-                        "각 unresolved_refs entry 에 classification (external/operator-provided/deferred) + rationale 추가",
-                        *unclassified[:3],
+                        "각 unresolved_refs entry 에 classification (8 enum) + rationale 추가",
+                        "implementation_blocker 분류 entry 는 codegen 시작 전 사람 결정으로 해소",
+                        *(unclassified[:2] + invalid_enum[:2] + blockers[:2]),
                     ])
     else:
         base.update(status="PASS",
-                    current=f"data-model json {json_count}건 unresolved 0 또는 분류 완료",
+                    current=f"data-model json {json_count}건 unresolved 0 또는 분류 완료 (blocker 0)",
                     to_pass=[])
     return base
 
