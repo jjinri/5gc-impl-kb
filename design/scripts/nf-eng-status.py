@@ -9,7 +9,11 @@ Usage:
 
 본 script 는 Engineering Design Freeze 단계 status 검사다 (ADR-0002).
 contract=nf-status.py, architecture=nf-arch-status.py, impl=nf-impl-status.py
-와 분리된다. eng_frozen 은 자율 코드 생성의 *유일한 GO 신호* 다.
+와 분리된다. eng_frozen 은 *technology decision freeze* 단일 게이트이며,
+autonomous implementation (/nf-implement) 의 최종 GO 신호인 aggregate
+readiness_pack_ready 의 한 구성요소다 (= handoff_ready ∧ contract_implementable
+∧ arch_consistent ∧ impl_ready_for_codegen ∧ eng_frozen). aggregate 측정은
+자매 script design/scripts/nf-readiness-status.py 의 책임 (PR D, 2026-05-22).
 
 설계 원칙 (ADR-0002 + plan docs/plans/2026-05-19-eng-design-freeze-skill-build-plan.md).
   - read-only. 산출 수정 안 함. _engineering_status.yaml 만 기계가 매번 새로 씀.

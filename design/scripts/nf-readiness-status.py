@@ -1,0 +1,184 @@
+#!/usr/bin/env python3
+# 각 lifecycle status 산출을 흡수해 readiness_pack_ready aggregate gate 평가 → dev/<nf>/_readiness_status.yaml
+"""
+Usage:
+    .venv/bin/python3 design/scripts/nf-readiness-status.py <nf> [--no-write]
+
+옵션:
+    --no-write   dev/<nf>/_readiness_status.yaml 저장 없이 stdout 만 보고
+
+본 script 는 autonomous implementation (/nf-implement) 의 *최종 GO 신호* 인
+aggregate gate readiness_pack_ready 를 측정한다 (ADR-0002 normative,
+docs/plans/2026-05-21-nf-readiness-implementation-workflow-upgrade-plan.md §3).
+
+    readiness_pack_ready =
+        handoff_ready             (contract — nf-status.py)
+      ∧ contract_implementable    (contract — nf-status.py, PR B)
+      ∧ arch_consistent           (architecture — nf-arch-status.py)
+      ∧ impl_ready_for_codegen    (implementation-planning — nf-impl-status.py, PR C)
+      ∧ eng_frozen                (engineering — nf-eng-status.py)
+
+설계 원칙.
+  - read-only aggregator. 각 upstream status YAML 의 `gates[*]` 만 흡수한다.
+    upstream script 를 자동 실행하지 않는다. user 또는 향후 /nf-readiness wrapper
+    (PR E) 가 순서대로 실행해 캐시한 산출만 본다.
+  - missing/parse-fail = aggregate FAIL. 조용한 PASS 금지.
+  - blocking 은 결정론. semantic judge 없음.
+  - 출력은 dev/<nf>/_readiness_status.yaml (gitignored, 다른 _*_status.yaml 정책과 동일).
+"""
+
+from __future__ import annotations
+
+import argparse
+import pathlib
+import sys
+
+import yaml
+
+REPO = pathlib.Path(__file__).resolve().parent.parent.parent
+
+# upstream status 파일과 그 안에서 흡수할 gate id. 순서는 lifecycle 순.
+UPSTREAM_SOURCES = [
+    ("handoff_ready",
+     "design/<nf>/_contract_status.yaml",
+     "/nf-contract-check <nf>"),
+    ("contract_implementable",
+     "design/<nf>/_contract_status.yaml",
+     "/nf-contract-check <nf>"),
+    ("arch_consistent",
+     "design/<nf>/_arch_status.yaml",
+     "/nf-arch-status <nf>"),
+    ("impl_ready_for_codegen",
+     "dev/<nf>/_impl_status.yaml",
+     "/nf-impl-status <nf>"),
+    ("eng_frozen",
+     "engineering/<nf>/_engineering_status.yaml",
+     "/nf-eng-status <nf>"),
+]
+
+AGGREGATE_GATE_ID = "readiness_pack_ready"
+
+
+def load_yaml(path: pathlib.Path) -> tuple[dict | None, str | None]:
+    if not path.exists():
+        return None, f"{path.relative_to(REPO)} 없음"
+    try:
+        return yaml.safe_load(path.read_text(encoding="utf-8")) or {}, None
+    except yaml.YAMLError as e:
+        return None, f"{path.relative_to(REPO)} YAML 파싱 실패 — {e}"
+
+
+def find_gate(doc: dict, gate_id: str) -> dict | None:
+    gates = doc.get("gates") or []
+    if not isinstance(gates, list):
+        return None
+    for g in gates:
+        if isinstance(g, dict) and g.get("id") == gate_id:
+            return g
+    return None
+
+
+def collect(nf: str) -> tuple[list[dict], dict | None]:
+    """upstream status 흡수. 반환 (per-gate snapshots, aggregate result).
+    각 snapshot — {id, source, source_skill, status (PASS/FAIL/MISSING), reason, blocked_by}."""
+    snapshots: list[dict] = []
+    for gate_id, rel, skill in UPSTREAM_SOURCES:
+        rel_path = rel.replace("<nf>", nf)
+        path = REPO / rel_path
+        snap = {
+            "id": gate_id,
+            "source": rel_path,
+            "source_skill": skill,
+            "status": "MISSING",
+            "reason": "",
+            "blocked_by": [],
+        }
+        doc, err = load_yaml(path)
+        if err:
+            snap["reason"] = err
+            snap["to_pass"] = [f"{skill} 실행해 {rel_path} 생성"]
+            snapshots.append(snap)
+            continue
+        g = find_gate(doc, gate_id)
+        if g is None:
+            snap["reason"] = f"{rel_path} 에 gates[id={gate_id!r}] 없음"
+            snap["to_pass"] = [f"{skill} (최신 버전) 으로 재생성 — "
+                               f"{gate_id} gate 가 누락"]
+            snapshots.append(snap)
+            continue
+        g_status = g.get("status")
+        snap["status"] = g_status if g_status in ("PASS", "FAIL") else "MISSING"
+        if snap["status"] == "FAIL":
+            snap["blocked_by"] = list(g.get("blocked_by") or [])
+            snap["reason"] = f"{gate_id} FAIL — blocked_by {snap['blocked_by']}"
+            snap["to_pass"] = [f"{skill} 의 blocked_by check 해소 후 재실행"]
+        elif snap["status"] == "PASS":
+            snap["reason"] = f"{gate_id} PASS"
+            snap["to_pass"] = []
+        else:
+            snap["reason"] = f"{gate_id} gate status={g_status!r} (PASS/FAIL 외)"
+            snap["to_pass"] = [f"{skill} 재실행"]
+        snapshots.append(snap)
+
+    blockers = [s["id"] for s in snapshots if s["status"] != "PASS"]
+    aggregate = {
+        "id": AGGREGATE_GATE_ID,
+        "requires_pass": [s["id"] for s in snapshots],
+        "status": "PASS" if not blockers else "FAIL",
+        "blocked_by": blockers,
+    }
+    return snapshots, aggregate
+
+
+def render_yaml(nf: str, snapshots: list[dict], aggregate: dict) -> str:
+    doc = {
+        "nf": nf,
+        "stage": "readiness-aggregate",
+        "target_schema": "readiness-status-v1",
+        "upstream_snapshots": snapshots,
+        "gates": [aggregate],
+    }
+    header = [
+        "# Auto-generated by design/scripts/nf-readiness-status.py",
+        "# readiness_pack_ready 는 lifecycle 산출의 aggregate 다 — 수동 편집 금지.",
+        "# 각 upstream gate 의 진실 출처는 해당 status YAML 이며, 본 파일은 그 캐시 흡수.",
+    ]
+    body = yaml.safe_dump(doc, allow_unicode=True, sort_keys=False,
+                          default_flow_style=False)
+    return "\n".join(header) + "\n\n" + body
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("nf")
+    ap.add_argument("--no-write", action="store_true")
+    args = ap.parse_args()
+    nf = args.nf
+
+    snapshots, aggregate = collect(nf)
+    yaml_text = render_yaml(nf, snapshots, aggregate)
+
+    out_path = REPO / "dev" / nf / "_readiness_status.yaml"
+    if not args.no_write:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(yaml_text, encoding="utf-8")
+        print(f"[nf-readiness-status] wrote {out_path.relative_to(REPO)}",
+              file=sys.stderr)
+
+    print(yaml_text)
+
+    print(f"\n[nf-readiness-status] {nf}: gate {AGGREGATE_GATE_ID}: "
+          f"{aggregate['status']}", file=sys.stderr)
+    if aggregate["status"] == "FAIL":
+        print(f"  blocked_by — {aggregate['blocked_by']}", file=sys.stderr)
+        for s in snapshots:
+            if s["status"] != "PASS":
+                print(f"  - {s['id']} {s['status']}: {s['reason']}",
+                      file=sys.stderr)
+                for t in s.get("to_pass") or []:
+                    print(f"      to_pass: {t}", file=sys.stderr)
+    sys.exit(1 if aggregate["status"] == "FAIL" else 0)
+
+
+if __name__ == "__main__":
+    main()
