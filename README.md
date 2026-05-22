@@ -2,7 +2,7 @@
 
 3GPP spec 으로부터 AI agent 가 NF (Network Function) 구현 코드를 *자율 생성* 하는 **5gc design-to-dev knowledge base**. 사람의 public workflow 는 *3 행위* 로 축소된다: (1) `specs/` 에 3GPP 원본 투입, (2) `/nf-readiness <nf>` 요청 (implementation readiness pack 생성), (3) `/nf-implement <nf>` 요청 (장기 autonomous 구현). 세부 lifecycle skill (`/nf-spec-discover`, `/nf-contract-build`, `/nf-arch-design`, `/nf-impl-plan`, `/nf-eng-design` 등) 은 `/nf-readiness` 내부 subroutine 으로 재배치되며 사람의 주 작업 surface 가 아니다.
 
-> **2026-05-21 workflow upgrade pending.** 최종 public workflow (`/nf-readiness` + `/nf-implement`) 는 `docs/plans/2026-05-21-nf-readiness-implementation-workflow-upgrade-plan.md` 의 PR A~G 사이클로 단계적으로 도입된다. 본 PR (PR A) 는 정책/문서 layer — 신규 wrapper skill 자체는 PR E 에서 신설.
+> **2026-05-21 workflow upgrade progress.** 최종 public workflow (`/nf-readiness` + `/nf-implement`) 는 `docs/plans/2026-05-21-nf-readiness-implementation-workflow-upgrade-plan.md` 의 PR A~G 사이클로 단계적으로 도입된다. **PR E2 (2026-05-22)** 까지 `/nf-readiness <nf>` wrapper 가 신설됐고, `/nf-implement` skeleton 은 PR E3, NSSF 의 readiness pack 실데이터 갱신은 PR F 의 책임.
 
 ```text
 Target public workflow:
@@ -38,8 +38,8 @@ python3 -m venv .venv
 
 | 단계 | skill | 기능 | 주요 산출물 |
 |---|---|---|---|
-| Readiness | `/nf-readiness <nf>` (PR E 신설) | spec → contract → arch → impl → eng-design 전체 내부 pipeline 실행, implementation readiness pack 생성, `readiness_pack_ready` 검사 | `dev/<nf>/` readiness pack (Agent Execution Pack 5 + Human Review Pack 4) |
-| Implementation | `/nf-implement <nf>` (PR E 신설) | readiness pack 입력 autonomous code generation. Phase 1 tracer-bullet → Phase 2~5 feature/verification/hardening | `src/`, `generated/`, `sql/`, `tests/`, `vendored/`, CI 산출 |
+| Readiness | `/nf-readiness <nf>` (PR E2, 2026-05-22) | spec → contract → arch → impl → eng-design 11-step lifecycle chain 자동 실행, registry resolve + first-blocker short-circuit, aggregate gate `readiness_pack_ready` 평가 | `dev/<nf>/` readiness pack (Agent Execution Pack 5 + Human Review Pack 4) + `dev/<nf>/_readiness_status.yaml` |
+| Implementation | `/nf-implement <nf>` (PR E3 신설 예정) | readiness pack 입력 autonomous code generation. Phase 1 tracer-bullet → Phase 2~5 feature/verification/hardening | `src/`, `generated/`, `sql/`, `tests/`, `vendored/`, CI 산출 |
 
 ### Internal subroutine skills (현재 PR A 시점에서는 사람이 직접 호출, PR E 이후 wrapper 가 내부 호출)
 
