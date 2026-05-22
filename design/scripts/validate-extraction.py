@@ -288,9 +288,19 @@ def rule_12_unresolved_vs_status(data: dict) -> list[str]:
         payload, err = _load_machine(t)
         if payload is None:
             continue
-        if payload.get("unresolved_refs") and t.get("status") in ("canonical", "handoff_ready"):
+        unresolved = payload.get("unresolved_refs") or []
+        # PR F1.2 — implementation_blocker 분류만 promote 차단. problem_details_response /
+        # external_common_data / responses_only_schema 등 닫힌 분류는 promote 허용
+        # (Pane 2 정책 C: classified unresolved 는 codegen agent 가 처리 방침 닫힘).
+        blocking = [
+            e for e in unresolved
+            if not isinstance(e, dict)
+            or e.get("classification") in (None, "implementation_blocker")
+        ]
+        if blocking and t.get("status") in ("canonical", "handoff_ready"):
             fails.append(
-                f"#12 unresolved_refs vs status: {tid!r} has unresolved but status={t.get('status')!r}"
+                f"#12 unresolved_refs vs status: {tid!r} has unclassified/blocking unresolved "
+                f"but status={t.get('status')!r}"
             )
     return fails
 

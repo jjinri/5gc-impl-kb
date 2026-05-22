@@ -41,6 +41,28 @@ EXTRACT_PY = REPO_ROOT / "design" / "scripts" / "extract.py"
 # 파일명 패턴 → spec 폴더 (TS29571_CommonData.yaml → 29.571)
 TS_FILENAME_RE = re.compile(r"^TS(\d{2})(\d{3})_")
 
+# PR F1.2 (2026-05-22) — status code data-model topic 감지. seed.topics 에 status code
+# (data-model/400 등) 가 등록되는데 OpenAPI components.schemas 에는 정의 없음. paths.{op}.responses
+# 의 status code 만 표시이므로 resolve 시도 자체가 잘못. 본 regex 가 매칭하면 emit_json 이
+# classified JSON 으로 직접 반환 (Pane 2 권고 정책 C).
+STATUS_CODE_RE = re.compile(r"^(default|[1-5][0-9][0-9])$")
+
+# PR F1.2 — classification 어휘. unresolved_refs[].classification 에 실제 emit 되는 값은
+# 아래 7 enum (UNRESOLVED_CLASSIFICATIONS). 'resolved' 는 schema 가 정상 resolve 된 경우의
+# 개념적 sentinel 이며 unresolved entry 에 emit 되지 않는다 — sibling code (nf-status.py
+# 의 _CLASSIFICATION_ENUM) 는 7 enum 만 검증한다 (PR #48 review Low finding 정정).
+UNRESOLVED_CLASSIFICATIONS = {
+    "external_common_data",           # TS29571_CommonData 등 공용 데이터 spec 의 schema
+    "responses_only_schema",          # response status code 만 표시 (path responses, components.schemas X)
+    "problem_details_response",       # 4xx/5xx 응답 = ProblemDetails wrapper
+    "callback_or_notification_only",  # webhook/callback 전용 schema
+    "optional_not_in_phase1",         # Phase 1 codegen 대상 외
+    "operator_policy_external",       # operator policy / O&M 영역 외부 결정
+    "implementation_blocker",         # 정말 막힘 — codegen 시작 전 결정 필요
+}
+# 호환성을 위한 superset (resolved sentinel 포함) — 외부에서 import 하면 7 + 1.
+CLASSIFICATION_ENUM = UNRESOLVED_CLASSIFICATIONS | {"resolved"}
+
 
 @dataclasses.dataclass
 class ResolvedRef:
@@ -422,6 +444,54 @@ def render(
     return out
 
 
+def _classify_unresolved_ref(ref: str, note: str) -> dict:
+    """PR F1.2 — raw unresolved $ref → classified entry shape.
+
+    shape — {ref, classification, rationale, implementation_action, phase}. classification
+    은 Pane 2 권고 8 enum 중 하나. ProblemDetails ref 는 problem_details_response, 그 외
+    cross-spec 미등록은 external_common_data (해당 spec 이 알려진 commondata 면) 또는
+    implementation_blocker (default). 본 default 가 보수적 — codegen 시작 전 사람 검토 신호.
+    """
+    schema_name = ref.rsplit("/", 1)[-1] if "/" in ref else ref
+    file_part = ref.split("#", 1)[0] if "#" in ref else ""
+    classification = "implementation_blocker"
+    rationale = note or f"Cross-spec reference {ref!r} could not be resolved."
+    implementation_action = "Resolve before codegen — register spec or declare blocker."
+    phase = "phase1"
+
+    if STATUS_CODE_RE.match(schema_name):
+        classification = "problem_details_response"
+        rationale = (
+            "Status-code topic represents an API error response bucket, "
+            "not an OpenAPI component schema."
+        )
+        implementation_action = (
+            "Use shared ProblemDetails serializer/wrapper for error responses."
+        )
+    elif schema_name == "ProblemDetails":
+        classification = "problem_details_response"
+        rationale = "ProblemDetails is the shared 5xx/4xx error response wrapper."
+        implementation_action = "Use shared ProblemDetails serializer/wrapper for error responses."
+    elif file_part and file_part.startswith("TS29571_CommonData"):
+        classification = "external_common_data"
+        rationale = (
+            f"Schema {schema_name!r} belongs to TS 29.571 CommonData but is not registered "
+            f"in this build's spec set."
+        )
+        implementation_action = (
+            f"Register TS 29.571 CommonData yaml, or treat {schema_name!r} as opaque "
+            f"common-data type at codegen boundary."
+        )
+
+    return {
+        "ref": ref,
+        "classification": classification,
+        "rationale": rationale,
+        "implementation_action": implementation_action,
+        "phase": phase,
+    }
+
+
 def _resolve_to_node(
     schema: dict,
     current_file: pathlib.Path,
@@ -441,7 +511,7 @@ def _resolve_to_node(
         if topic_id:
             return {"topic": topic_id}
         if rr.schema is None:
-            unresolved.append({"ref": schema["$ref"], "note": rr.note or ""})
+            unresolved.append(_classify_unresolved_ref(schema["$ref"], rr.note or ""))
             return {
                 "type": "unknown",
                 "_inlined_from": schema["$ref"],
@@ -599,6 +669,36 @@ def emit_json(
     handoff_topics: list[str],
     no_docx_fallback: bool = False,
 ) -> dict:
+    # PR F1.2 — status code topic 우회. seed.topics 의 data-model/<status-code> 는
+    # OpenAPI response slot 표시이지 components.schemas 항목이 아니다 (Pane 2 정책 C).
+    # classified JSON 직접 반환 — complexity_flags=[]·wrapper_required=true·
+    # c_type_hint=struct nf_problem_details*·classification=problem_details_response.
+    if STATUS_CODE_RE.match(root_schema_name):
+        unresolved_entry = _classify_unresolved_ref(root_schema_name, "status code response slot")
+        return {
+            "schema_version": "data-model-v1",
+            "nf": nf,
+            "topic_id": topic_id,
+            "status": "classified",
+            "classification": "problem_details_response",
+            "source": {
+                "spec_refs": spec_refs,
+                "openapi_refs": [],
+                "source_yaml": str(yaml_path.relative_to(REPO_ROOT))
+                    if yaml_path.is_absolute() and yaml_path.is_relative_to(REPO_ROOT)
+                    else str(yaml_path),
+            },
+            "root_schema": root_schema_name,
+            "root": None,
+            "fields": [],
+            "dependencies": [],
+            "unresolved_refs": [unresolved_entry],
+            "complexity_flags": [],
+            "wrapper_required": True,
+            "c_type_hint": "struct nf_problem_details*",
+            "validation_hint": None,
+            "normalized_schema": None,
+        }
     doc = cached_yaml(yaml_path)
     schemas = (doc.get("components") or {}).get("schemas") or {}
     root_schema = schemas.get(root_schema_name)

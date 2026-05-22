@@ -125,3 +125,51 @@ def test_build_handoff_v2_missing_seed_errors(tmp_path: pathlib.Path) -> None:
     )
     assert out.returncode != 0
     assert "_contract_seed.yaml" in out.stderr
+
+
+# PR F1.2 — build-handoff.py 가 handoff yaml self-contained 정책 위해 api topic / error-handling
+# topic 을 OpenAPI yaml 분석으로 enrich. 본 enrichment 가 nf-status 의 api_operation_complete +
+# problem_details_matrix_complete check 직접 의존. live NSSF data 로 검증 (seed + manifest +
+# primary yaml 풀 셋업이 fixture 로 옮기기 큼).
+
+def test_build_handoff_v2_api_topic_enriched_for_nssf() -> None:
+    """NSSF api topic 이 method/path 외 responses/security_requirements/error_responses/
+    source_refs 4 키 추가 보유. seed 가 method/path 만 줘도 build-handoff 가 yaml 에서
+    추출해 채움. nf-status.py 의 api_operation_complete 6 키 mandate 충족.
+    """
+    out = subprocess.run(
+        [str(REPO / ".venv" / "bin" / "python3"),
+         str(REPO / "design" / "scripts" / "build-handoff.py"), "nssf"],
+        capture_output=True, text=True, cwd=REPO, timeout=60,
+    )
+    assert out.returncode == 0, out.stderr
+    data = yaml.safe_load((REPO / "handoff" / "nssf" / "contract.yaml").read_text(encoding="utf-8"))
+    api_topics = {tid: t for tid, t in (data.get("topics") or {}).items() if tid.startswith("api/")}
+    assert api_topics, "NSSF handoff yaml has no api topics"
+    for tid, t in api_topics.items():
+        for key in ("method", "path", "responses", "security_requirements",
+                    "error_responses", "source_refs"):
+            assert key in t, f"{tid} missing key {key!r} after build-handoff enrichment"
+        # source_refs 가 최소 1개 (yaml 경로 자동 추가).
+        assert t["source_refs"], f"{tid} source_refs empty"
+
+
+def test_build_handoff_v2_error_handling_operations_for_nssf() -> None:
+    """NSSF error-handling topic 이 operations × causes 매트릭스 보유.
+    nf-status.py problem_details_matrix_complete check 가 operations 필수 검증.
+    """
+    out = subprocess.run(
+        [str(REPO / ".venv" / "bin" / "python3"),
+         str(REPO / "design" / "scripts" / "build-handoff.py"), "nssf"],
+        capture_output=True, text=True, cwd=REPO, timeout=60,
+    )
+    assert out.returncode == 0, out.stderr
+    data = yaml.safe_load((REPO / "handoff" / "nssf" / "contract.yaml").read_text(encoding="utf-8"))
+    eh = (data.get("topics") or {}).get("error-handling")
+    assert eh is not None, "NSSF handoff yaml missing error-handling topic"
+    ops = eh.get("operations") or {}
+    assert ops, "error-handling.operations enrichment empty"
+    for op_id, info in ops.items():
+        assert isinstance(info, dict)
+        assert "causes" in info, f"operation {op_id!r} missing causes list"
+        assert isinstance(info["causes"], list)
