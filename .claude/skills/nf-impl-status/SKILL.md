@@ -34,7 +34,9 @@ implementation-planning 단계 status 검사다. ADR-0001 L54 가 예고한 "sep
 - **모든 check 는 criterion + to_pass 의무.**
 - **canonical 섹션은 SKILL.md mandate 와 동일 source.** script 의 `DEV_MD_CANON` 상수는 `nf-impl-plan/SKILL.md` mandate (PR #20 영구화) 와 1:1. 함께 갱신.
 
-## 검사 항목 (Phase 1)
+## 검사 항목
+
+### Phase 1 — `impl_consistent` (legacy planning 4 파일)
 
 | id | tier | PASS 정의 |
 | --- | --- | --- |
@@ -45,6 +47,28 @@ implementation-planning 단계 status 검사다. ADR-0001 L54 가 예고한 "sep
 | `traceability_xref` | 2 | advisory WARN (gate 비포함) — 각 task id 가 `traceability.md` 에 등장 |
 
 gate — `impl_consistent` = 위 Tier 1 4개 AND.
+
+### `impl_ready_for_codegen` (PR C, 2026-05-21 plan §4.5)
+
+Readiness Pack 9 파일이 autonomous codegen agent 가 원본 OpenAPI YAML 재독해 없이 구현 가능한 수준인지 검사.
+
+| id | tier | PASS 정의 |
+| --- | --- | --- |
+| `readiness_pack_files_present` | 1 | Agent Execution Pack 5 + Human Review Pack 4 = 9 파일 모두 존재 |
+| `api_matrix_covers_all_operations` | 1 | `api-implementation-matrix.md` `## Operation Matrix` 표가 `handoff/<nf>/contract.yaml` 의 `topics.api/<Op>` 키 전체 cover |
+| `data_model_map_covers_all_contract_models` | 1 | `data-model-implementation-map.md` `## Schema Classification` 표가 `topics.data-model/<S>` 키 전체 cover |
+| `all_work_items_have_expected_files` | 1 | `codegen-work-items.yaml` (`schema_version: codegen-work-items-v1`) `items[].expected_files` 모두 non-empty + TODO 아님 |
+| `all_work_items_have_tests` | 1 | `items[].tests` 모두 non-empty + TODO 아님 |
+| `all_work_items_have_verification_commands` | 1 | `items[].verification_commands` 모두 non-empty + TODO 아님 |
+| `team_execution_plan_present` | 1 | `team-execution-plan.md` 5 lane (Orchestrator/Code/Reviewer/Tester/Verifier) + Integration Order + References 순서 일치 |
+| `human_review_pack_traceable` | 1 | Human Review Pack 4 파일 존재 + frontmatter 필수 키 + 본문이 TODO/header 만은 아님 |
+| `gaps_classified` | 1 | `open-gaps-and-assumptions.md` `## Gaps` 표 모든 행이 category 컬럼 ∈ {blocker, deferred, operator-provided, library-assumed, test-gap, assumption} |
+| `blocker_gaps_zero` | 1 | 위 표의 `blocker` category 행 0개 |
+| `no_spec_reread_required` | 1 | aggregate sentinel — `blocker_gaps_zero` PASS + `spec-to-design-coverage.md` `## Coverage Trace` 에 최소 1 non-TODO 행 + open-gaps/design-adequacy 본문에 "spec 재독해" 단서 부재 |
+
+gate — `impl_ready_for_codegen` = 위 11개 AND.
+
+본 gate 는 `impl_consistent` 와 *독립* 으로 평가된다. PR D 의 `readiness_pack_ready` aggregate gate (engineering 단계) 의 한 구성요소다.
 
 ## Workflow
 
@@ -61,9 +85,10 @@ gate — `impl_consistent` = 위 Tier 1 4개 AND.
 
 ### 3. 보고
 - `impl_consistent` gate PASS/FAIL.
+- `impl_ready_for_codegen` gate PASS/FAIL.
 - FAIL check 와 그 `to_pass` 액션.
 - WARN (advisory) 는 비차단으로 별도 표시.
-- 다음 추천 — gate PASS 면 implementation 착수 검토, FAIL 이면 `/nf-impl-plan <nf>` 로 to_pass 반영.
+- 다음 추천 — 두 gate 모두 PASS 면 `/nf-eng-design <nf>` (이미 freeze 됐다면 PR D 의 `readiness_pack_ready` aggregate 검사 단계), 아니면 `/nf-impl-plan <nf>` 로 to_pass 반영.
 
 ## 자주 틀리는 지점
 - `_impl_status.yaml` 을 손으로 편집 — 금지. 기계 재생성물. to_pass 를 따라 *산출* 을 고치고 재실행.
