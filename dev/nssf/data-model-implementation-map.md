@@ -49,7 +49,7 @@ generated_date: 2026-05-22
 | 401 | wrapper | (shared ProblemDetails wrapper) | `struct nf_problem_details*` | enum + WWW-Authenticate header | NSSelectionGet, NSSAIAvailabilityPut/Patch/Delete/Post/Unsubscribe/SubModifyPatch/Options | Phase 1 wave A (cross-phase) | none |
 | 403 | wrapper | (shared ProblemDetails wrapper) | `struct nf_problem_details*` | enum + cause | NSSelectionGet, NSSAIAvailabilityPut/Patch/Delete/Post/Unsubscribe/SubModifyPatch/Options | Phase 1 wave A (cross-phase) | none |
 | 404 | wrapper | (shared ProblemDetails wrapper) | `struct nf_problem_details*` | enum + cause | NSSelectionGet, NSSAIAvailabilityPut/Patch/Delete/Post/Unsubscribe/SubModifyPatch/Options | Phase 1 wave A (cross-phase) | none |
-| 405 | wrapper | (shared ProblemDetails wrapper) | `struct nf_problem_details*` | enum + Allow header | NSSAIAvailabilityOptions | Phase 2 wave B | none |
+| 405 | wrapper | (shared ProblemDetails wrapper) | `struct nf_problem_details*` | enum + Allow header | NSSAIAvailabilityOptions | Phase 2 wave A (Options sub-step) | none |
 | 406 | wrapper | (shared ProblemDetails wrapper) | `struct nf_problem_details*` | enum + Accept negotiation | NSSelectionGet | Phase 1 wave A | none |
 | 411 | wrapper | (shared ProblemDetails wrapper) | `struct nf_problem_details*` | enum + Content-Length required | NSSAIAvailabilityPut/Patch/Post/SubModifyPatch | Phase 2 wave A | none |
 | 413 | wrapper | (shared ProblemDetails wrapper) | `struct nf_problem_details*` | enum + payload limit | NSSAIAvailabilityPut/Patch/Post/SubModifyPatch | Phase 2 wave A | none |
@@ -57,7 +57,7 @@ generated_date: 2026-05-22
 | 415 | wrapper | (shared ProblemDetails wrapper) | `struct nf_problem_details*` | enum + Content-Type required | NSSAIAvailabilityPut/Patch/Post/SubModifyPatch | Phase 2 wave A | none |
 | 429 | wrapper | (shared ProblemDetails wrapper) | `struct nf_problem_details*` | enum + Retry-After header | NSSelectionGet, NSSAIAvailabilityPut/Patch/Delete/Post/Unsubscribe/SubModifyPatch/Options | Phase 1 wave A (cross-phase) | none |
 | 500 | wrapper | (shared ProblemDetails wrapper) | `struct nf_problem_details*` | enum + cause | NSSelectionGet, NSSAIAvailabilityPut/Patch/Delete/Post/Unsubscribe/SubModifyPatch/Options | Phase 1 wave A (cross-phase) | none |
-| 501 | wrapper | (shared ProblemDetails wrapper) | `struct nf_problem_details*` | enum + cause | NSSAIAvailabilityOptions (rare) | Phase 2 wave B | none |
+| 501 | wrapper | (shared ProblemDetails wrapper) | `struct nf_problem_details*` | enum + cause | NSSAIAvailabilityOptions (rare) | Phase 2 wave A (Options sub-step) | none |
 | 502 | wrapper | (shared ProblemDetails wrapper) | `struct nf_problem_details*` | enum + cause | NSSelectionGet | Phase 1 wave A | none |
 | 503 | wrapper | (shared ProblemDetails wrapper) | `struct nf_problem_details*` | enum + Retry-After header | NSSelectionGet, NSSAIAvailabilityPut/Patch/Delete/Post/Unsubscribe/SubModifyPatch/Options | Phase 1 wave A (cross-phase) | none |
 | default | wrapper | (shared ProblemDetails wrapper) | `struct nf_problem_details*` | enum + cause fallback | all ops | Phase 1 wave A (cross-phase) | none |

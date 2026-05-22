@@ -22,8 +22,7 @@ generated_date: 2026-05-22
 
 - API operation 8개 (포함) — `api-implementation-matrix.md` ## Operation Matrix 참조.
   - Phase 1 wave A — NSSelectionGet (tracer-bullet).
-  - Phase 2 wave A — NSSAIAvailability Put / Patch / Delete (writes-trio).
-  - Phase 2 wave B — NSSAIAvailability Options (read-trio).
+  - Phase 2 wave A — NSSAIAvailability Put / Patch / Delete / Options (`WI-availability-handlers` 단일 work item, Options 는 same work item 내부 independent sub-step).
   - Phase 3 wave A — NSSAIAvailability subscription Post / Unsubscribe / SubModifyPatch.
 - data-model schema 33개 (포함) — `data-model-implementation-map.md` ## Schema Classification 참조. generated 14 + wrapper 19 (1 NFType + 17 ProblemDetails 상태코드 + 1 default) + handwritten 0 + deferred 0.
 - 외부 의존성.
