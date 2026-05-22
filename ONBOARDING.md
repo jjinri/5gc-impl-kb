@@ -3,7 +3,7 @@
 
 **프로젝트 최종 목표는 AI agent 가 3GPP spec 을 입력으로 완성된 NSSF 구현 코드를 자율 생성·빌드하는 것이다.** 사람의 public workflow 는 *3 행위* 로 축소된다 — (1) `specs/` 에 3GPP 원본 투입, (2) `/nf-readiness <nf>` 요청, (3) `/nf-implement <nf>` 요청. 세부 lifecycle skill (`/nf-spec-discover`, `/nf-contract-build`, `/nf-arch-design`, `/nf-impl-plan`, `/nf-eng-design` 등) 은 `/nf-readiness` 내부 subroutine 으로 재배치되며 사람의 주 작업 surface 가 아니다.
 
-> **2026-05-21 workflow upgrade pending.** 본 문서의 lifecycle 흐름은 in-progress upgrade 사이클의 *현재 상태* 를 반영한다. 최종 public workflow (`/nf-readiness` + `/nf-implement`) 는 `docs/plans/2026-05-21-nf-readiness-implementation-workflow-upgrade-plan.md` 의 PR A~G 사이클로 단계적으로 도입된다. 본 PR (PR A) 는 정책/문서 layer 만 — 신규 wrapper skill 자체는 PR E 에서 신설.
+> **2026-05-21 workflow upgrade progress.** 본 문서의 lifecycle 흐름은 in-progress upgrade 사이클의 *현재 상태* 를 반영한다. 최종 public workflow (`/nf-readiness` + `/nf-implement`) 는 `docs/plans/2026-05-21-nf-readiness-implementation-workflow-upgrade-plan.md` 의 PR A~G 사이클로 단계적으로 도입된다. **PR E2 (2026-05-22)** 까지 `/nf-readiness <nf>` wrapper 가 신설됐다. `/nf-implement` skeleton 은 PR E3, NSSF readiness pack 실데이터 갱신은 PR F 의 책임.
 
 > 용어·단계 이름은 `docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md` 를 따른다. 정책은 `CLAUDE.md`, Git 원칙은 `AGENTS.md`.
 > 파일 관리 기준은 `docs/artifact-management.md` 를 따른다 — 원본, 로컬 재생성 산출물, git 추적 lifecycle 산출물, 작업 계획/회고를 구분한다.
