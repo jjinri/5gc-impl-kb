@@ -57,14 +57,14 @@ Readiness Pack 9 파일이 autonomous codegen agent 가 원본 OpenAPI YAML 재�
 | `readiness_pack_files_present` | 1 | Agent Execution Pack 5 + Human Review Pack 4 = 9 파일 모두 존재 |
 | `api_matrix_covers_all_operations` | 1 | `api-implementation-matrix.md` `## Operation Matrix` 표가 `handoff/<nf>/contract.yaml` 의 `topics.api/<Op>` 키 전체 cover |
 | `data_model_map_covers_all_contract_models` | 1 | `data-model-implementation-map.md` `## Schema Classification` 표가 `topics.data-model/<S>` 키 전체 cover |
-| `all_work_items_have_expected_files` | 1 | `codegen-work-items.yaml` (`schema_version: codegen-work-items-v1`) `items[].expected_files` 모두 non-empty + TODO 아님 |
-| `all_work_items_have_tests` | 1 | `items[].tests` 모두 non-empty + TODO 아님 |
-| `all_work_items_have_verification_commands` | 1 | `items[].verification_commands` 모두 non-empty + TODO 아님 |
+| `all_work_items_have_expected_files` | 1 | `codegen-work-items.yaml` (`schema_version: codegen-work-items-v1`) 각 `items[]` 가 SKILL.md mandate 8 키 (`id`/`owner_lane` non-empty string, `inputs`/`expected_files`/`acceptance`/`tests`/`verification_commands` non-empty list, `depends_on` list 허용 empty) 보유 + 본 check 의 `expected_files` non-empty + TODO 아님 |
+| `all_work_items_have_tests` | 1 | 위 8 키 mandate + `items[].tests` 모두 non-empty + TODO 아님 |
+| `all_work_items_have_verification_commands` | 1 | 위 8 키 mandate + `items[].verification_commands` 모두 non-empty + TODO 아님 |
 | `team_execution_plan_present` | 1 | `team-execution-plan.md` 5 lane (Orchestrator/Code/Reviewer/Tester/Verifier) + Integration Order + References 순서 일치 |
-| `human_review_pack_traceable` | 1 | Human Review Pack 4 파일 존재 + frontmatter 필수 키 + 본문이 TODO/header 만은 아님 |
+| `human_review_pack_traceable` | 1 | Human Review Pack 4 파일 존재 + frontmatter 필수 키 + per-file 사람 audit 흔적 (design-adequacy `## Checklist` 표에 status != pending/TODO 행 1+, spec-to-design `## Coverage Trace` 에 non-TODO 행 1+, open-gaps `## Gaps` 에 id != TODO 행 1+, implementation-readiness-review `## Recommendation` 에 30자+ 비-TODO 본문 1+) |
 | `gaps_classified` | 1 | `open-gaps-and-assumptions.md` `## Gaps` 표 모든 행이 category 컬럼 ∈ {blocker, deferred, operator-provided, library-assumed, test-gap, assumption} |
 | `blocker_gaps_zero` | 1 | 위 표의 `blocker` category 행 0개 |
-| `no_spec_reread_required` | 1 | aggregate sentinel — `blocker_gaps_zero` PASS + `spec-to-design-coverage.md` `## Coverage Trace` 에 최소 1 non-TODO 행 + open-gaps/design-adequacy 본문에 "spec 재독해" 단서 부재 |
+| `no_spec_reread_required` | 1 | aggregate sentinel — `open-gaps-and-assumptions.md` `## Gaps` 표 파싱 가능 + blocker 행 0 + `spec-to-design-coverage.md` `## Coverage Trace` 에 non-TODO 행 1+ + open-gaps/design-adequacy 본문에 "spec 재독해" 단서 부재 |
 
 gate — `impl_ready_for_codegen` = 위 11개 AND.
 

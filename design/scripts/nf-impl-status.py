@@ -93,7 +93,13 @@ HUMAN_REVIEW_PACK = (
     "open-gaps-and-assumptions.md",
 )
 WORK_ITEMS_SCHEMA = "codegen-work-items-v1"
-WORK_ITEM_REQUIRED_LIST_KEYS = ("expected_files", "tests", "verification_commands")
+# SKILL.md mandate — 각 items[] 가 가져야 하는 8 키.
+# `depends_on` 은 empty list 허용, 나머지는 non-empty 요구.
+WORK_ITEM_REQUIRED_SCALAR_KEYS = ("id", "owner_lane")
+WORK_ITEM_REQUIRED_LIST_KEYS_NONEMPTY = (
+    "inputs", "expected_files", "acceptance", "tests", "verification_commands",
+)
+WORK_ITEM_REQUIRED_LIST_KEYS_MAY_EMPTY = ("depends_on",)
 GAP_CATEGORIES = {
     "blocker", "deferred", "operator-provided", "library-assumed",
     "test-gap", "assumption",
@@ -439,34 +445,66 @@ def _load_work_items(dev_dir: pathlib.Path) -> tuple[list, str | None]:
     return items, None
 
 
+def _work_item_schema_errors(items: list) -> list[str]:
+    """SKILL.md mandate 의 8 키 schema 검증. PR #42 Finding 1 보강.
+    각 items[i] 가 다음을 만족해야 함.
+      - scalar keys (id, owner_lane) — 비어있지 않은 string
+      - list keys non-empty (inputs/expected_files/acceptance/tests/
+        verification_commands) — non-empty list 이며 모든 원소 TODO 아님
+      - list keys may-empty (depends_on) — 키 존재 + list 타입 (empty 허용)
+    """
+    errs: list[str] = []
+    for i, it in enumerate(items):
+        if not isinstance(it, dict):
+            errs.append(f"items[{i}] (dict 아님)")
+            continue
+        ident = it.get("id", f"index {i}")
+        for k in WORK_ITEM_REQUIRED_SCALAR_KEYS:
+            v = it.get(k)
+            if not (isinstance(v, str) and v.strip()
+                    and v.strip().upper() != "TODO"):
+                errs.append(f"items[{i}] id={ident!r} scalar {k!r} 누락/TODO")
+        for k in WORK_ITEM_REQUIRED_LIST_KEYS_MAY_EMPTY:
+            v = it.get(k)
+            if not isinstance(v, list):
+                errs.append(f"items[{i}] id={ident!r} list-key {k!r} "
+                            f"누락 또는 list 아님 (empty list 허용)")
+    return errs
+
+
 def _check_work_items_key(dev_dir: pathlib.Path, key: str, check_id: str,
                           name_ko: str) -> dict:
     base = {
         "id": check_id, "tier": 1, "name": name_ko,
         "criterion": (f"codegen-work-items.yaml schema_version "
-                      f"{WORK_ITEMS_SCHEMA}, 각 items[].{key} 가 비어있지 않은 list."),
+                      f"{WORK_ITEMS_SCHEMA}, 각 items[] 가 SKILL.md mandate "
+                      f"8 키 모두 보유 + 본 check 의 {key!r} 가 비어있지 않은 list."),
     }
     items, err = _load_work_items(dev_dir)
     if err:
         base.update(status="FAIL", current=err,
                     to_pass=["/nf-impl-plan <nf> 으로 codegen-work-items.yaml 재생성"])
         return base
+    schema_errs = _work_item_schema_errors(items)
     bad = []
     for i, it in enumerate(items):
         if not isinstance(it, dict):
-            bad.append(f"items[{i}] (dict 아님)")
-            continue
+            continue  # scheme errs 가 이미 잡음
         v = it.get(key)
         if not (isinstance(v, list) and v and any(
                 str(x).strip() and str(x).strip().upper() != "TODO" for x in v)):
             bad.append(f"items[{i}] id={it.get('id', '?')} {key} 비어있음/TODO")
-    if bad:
-        base.update(status="FAIL", current=f"불량 — {bad[:5]}"
-                                            + (" ..." if len(bad) > 5 else ""),
-                    to_pass=[f"각 work item 의 {key} 보강"])
+    all_problems = schema_errs + bad
+    if all_problems:
+        base.update(status="FAIL", current=f"불량 — {all_problems[:5]}"
+                                            + (" ..." if len(all_problems) > 5
+                                               else ""),
+                    to_pass=[f"각 work item 의 SKILL.md mandate 8 키 + "
+                             f"{key!r} non-empty 보강"])
     else:
         base.update(status="PASS",
-                    current=f"{len(items)}개 work item 모두 {key} 보유", to_pass=[])
+                    current=f"{len(items)}개 work item 모두 8 키 + {key} 보유",
+                    to_pass=[])
     return base
 
 
@@ -515,40 +553,109 @@ def check_team_execution_plan_present(dev_dir: pathlib.Path) -> dict:
     return base
 
 
+def _checklist_human_reviewed(dev_dir: pathlib.Path) -> str | None:
+    """design-adequacy-checklist.md 의 `## Checklist` 표에 status 컬럼 (열 3) 이
+    'pending'/'TODO' 외 (예 ok/concern) 인 행이 1 개 이상."""
+    p = dev_dir / "design-adequacy-checklist.md"
+    if not p.exists():
+        return "design-adequacy-checklist.md 없음"
+    rows = parse_md_table_section(p.read_text(encoding="utf-8"), "Checklist")
+    if not rows:
+        return "design-adequacy-checklist.md `## Checklist` 표 없음"
+    for r in rows:
+        if len(r) >= 3 and r[2].strip().lower() not in ("pending", "todo", ""):
+            return None
+    return ("design-adequacy-checklist.md 의 Checklist 모든 행이 status=pending/TODO "
+            "— 사람 audit 흔적 없음")
+
+
+def _coverage_trace_has_content(dev_dir: pathlib.Path) -> str | None:
+    """spec-to-design-coverage.md `## Coverage Trace` 표에 첫 컬럼 non-TODO 행 1+."""
+    p = dev_dir / "spec-to-design-coverage.md"
+    if not p.exists():
+        return "spec-to-design-coverage.md 없음"
+    rows = parse_md_table_section(p.read_text(encoding="utf-8"), "Coverage Trace")
+    if any(r and r[0].strip() and r[0].strip().upper() != "TODO" for r in rows):
+        return None
+    return ("spec-to-design-coverage.md 의 Coverage Trace 가 비어있거나 "
+            "첫 컬럼이 모두 TODO")
+
+
+def _gaps_table_non_todo(dev_dir: pathlib.Path) -> str | None:
+    """open-gaps-and-assumptions.md `## Gaps` 에 id 컬럼 non-TODO 행 1+."""
+    rows, err = _parse_gaps_table(dev_dir)
+    if err:
+        return err
+    if any(r and r[0].strip() and r[0].strip().upper() != "TODO" for r in rows):
+        return None
+    return "open-gaps-and-assumptions.md 의 Gaps 모든 행이 id=TODO"
+
+
+def _review_recommendation_non_todo(dev_dir: pathlib.Path) -> str | None:
+    """implementation-readiness-review.md `## Recommendation` 안에 TODO 가 아닌
+    실질적 본문 (텍스트 길이 ≥ 30 글자) 1줄 이상."""
+    p = dev_dir / "implementation-readiness-review.md"
+    if not p.exists():
+        return "implementation-readiness-review.md 없음"
+    text = p.read_text(encoding="utf-8")
+    start = text.find("## Recommendation")
+    if start == -1:
+        return "implementation-readiness-review.md `## Recommendation` 섹션 없음"
+    nxt = text.find("\n## ", start + len("## Recommendation"))
+    section = text[start:nxt] if nxt != -1 else text[start:]
+    for ln in section.splitlines()[1:]:  # skip H2 헤더
+        s = ln.strip()
+        if not s or s.startswith("#"):
+            continue
+        cleaned = s.lstrip("- *").strip()
+        if cleaned.upper() == "TODO":
+            continue
+        if "TODO" in cleaned and len(cleaned) < 40:
+            continue
+        if len(cleaned) >= 30:
+            return None
+    return ("implementation-readiness-review.md Recommendation 섹션에 30자 이상 "
+            "비-TODO 본문 없음")
+
+
 def check_human_review_pack_traceable(dev_dir: pathlib.Path) -> dict:
     base = {
         "id": "human_review_pack_traceable", "tier": 1,
-        "name": "Human Review Pack 4 파일 존재 + frontmatter + 비어있지 않음",
+        "name": "Human Review Pack 4 파일 존재 + frontmatter + 사람 audit 흔적",
         "criterion": (", ".join(HUMAN_REVIEW_PACK) + " 4 파일 모두 존재, "
-                      "frontmatter 필수 키 충족, 본문이 자리표시자 (TODO 만) 가 아님."),
+                      "frontmatter 필수 키 충족, "
+                      "design-adequacy-checklist 의 Checklist 표에 status != "
+                      "pending/TODO 행 1+, spec-to-design-coverage Coverage Trace "
+                      "에 non-TODO 행 1+, open-gaps Gaps 에 id != TODO 행 1+, "
+                      "implementation-readiness-review Recommendation 에 30자+ "
+                      "비-TODO 본문 1+."),
     }
-    bad = []
+    bad: list[str] = []
+    # 1. 4 파일 존재 + frontmatter
     for fn in HUMAN_REVIEW_PACK:
         p = dev_dir / fn
         if not p.exists():
             bad.append(f"{fn} 없음")
             continue
-        text = p.read_text(encoding="utf-8")
-        fm, body = parse_frontmatter(text)
+        fm, _ = parse_frontmatter(p.read_text(encoding="utf-8"))
         if not fm or (DEV_FM_KEYS - set(fm.keys())):
             bad.append(f"{fn} frontmatter 누락")
-            continue
-        # 본문이 의미 있는지 — TODO/placeholder 외 줄이 한 줄이라도 있는지
-        meaningful = any(
-            ln.strip() and ln.strip().upper() != "TODO"
-            and not ln.strip().startswith("- TODO")
-            and not ln.strip().startswith("##")
-            and not ln.strip().startswith("#")
-            for ln in body.splitlines()
-        )
-        if not meaningful:
-            bad.append(f"{fn} 본문이 TODO/헤더만")
+    # 2. per-file substantive 증거 — boilerplate 통과 차단 (PR #42 Finding 2 보강)
+    for err in (
+        _checklist_human_reviewed(dev_dir),
+        _coverage_trace_has_content(dev_dir),
+        _gaps_table_non_todo(dev_dir),
+        _review_recommendation_non_todo(dev_dir),
+    ):
+        if err:
+            bad.append(err)
     if bad:
         base.update(status="FAIL", current=f"불량 — {bad}",
                     to_pass=["Human Review Pack 본문을 사람이 audit 가능한 "
-                             "수준으로 작성 — TODO 외 의미 있는 행 포함"])
+                             "수준으로 작성 — 각 표/섹션의 placeholder 행 채움"])
     else:
-        base.update(status="PASS", current="4 파일 모두 사람 audit 가능", to_pass=[])
+        base.update(status="PASS",
+                    current="4 파일 모두 사람 audit 흔적 보유", to_pass=[])
     return base
 
 
@@ -632,8 +739,15 @@ def check_no_spec_reread_required(dev_dir: pathlib.Path) -> dict:
                       "design-adequacy 본문에 'spec 재독해/re-read' 단서 부재."),
     }
     rows, gap_err = _parse_gaps_table(dev_dir)
-    blocker_n = 0 if gap_err else sum(
-        1 for r in rows if len(r) >= 2 and r[1].lower() == "blocker")
+    fails = []
+    if gap_err:
+        # gap table 미존재/파싱 실패 = blocker count 신뢰 불가 = FAIL (PR #42 Finding 3 보강).
+        fails.append(f"gap table 신뢰 불가 — {gap_err}")
+        blocker_n = 0
+    else:
+        blocker_n = sum(1 for r in rows if len(r) >= 2 and r[1].lower() == "blocker")
+        if blocker_n:
+            fails.append(f"blocker {blocker_n}개")
     cov_path = dev_dir / "spec-to-design-coverage.md"
     cov_ok = False
     if cov_path.exists():
@@ -649,9 +763,6 @@ def check_no_spec_reread_required(dev_dir: pathlib.Path) -> dict:
         for kw in ("spec 재독해", "re-read spec", "spec 재해석"):
             if kw in t:
                 sentinel_hits.append(f"{fn}:{kw}")
-    fails = []
-    if blocker_n:
-        fails.append(f"blocker {blocker_n}개")
     if not cov_ok:
         fails.append("Coverage Trace 가 비어있거나 TODO 만")
     if sentinel_hits:
