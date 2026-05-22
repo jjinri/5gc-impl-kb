@@ -60,6 +60,14 @@ python3 -m venv .venv
 
 `nf-reset` 은 별도 skill 이 아니라 `/nf-init --reset` 으로 통합된 destructive option 이다.
 
+### NF registry (PR E1, 2026-05-22)
+
+`design/nf-registry.yaml` 는 *durable NF catalog / routing source* 다 (plan §3.1). `design/scripts/nf-registry-bootstrap.py` 가 `specs/` 폴더의 OpenAPI 신호 (filename `TS<n>_N<nf>_...`, `info.title`, `paths` prefix) 로 NF 별 primary_spec 후보를 발견하고 `generated.nfs` 영역만 갱신한다. `manual_overrides.nfs` 는 사람 전용 — bootstrap 은 절대 덮어쓰지 않는다.
+
+primary_spec_confidence 정책. **high** = 2+ 독립 signal type + 충돌 없음. **medium** = 1 signal type. **low** = 다중 NF 후보 / known-table fallback / 신호 없음. `/nf-readiness` wrapper (PR E2) 가 confidence ≠ high 일 때 manual_overrides 확인 후 진행 여부를 결정한다.
+
+bootstrap 은 `--write` 없이 dry-run 이 기본. registry 재생성은 `.venv/bin/python3 design/scripts/nf-registry-bootstrap.py --write`. NSSF / NRF / UDM 의 기존 산출 (`design/<nf>/_manifest.yaml`, `_contract_seed.yaml`, `contract/`, `architecture/`, `dev/`, `engineering/`) 은 본 bootstrap 으로 변경되지 않는다 (PR F 가 책임).
+
 ## 더 보기
 
 - [`CLAUDE.md`](./CLAUDE.md) — repo-local agent 정책.

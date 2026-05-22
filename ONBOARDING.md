@@ -180,6 +180,7 @@ specs/ (사람: 3GPP 원본 투입)
 | 단계 | skill (canonical / alias) | 주 script | 핵심 산출물 | 추적 | gate |
 |---|---|---|---|---|---|
 | A spec 준비 | (사람 전용) | — | `specs/<spec>/*` | git | — |
+| A.1 NF registry | (자동·tool 산출) | nf-registry-bootstrap.py (PR E1) | `design/nf-registry.yaml` (`schema_version: nf-registry-v1`, generated/manual_overrides 분리) | git | primary_spec_confidence ≥ medium |
 | B discovery | `/nf-spec-discover` (`/nf-init`) | nf-manifest.py, nf-seed-gen.py | `_manifest.yaml`, `_contract_seed.yaml` | 비추적 | manifest ready |
 | C contract 생성 | `/nf-contract-build` (`/nf-build`) | resolve-yaml-refs.py, build-handoff.py, validate-extraction.py | `design/<nf>/contract/**`, `handoff/<nf>/contract.yaml` | 비추적 | — |
 | D contract 검증 | `/nf-contract-check` (`/nf-status`) | nf-status.py | `_contract_status.yaml` | 비추적 | **handoff_ready** |

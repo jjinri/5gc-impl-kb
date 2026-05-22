@@ -1,0 +1,71 @@
+# Auto-managed by design/scripts/nf-registry-bootstrap.py
+# `generated.*` 는 bootstrap 이 매번 새로 씀 — 수동 편집 금지.
+# `manual_overrides.nfs` 만 사람이 편집 — bootstrap 은 절대 덮어쓰지 않는다.
+# schema_version = nf-registry-v1 (PR E1, 2026-05-22 plan §3.1).
+#
+# primary_spec_confidence — high / medium / low.
+#   high   = 2+ 독립 signal type (filename/title/path) 일치 + 충돌 없음
+#   medium = 1 signal type 일치
+#   low    = 다중 NF 후보 / known-table fallback / 신호 없음
+# /nf-readiness wrapper (PR E2) 가 confidence != high 인 경우 어떻게
+# 처리할지는 그 wrapper 의 책임 — 기본은 manual_overrides 확인 후 진행.
+
+schema_version: nf-registry-v1
+generated:
+  generated_at: '2026-05-22T02:11:20Z'
+  generator: design/scripts/nf-registry-bootstrap.py
+  nfs:
+    nrf:
+      primary_spec: '29.510'
+      primary_spec_confidence: high
+      discovery_source: auto
+      discovered_from:
+      - specs/29.510/
+      supporting_specs: []
+      expected_files:
+        yaml:
+        - TS29510_Nnrf_AccessToken.yaml
+        - TS29510_Nnrf_Bootstrapping.yaml
+        - TS29510_Nnrf_NFDiscovery.yaml
+        - TS29510_Nnrf_NFManagement.yaml
+        docx:
+        - 29510-j60.docx
+      rationale: signals=filename,path,title
+    nssf:
+      primary_spec: '29.531'
+      primary_spec_confidence: high
+      discovery_source: auto
+      discovered_from:
+      - specs/29.531/
+      supporting_specs: []
+      expected_files:
+        yaml:
+        - TS29531_Nnssf_NSSAIAvailability.yaml
+        - TS29531_Nnssf_NSSelection.yaml
+        docx:
+        - 29531-j60.docx
+      rationale: signals=filename,path,title
+    udm:
+      primary_spec: '29.503'
+      primary_spec_confidence: high
+      discovery_source: auto
+      discovered_from:
+      - specs/29.503/
+      supporting_specs: []
+      expected_files:
+        yaml:
+        - TS29503_Nudm_EE.yaml
+        - TS29503_Nudm_MT.yaml
+        - TS29503_Nudm_NIDDAU.yaml
+        - TS29503_Nudm_PP.yaml
+        - TS29503_Nudm_RSDS.yaml
+        - TS29503_Nudm_SDM.yaml
+        - TS29503_Nudm_SSAU.yaml
+        - TS29503_Nudm_UEAU.yaml
+        - TS29503_Nudm_UECM.yaml
+        - TS29503_Nudm_UEID.yaml
+        docx:
+        - 29503-j60.docx
+      rationale: signals=filename,title
+manual_overrides:
+  nfs: {}
