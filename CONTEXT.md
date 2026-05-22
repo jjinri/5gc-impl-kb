@@ -1,64 +1,60 @@
-# 5gc-impl-kb — NF 개발 파이프라인 컨텍스트
+# 5gc-impl-kb context
 
-3GPP spec 을 입력으로 받아 AI agent 가 자율적으로 완성된 NF(예 NSSF) 코드를 생성하도록, 단계별 산출물·게이트로 이어지는 지식 베이스. 본 문서는 *용어집* 이며 구현·결정 기록이 아니다.
+본 repo 는 3GPP spec 을 NF 구현용 **implementation knowledge base** 로 변환한다. 이 문서는 현재 workflow 의 용어집이다.
 
-## Language
+## Canonical terms
 
-**명세-파생 산출 (Spec-Derived Artifact)**:
-3GPP spec 으로부터 결정론적으로 도출되어 agent 가 재생성 가능한 산출 — 엔지니어링 의견을 담지 않는다 (contract·architecture, 파이프라인 B~F).
-_Avoid_: design output, 설계물 (모호함 — 엔지니어링 결정과 혼동)
+**Implementation Knowledge Base (KB)**
+AI agent 가 NF 코드를 작성하고 사람이 설계를 검토하기 위해 읽는 tracked 산출물 집합. NF별 KB 는 주로 `design/<nf>/architecture/**`, `design/<nf>/module-decomposition/**`, `engineering/<nf>/engineering-design.md`, `dev/<nf>/` readiness pack 으로 구성된다.
 
-**개발 설계 (Engineering Design)**:
-spec 으로부터 도출 불가능한, 사람이 소유하는 엔지니어링 결정 (언어·런타임·SBI/HTTP framework·TLS·persistence·telemetry·배포 토폴로지 + 모듈 코드 형태) — 자율 코드 생성 전에 freeze 되어야 한다.
-_Avoid_: implementation planning, architecture (둘 다 별개 개념), "dev harness 설계"
+**Source Input**
+사람이 외부에서 확보해 `specs/<spec>/` 에 넣는 원본 docx/yaml/pdf. lifecycle 이 새로 시작되는 clean 상태의 필수 입력이다.
 
-**구현 작업 계획 (Implementation Planning)**:
-architecture 를 작업 단위로 재분할한, *결정을 연기하는* 작업 목록 — 각 task acceptance 가 "X 를 결정하라" 이며 결정 자체를 담지 않는다 (현 `/nf-impl-plan` = stage G 산출).
-_Avoid_: 개발 설계 (G 는 개발 설계가 아니다), dev design
+**Local Reproducible Artifact**
+동일 source input + script/skill 로 재생성 가능한 cache 산출. 예: `design/<nf>/_manifest.yaml`, `design/<nf>/_contract_seed.yaml`, `design/<nf>/contract/**`, `handoff/<nf>/contract.yaml`, `_*_status.yaml`. git source of truth 가 아니다.
 
-**자율 코드 생성 (Autonomous Code Generation)**:
-AI agent 가 freeze 된 개발 설계를 입력으로 실제 NF 코드를 작성해 동작하는 NF 를 빌드하는, 파이프라인 *밖* 의 목표 단계.
-_Avoid_: implementation (모호 — 계획과 코드 양쪽 의미)
+**Reviewed Lifecycle Artifact**
+skill 이 생성할 수 있지만 PR review/ratify 후 다음 단계의 source of truth 로 쓰이는 tracked 산출. 예: architecture 문서, `engineering-design.md`, `dev/<nf>/` readiness pack.
 
-**게이트 (Gate)**:
-한 단계 산출이 다음 단계 입력으로 충분한지 판정하는 PASS/FAIL 조건. *구조 게이트* (모양·섹션·schema 검사) 와 *의미 게이트* (내용 충실성 검사) 는 다른 종류다.
-_Avoid_: 두 종류를 "게이트" 로 뭉뚱그리기
+**Readiness Pack**
+`/nf-impl-plan` 이 만드는 `dev/<nf>/` implementation KB. Agent Execution Pack 과 Human Review Pack 을 포함하며 `impl_ready_for_codegen` 의 입력이다.
 
-**owner: dev**:
-한 결정/작업의 해결 주체가 spec-파생 파이프라인이 아니라 dev(코드생성) 단계임을 뜻하는 주석 — schema 미강제, 게이트 무시, 현재 모든 task 에 붙어 변별력 없음.
-_Avoid_: owner 를 기계 검사되는 필드로 간주
+**Agent Execution Pack**
+구현 agent 가 코드 생성을 위해 읽는 readiness pack 부분. 대표 파일: `api-implementation-matrix.md`, `data-model-implementation-map.md`, `codegen-work-items.yaml`, `team-execution-plan.md`, `verification-plan.md`.
 
-**연기 레지스터 (Deferral Register)**:
-의도적으로 미룬 엔지니어링 결정을 `| 결정 | TBD | 해결자/참조 |` 형태로 모은 표 — 현재 `architecture/decisions/ADR-0001-architecture-baseline.md` `## Open choices` 에 7행 실재 (4 `TBD` + 3 `보류`). **개발 설계** 의 결정 인벤토리 원천.
-_Avoid_: arch Open choices 와 동일시 (전자는 구조화 표, 후자는 산문)
+**Human Review Pack**
+사람이 설계 충분성, trace, gap 분류를 검토하기 위해 읽는 readiness pack 부분. 대표 파일: `implementation-readiness-review.md`, `design-adequacy-checklist.md`, `spec-to-design-coverage.md`, `open-gaps-and-assumptions.md`.
 
-**개발 설계 Freeze 단계 (Engineering Design Freeze)**:
-**구현 작업 계획**(stage G) 과 **자율 코드 생성** 사이를 메우는 단계 — **개발 설계** 의 모든 결정이 `decided` 또는 `explicitly_out_of_scope` 로 잠겼음을 게이트 `eng_frozen` 으로 판정한다. 통과 후에만 자율 코드 생성 진입.
-_Avoid_: **구현 작업 계획** 과 동일시 (G 는 결정 연기, 본 단계는 결정 freeze)
+**Engineering Design**
+spec 에서 자동 도출할 수 없는 library/DB/runtime/tool/operator-policy 결정. `engineering/<nf>/engineering-design.md` 가 source of truth 다.
 
-**eng_frozen**:
-**개발 설계 Freeze 단계** 의 게이트이자 **자율 코드 생성** 의 유일한 GO 신호. *blocking 판정은 결정론적 구조 검사* (slot 별 typed closed-form schema), *의미 sub-judge 는 비차단 advisory* (GO/STOP 미결정). 인벤토리 = engineering-core-slots profile + **연기 레지스터** 행.
-_Avoid_: LLM/sub-agent judge 를 blocking 판정자로 둠 (최종 barrier 는 결정론)
+**eng_frozen**
+Engineering Design 의 technology decision freeze gate. 최종 implementation GO 가 아니라 `readiness_pack_ready` 의 구성요소다.
 
-**프로젝트 보안 베이스라인 (Project Security Baseline)**:
-NF spec dependency 와 *독립* 하게 모든 NF codegen 산출이 따라야 하는 보안 capability 의무 — 내부 HTTPS/TLS · mTLS · inbound/outbound OAuth2 code path 의무, dev disable 가능하되 production-capable path 의무 보유, TLS/X.509/JWT primitive 직접 구현 금지 (maintained library). source = `docs/adr/ADR-0004-project-security-baseline.md`. 33.501/33.310/33.210 등 security/profile spec 의 결론을 흡수하며, NF 별 `_manifest.yaml` 의 lifecycle extraction dependency 로는 끌어들이지 않는다.
-_Avoid_: NF 별 engineering-design 만의 결정으로 분산 (재발견·일관성 위험), 33.501 을 NF spec lifecycle dependency 로 추가
+**readiness_pack_ready**
+`/nf-implement <nf>` 시작 가능성을 뜻하는 aggregate gate. 다음 gate 가 모두 PASS 해야 한다: `handoff_ready`, `contract_implementable`, `arch_consistent`, `impl_ready_for_codegen`, `eng_frozen`.
+
+**No Spec Semantic Rediscovery**
+구현 agent 가 원본 spec/OpenAPI 를 의미 보강이나 data model 재해석 목적으로 다시 읽으면 readiness 실패로 본다. 원본은 generator input, drift/source trace 확인에만 허용된다.
+
+**Project Security Baseline**
+모든 NF 구현이 따라야 하는 TLS/mTLS/OAuth2 production-capable code path 의무. Source = `docs/adr/ADR-0004-project-security-baseline.md`. 33.501/33.310/33.210 세부는 operator-provided config + maintained library compliance 로 다루며 NF별 lifecycle dependency 로 끌어들이지 않는다.
 
 ## Relationships
 
-- **명세-파생 산출** (B~F) 은 **개발 설계** 의 입력이다 — 담지는 않는다.
-- **개발 설계** 는 **자율 코드 생성** 의 입력이며 그 전에 freeze 되어야 한다.
-- **구현 작업 계획** (stage G) 은 **개발 설계** 를 *연기* 한다 — 그 사이를 **개발 설계 Freeze 단계**(게이트 `eng_frozen`)가 메운다.
-- `handoff_ready` 는 *의미 게이트*, `arch_consistent`·`impl_consistent` 는 *구조 게이트* — 동급 peer 가 아니다.
-- **프로젝트 보안 베이스라인** 은 **개발 설계** 와 **자율 코드 생성** 의 *추가 의무 source* 다 — NF spec dependency 가 아니라 project ADR 이 진실이다. **개발 설계** 는 baseline 을 만족시키는 lib/구조를 결정하고, codegen 은 baseline + **개발 설계** 두 source 합집합을 따른다.
+- `specs/` 는 source input 이다.
+- `/nf-readiness <nf>` 는 source input 을 NF별 KB/readiness pack 으로 변환한다.
+- `/nf-implement <nf>` 는 readiness pack 을 읽어 실제 source/test/CI 를 만든다.
+- `eng_frozen` 은 necessary but not sufficient 이다. 최종 GO 는 `readiness_pack_ready` 다.
+- Human Review Pack 은 자동 gate 의 대상이 아니라 사람이 audit 하는 표면이다. 단, 파일 존재·frontmatter·traceability 같은 구조는 `nf-impl-status.py` 가 검사한다.
+- Local reproducible artifact 는 중요하지만 git source of truth 가 아니다. 필요하면 skill/script 로 재생성한다.
 
-## Example dialogue
+## Avoid ambiguous wording
 
-> **사람:** "F 또는 G 에서 실제 코드 작성을 위한 개발 설계를 하려고 했다."
-> **Agent:** "빌드된 G(`/nf-impl-plan`)는 **구현 작업 계획** 이다 — task 가 'schema 전략을 *결정하라*' 이고 결정을 담지 않는다. **개발 설계** 를 담는 단계가 파이프라인에 없다."
-
-## Flagged ambiguities
-
-- "개발 설계" 가 (a) stage G impl-plan 과 (b) 엔지니어링 결정 산출 양쪽으로 쓰였다 — 해소: 빌드된 G 는 **구현 작업 계획**(결정 연기), **개발 설계**(결정 freeze)는 현재 어느 단계도 생산하지 않는 별개 개념.
-- "design" 이 명세-파생 산출과 엔지니어링 결정 양쪽을 의미했다 — 해소: 전자는 **명세-파생 산출**, 후자는 **개발 설계**.
-- "TBD" 가 (1) **연기 레지스터** 의 소유자-명시 정당한 연기 와 (2) `tasks.yaml` acceptance 의 "답 없이 task 통과" 탈출구 양쪽으로 쓰였다 — 해소: 별개 개념. (1)만 canonical TBD, (2)는 거짓-준비신호 누수로 취급.
+| 피할 표현 | 대신 사용할 표현 |
+|---|---|
+| design output | spec-derived contract / architecture / engineering design 중 하나로 구체화 |
+| implementation plan 이 곧 개발 설계 | implementation planning 과 engineering design 을 분리 |
+| eng_frozen 이 codegen GO | readiness_pack_ready 가 implementation GO |
+| generated file = gitignore | local reproducible artifact 또는 reviewed lifecycle artifact 로 구분 |
+| spec 다시 읽어서 구현 | readiness pack 보강 후 구현 |

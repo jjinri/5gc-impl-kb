@@ -1,79 +1,113 @@
 # 5gc-impl-kb
 
-3GPP spec 으로부터 AI agent 가 NF (Network Function) 구현 코드를 *자율 생성* 하는 **5gc design-to-dev knowledge base**. 사람의 public workflow 는 *3 행위* 로 축소된다: (1) `specs/` 에 3GPP 원본 투입, (2) `/nf-readiness <nf>` 요청 (implementation readiness pack 생성), (3) `/nf-implement <nf>` 요청 (장기 autonomous 구현). 세부 lifecycle skill (`/nf-spec-discover`, `/nf-contract-build`, `/nf-arch-design`, `/nf-impl-plan`, `/nf-eng-design` 등) 은 `/nf-readiness` 내부 subroutine 으로 재배치되며 사람의 주 작업 surface 가 아니다.
+`5gc-impl-kb` 는 3GPP spec 을 입력으로 NF(Network Function) 구현에 필요한 지식을 축적·검증하는 **implementation knowledge base**다. 목표는 사람이 spec 원본만 준비하면 AI agent 가 구현에 필요한 계약·설계·작업·검증 정보를 KB 에서 읽고 `/nf-implement <nf>` 로 코드를 생성할 수 있게 하는 것이다.
 
-> **2026-05-21 workflow upgrade progress.** 최종 public workflow (`/nf-readiness` + `/nf-implement`) 는 `docs/plans/2026-05-21-nf-readiness-implementation-workflow-upgrade-plan.md` 의 PR A~G 사이클로 단계적으로 도입된다. **PR E3 (2026-05-22)** 까지 `/nf-readiness <nf>` + `/nf-implement <nf>` wrapper *skeleton* 이 모두 신설됐다. NSSF 의 readiness pack 실데이터 갱신은 PR F, `/nf-implement` 의 NSSF Phase 1 tracer-bullet 실행은 PR G 의 책임.
+사람의 일반 workflow 는 3가지다.
 
 ```text
-Target public workflow:
-  specs/{spec}/{file}.{docx,yaml}        ← 사람 입력
-        │
-        ▼  /nf-readiness <nf>            ← 사람 호출 1
-   dev/<nf>/ readiness pack              ← Agent Execution Pack + Human Review Pack
-        │
-        ▼  readiness_pack_ready PASS     ← 최종 GO gate (eng_frozen 단독 GO 폐기)
-        │
-        ▼  /nf-implement <nf>            ← 사람 호출 2
-   src/, generated/, sql/, tests/        ← autonomous code generation 산출
-        │
-        ▼  full_nf_done                  ← merge/release
+1. specs/ 에 3GPP 원본 docx/yaml 투입
+2. /nf-readiness <nf>   → NF별 implementation KB/readiness pack 생성·검증
+3. /nf-implement <nf>   → readiness pack 기반 autonomous 구현 시작
 ```
 
-정확한 lifecycle 용어와 canonical skill 이름은 [`docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`](./docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md) 를 따른다. 8 gate 의미 정정 (`specs_ready`, `contract_implementable`, `arch_consistent`, `impl_ready_for_codegen`, `eng_frozen`, `readiness_pack_ready`, `tracer_bullet_passed`, `full_nf_done`) 는 위 upgrade plan §3 참조.
+세부 lifecycle skill 은 `/nf-readiness` 내부 subroutine 이다. 사람이 직접 호출하는 경우는 third-party library 교체, DBMS 교체, 보안 정책 변경, spec 추가·제외, public contract 변경처럼 **새 계약**이 필요한 때로 한정한다.
 
 ## Quick start
 
 ```bash
-git clone https://github.com/jjinri/5gc-impl-kb.git && cd 5gc-impl-kb
-sudo apt install python3-venv python3-pip   # 사용자 권한 필요 — 한 번만
+git clone https://github.com/jjinri/5gc-impl-kb.git
+cd 5gc-impl-kb
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```
 
-의존성은 `requirements.txt` 가 진실 출처 (`pypdf`·`python-docx`·`pyyaml`). 본 repo 의 모든 도구는 `.venv/bin/python3 design/scripts/<name>.py` 형태로 호출하므로 venv 활성화는 불필요. `.doc` 처리가 필요하면 별도로 `sudo apt install libreoffice-core` 또는 `antiword`.
+도구 실행은 venv 활성화 없이 `.venv/bin/python3 design/scripts/<script>.py ...` 형태로 가능하다. `.doc` 변환이 필요하면 host 에 `libreoffice` 또는 `antiword` 가 추가로 필요할 수 있다.
 
-## 사람이 호출하는 lifecycle skill
+## KB 구조
 
-### Target public surface (upgrade 완료 후)
+```text
+specs/                    # 사람이 넣는 원본 spec/API 파일
+  29.531/*.docx|*.yaml
 
-| 단계 | skill | 기능 | 주요 산출물 |
+design/nf-registry.yaml   # NF 라우팅 catalog, git 추적
+
+design/<nf>/              # spec-derived contract/architecture 영역
+  architecture/           # review 된 architecture KB, git 추적
+  module-decomposition/   # module 책임 KB, git 추적
+  _manifest.yaml          # local rendered cache, 비추적
+  _contract_seed.yaml     # local rendered cache, 비추적
+  contract/               # local rendered contract topics, 비추적
+
+handoff/<nf>/contract.yaml # local machine-readable contract cache, 비추적
+
+engineering/<nf>/engineering-design.md  # library/DB/runtime/tool 결정 freeze, git 추적
+
+dev/<nf>/                 # NF별 implementation KB/readiness pack, git 추적
+  implementation-plan.md
+  tasks.yaml
+  test-matrix.md
+  traceability.md
+  api-implementation-matrix.md
+  data-model-implementation-map.md
+  codegen-work-items.yaml
+  team-execution-plan.md
+  verification-plan.md
+  implementation-readiness-review.md
+  design-adequacy-checklist.md
+  spec-to-design-coverage.md
+  open-gaps-and-assumptions.md
+```
+
+자세한 파일 분류와 fresh clone 재생성 순서는 [`docs/artifact-management.md`](./docs/artifact-management.md) 를 따른다. KB 독해 순서는 [`docs/kb/README.md`](./docs/kb/README.md) 를 따른다.
+
+## Public workflow skills
+
+| 사람 호출 | 목적 | 성공 gate | 주요 산출 |
 |---|---|---|---|
-| Readiness | `/nf-readiness <nf>` (PR E2, 2026-05-22) | spec → contract → arch → impl → eng-design 11-step lifecycle chain 자동 실행, registry resolve + first-blocker short-circuit, aggregate gate `readiness_pack_ready` 평가 | `dev/<nf>/` readiness pack (Agent Execution Pack 5 + Human Review Pack 4) + `dev/<nf>/_readiness_status.yaml` |
-| Implementation | `/nf-implement <nf>` (PR E3, 2026-05-22 — skeleton) | readiness pack 입력 autonomous code generation. Phase 0 readiness gate → Phase 1 tracer-bullet → Phase 2 task graph → Phase 3 feature wave → Phase 4 contract/security/e2e → Phase 5 hardening. run state `dev/<nf>/_implementation_run_state.yaml` 로 stop/resume. *no spec semantic rediscovery* 강제. 실제 NSSF Phase 1 산출은 PR G | `src/`, `generated/`, `sql/`, `tests/`, `vendored/`, CI 산출 |
+| `/nf-readiness <nf>` | spec 에서 implementation-ready KB 생성·검증 | `readiness_pack_ready` | `design/<nf>/`, `engineering/<nf>/`, `dev/<nf>/` readiness pack |
+| `/nf-implement <nf>` | readiness pack 을 입력으로 장기 autonomous 구현 | `tracer_bullet_passed` → `full_nf_done` | `src/`, generated code, SQL, tests, CI/runtime 산출 |
 
-### Internal subroutine skills (public wrappers 내부에서 호출; 새 계약 / override 상황에서만 직접 호출)
+`readiness_pack_ready` 는 다음 gate 의 AND 다.
 
-| 단계 | 호환 skill | canonical skill | 기능 | 주요 산출물 |
-|---|---|---|---|---|
-| Spec discovery | `/nf-init <nf> --primary <spec>` | `/nf-spec-discover <nf> --primary <spec>` | primary/ref spec 식별, manifest 생성·보강, ready 시 seed auto-gen | `design/<nf>/_manifest.yaml`, `design/<nf>/_contract_seed.yaml` |
-| Reset + rediscovery | `/nf-init <nf> --primary <spec> --reset` | `/nf-spec-discover <nf> --primary <spec> --reset` | contract 산출만 archive 후 manifest refresh + seed auto-gen | `design/<nf>/_archive/<ts>/`, manifest/seed 보존·갱신 |
-| Contract extraction | `/nf-build <nf>` | `/nf-contract-build <nf>` | spec-derived contract markdown/json 과 handoff contract 생성 (PR B 에서 data-model field table / generated-vs-wrapper 판단 추가) | `design/<nf>/contract/...`, `handoff/<nf>/contract.yaml` |
-| Contract validation | `/nf-status <nf>` | `/nf-contract-check <nf>` | contract 가 implementation 입력으로 충분한지 검사 (PR B 에서 `contract_implementable` gate 추가) | `design/<nf>/_contract_status.yaml` |
-| Architecture design | 없음 | `/nf-arch-design <nf>` | contract 를 module/flow/state/error/test seam 으로 변환 | `design/<nf>/architecture/*` |
-| Architecture validation | 없음 | `/nf-arch-status <nf>` | architecture 자기 일관성 검사 (`arch_consistent`) | `design/<nf>/_arch_status.yaml` |
-| Implementation planning | 없음 | `/nf-impl-plan <nf>` | 아키텍처를 implementation readiness pack 으로 변환 (PR C 에서 Agent Execution Pack + Human Review Pack 9 파일 산출 추가) | `dev/<nf>/implementation-plan.md`, `tasks.yaml`, `test-matrix.md`, `traceability.md`, readiness pack 9 파일 |
-| Implementation validation | 없음 | `/nf-impl-status <nf>` | impl plan 자기 일관성 + codegen 진입 가능 검사 (PR C 에서 `impl_ready_for_codegen` gate 추가) | `dev/<nf>/_impl_status.yaml` |
-| Engineering design | 없음 | `/nf-eng-design <nf>` | tech decision freeze (library / DB / runtime / tool / policy) | `engineering/<nf>/engineering-design.md` |
-| Engineering validation | 없음 | `/nf-eng-status <nf>` | engineering decision freeze 검사 (`eng_frozen`) | `engineering/<nf>/_engineering_status.yaml` |
+```text
+handoff_ready
+∧ contract_implementable
+∧ arch_consistent
+∧ impl_ready_for_codegen
+∧ eng_frozen
+```
 
-세부 wrapper skill 직접 호출은 *예외 경우* — third-party library 교체, DBMS 교체, security policy 변경, spec 추가/제외, public contract 변경 등 "새 계약" 이 필요할 때만. 일반 NF 작업은 `/nf-readiness` + `/nf-implement` 2 행위로 처리.
+`eng_frozen` 은 technology decision freeze 일 뿐이며, 단독 implementation GO 신호가 아니다.
 
-`nf-reset` 은 별도 skill 이 아니라 `/nf-init --reset` 으로 통합된 destructive option 이다.
+## Internal lifecycle skills
 
-### NF registry (PR E1, 2026-05-22)
+| 내부 단계 | skill | 역할 | 산출 class |
+|---|---|---|---|
+| NF routing | `/nf-readiness` Phase 0 + `nf-registry-bootstrap.py` | `specs/` 에서 NF primary spec 후보 resolve | `design/nf-registry.yaml` tracked, manifest cache |
+| Spec discovery | `/nf-spec-discover` (`/nf-init`) | manifest/seed 생성 | local reproducible cache |
+| Contract build | `/nf-contract-build` (`/nf-build`) | contract topic + handoff 생성 | local reproducible cache |
+| Contract check | `/nf-contract-check` (`/nf-status`) | `handoff_ready`, `contract_implementable` 측정 | local status cache |
+| Architecture | `/nf-arch-design` / `/nf-arch-status` | architecture KB 생성·검증 | tracked architecture + local status |
+| Implementation planning | `/nf-impl-plan` / `/nf-impl-status` | readiness pack 생성·검증 | tracked `dev/<nf>/` KB + local status |
+| Engineering freeze | `/nf-eng-design` / `/nf-eng-status` | library/DB/runtime/tool 결정 freeze | tracked engineering design + local status |
+| Aggregate | `nf-readiness-status.py` | 최종 readiness gate 계산 | local status cache |
 
-`design/nf-registry.yaml` 는 *durable NF catalog / routing source* 다 (plan §3.1). `design/scripts/nf-registry-bootstrap.py` 가 `specs/` 폴더의 OpenAPI 신호 (filename `TS<n>_N<nf>_...`, `info.title`, `paths` prefix) 로 NF 별 primary_spec 후보를 발견하고 `generated.nfs` 영역만 갱신한다. `manual_overrides.nfs` 는 사람 전용 — bootstrap 은 절대 덮어쓰지 않는다.
+## NSSF current state
 
-primary_spec_confidence 정책. **high** = 2+ 독립 signal type + 충돌 없음. **medium** = 1 signal type. **low** = 다중 NF 후보 / known-table fallback / 신호 없음. `/nf-readiness` wrapper (PR E2) 가 confidence ≠ high 일 때 manual_overrides 확인 후 진행 여부를 결정한다.
+NSSF 는 `dev/nssf/` readiness pack 9 파일이 생성되어 `readiness_pack_ready PASS` 상태다. 다음 단계는 `/nf-implement nssf` Phase 1 tracer-bullet 이며, 구현 agent 는 원본 spec 을 의미 재발견 용도로 다시 읽지 않고 readiness pack 을 source of truth 로 사용한다.
 
-bootstrap 은 `--write` 없이 dry-run 이 기본. registry 재생성은 `.venv/bin/python3 design/scripts/nf-registry-bootstrap.py --write`. NSSF / NRF / UDM 의 기존 산출 (`design/<nf>/_manifest.yaml`, `_contract_seed.yaml`, `contract/`, `architecture/`, `dev/`, `engineering/`) 은 본 bootstrap 으로 변경되지 않는다 (PR F 가 책임).
+## 원칙
 
-## 더 보기
+- **No spec semantic rediscovery**: implementation agent 는 원본 OpenAPI/spec 을 drift/source trace/generator input 으로만 사용할 수 있다. 구현 의미 판단은 KB 산출물이 제공해야 한다.
+- **Tracked KB vs local cache 분리**: 다음 단계가 source of truth 로 읽는 reviewed 산출은 git 추적, deterministic cache/status 는 비추적.
+- **Security baseline**: TLS/mTLS/OAuth2 production-capable code path 의무는 [`ADR-0004`](./docs/adr/ADR-0004-project-security-baseline.md) 가 project-wide source 다. 33.501/33.310/33.210 은 NF별 lifecycle extraction dependency 로 추가하지 않는다.
 
-- [`CLAUDE.md`](./CLAUDE.md) — repo-local agent 정책.
-- [`docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`](./docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md) — lifecycle 단계와 skill vocabulary 결정.
-- [`docs/adr/ADR-0002-engineering-design-freeze.md`](./docs/adr/ADR-0002-engineering-design-freeze.md) — `eng_frozen` 게이트 (PR D 에서 readiness 구성요소로 의미 좁힘 예정).
-- [`docs/adr/ADR-0004-project-security-baseline.md`](./docs/adr/ADR-0004-project-security-baseline.md) — TLS / mTLS / OAuth2 production-capable code path 의무 source.
-- [`docs/artifact-management.md`](./docs/artifact-management.md) — 원본·재생성 산출물·reviewed lifecycle 산출물·작업 계획 문서의 파일 관리 기준.
-- [`docs/plans/2026-05-21-nf-readiness-implementation-workflow-upgrade-plan.md`](./docs/plans/2026-05-21-nf-readiness-implementation-workflow-upgrade-plan.md) — `/nf-readiness` + `/nf-implement` workflow upgrade 마스터 plan (PR A~G 사이클).
-- 세부 schema/gate/tool 동작은 `design/scripts/*` docstring 과 `.claude/skills/*/SKILL.md` 가 진실 출처다.
+## References
+
+- [`ONBOARDING.md`](./ONBOARDING.md) — 사람/agent 사용 가이드.
+- [`CONTEXT.md`](./CONTEXT.md) — canonical 용어집.
+- [`docs/kb/README.md`](./docs/kb/README.md) — KB 독해 순서와 agent/human review 관점.
+- [`docs/artifact-management.md`](./docs/artifact-management.md) — 파일 class, git 정책, 재생성 순서.
+- [`docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`](./docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md) — lifecycle vocabulary.
+- [`docs/adr/ADR-0002-engineering-design-freeze.md`](./docs/adr/ADR-0002-engineering-design-freeze.md) — `eng_frozen` 의미.
+- [`docs/adr/ADR-0004-project-security-baseline.md`](./docs/adr/ADR-0004-project-security-baseline.md) — security baseline.
