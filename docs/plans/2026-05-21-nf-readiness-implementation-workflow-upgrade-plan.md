@@ -27,7 +27,7 @@ PR #38 (`codegen-nssf-tracer-bullet-plan`) 은 현재 형태로 merge 하지 않
 Human input:
   specs/<spec>/*.docx|*.yaml 준비
 
-/nf-readiness nssf --primary 29.531
+/nf-readiness nssf
   → specs_ready
   → contract_implementable
   → arch_consistent
@@ -44,6 +44,8 @@ Human input:
   → Phase 5 hardening/review/merge
 ```
 
+Note. `--primary <spec>` 는 *override / bootstrap* 용 보조 인자다 (`design/nf-registry.yaml` 부재·저신뢰일 때만). canonical public UX 는 `/nf-readiness <nf>` 형태이며 `primary_spec` 은 registry resolve. 자세한 routing 은 §3.1.
+
 ## 3. Gate semantics 정정
 
 | Gate | 의미 | 다음 단계 |
@@ -58,6 +60,89 @@ Human input:
 | `full_nf_done` | full NF 기능 + contract/security/e2e 검증 완료 | merge/release |
 
 중요: `eng_frozen` 단독으로 codegen GO 를 의미하지 않는다. 최종 GO 는 `readiness_pack_ready` 다.
+
+## 3.1 Registry vs manifest 관계 (2026-05-22 amendment)
+
+NF 별 lifecycle 입력은 두 layer 로 분리한다.
+
+| Layer | 파일 | 성격 | git 추적 | 책임자 |
+|---|---|---|---|---|
+| **durable NF catalog / routing source** | `design/nf-registry.yaml` | spec 스캔으로 AI/tool 이 생성·보강, 사람은 `manual_overrides` 만 | tracked | tool 자동 + 사람 override |
+| **per-NF discovery rendered output** | `design/<nf>/_manifest.yaml` | registry + spec scan 결과의 *rendered* artifact. 재생성물. | gitignored | `/nf-spec-discover` 도구 |
+
+Canonical flow.
+
+```
+specs/<spec>/ 준비
+    └─ (bootstrap) tool 이 specs/ 스캔 → design/nf-registry.yaml 자동 생성·보강
+          └─ /nf-readiness <nf>
+                ├─ design/nf-registry.yaml 에서 nfs[<nf>].primary_spec resolve
+                ├─ resolve 실패/저신뢰 → blocker 로 보고 후 사람 manual_overrides 확정
+                └─ /nf-spec-discover <nf> --primary <resolved> (internal subroutine)
+                      └─ design/<nf>/_manifest.yaml (rendered output)
+                            └─ design/<nf>/_contract_seed.yaml
+                                  └─ contract / arch / impl / eng / readiness pipeline
+```
+
+핵심 원칙.
+
+- `design/nf-registry.yaml` 은 *routing source* — fresh checkout 에서 `/nf-readiness <nf>` 가 동작하려면 본 파일이 있어야 한다 (git tracked).
+- `_manifest.yaml` 은 *rendered output* — durable 한 정책 결정은 *registry 또는 ADR 에 저장* 하고 manifest 는 그것을 인용한 결과만 담는다.
+- `--primary` 는 *override / bootstrap / 실험용* — canonical UX 가 아니다. registry 미존재 또는 신뢰도 낮을 때만 사용.
+
+## 3.2 Durable manual decisions 위치 (2026-05-22 amendment)
+
+33.501 / 33.310 / 33.210 같은 *durable 정책 결정* 을 `_manifest.yaml` 의 `manual_overrides.exclude` *에만* 두면 fresh checkout 후 manifest 가 새로 생성될 때 정책이 사라진다 (manifest = rendered output). durable source 는 다음 둘 중 하나여야 한다.
+
+| 결정 종류 | durable 위치 | manifest 가 인용 |
+|---|---|---|
+| project-wide security/compliance baseline (33.501, 33.310, 33.210 등) | `docs/adr/ADR-0004-project-security-baseline.md` (또는 후속 ADR) | `manifest.deps.security[i].excluded` reason 이 ADR 인용 |
+| NF-specific spec subset / scope policy (예 NSSF 가 38.413 보류) | `design/nf-registry.yaml` 의 `manual_overrides.nfs.<nf>.spec_policy.exclude.<spec>` | manifest 가 `source_registry: nf-registry.yaml` 명시 + `excluded: true` + reason 동일 |
+| operational decision (deployment 옵션 등) | engineering-design.md 의 해당 slot | manifest 가 직접 참조 안 함 (engineering 단계 책임) |
+
+예시 (registry).
+
+```yaml
+# design/nf-registry.yaml (excerpt)
+manual_overrides:
+  nfs:
+    nssf:
+      spec_policy:
+        exclude:
+          "33.501":
+            reason: "absorbed_by_ADR_0004 — project security baseline 으로 통합"
+            ratified_by: "jjinri"
+            date: "2026-05-21"
+          "38.413":
+            reason: "AMF reallocation via RAN 운영 보류"
+            ratified_by: "jjinri"
+            date: "2026-05-19"
+```
+
+manifest 는 위 registry 결정을 *render* 한 output 으로 `deps.security` / `cross-nf` row 에 excluded=true + reason 을 채운다.
+
+## 3.3 Lifecycle 단계 표 — 산출물·gate·병합 후보 (2026-05-22 amendment)
+
+| Stage | 산출물 (durable) | Gate | 책임 skill (internal) | 병합/리네임 후보 |
+|---|---|---|---|---|
+| (A) Spec preparation | `specs/<spec>/*.docx`, `*.yaml` (사람 투입) | `specs_ready` | — | 유지 |
+| (B) NF routing registry | `design/nf-registry.yaml` | (registry 자체는 gate 아님; `/nf-readiness` precondition) | `/nf-readiness` bootstrap | PR E 신설 |
+| (C) Spec discovery | `_manifest.yaml`·`_contract_seed.yaml` (rendered) | manifest `ready_for_build` | `/nf-spec-discover` (internal) | 유지 |
+| (D) Contract build | `design/<nf>/contract/**` + `handoff/<nf>/contract.yaml` | — | `/nf-contract-build` (internal) | 유지 |
+| (E) Contract check | `_contract_status.yaml` | `handoff_ready` + `contract_implementable` | `/nf-contract-check` (internal) | 두 gate 모두 같은 status 파일 안 |
+| (F) Architecture | `design/<nf>/architecture/**` + `module-decomposition/**` | `arch_consistent` | `/nf-arch-design` + `/nf-arch-status` (internal) | 유지 |
+| (G) Implementation planning + readiness pack | `dev/<nf>/{impl-plan,tasks,test-matrix,traceability,api-implementation-matrix,data-model-implementation-map,codegen-work-items,team-execution-plan,verification-plan,implementation-readiness-review,design-adequacy-checklist,spec-to-design-coverage,open-gaps-and-assumptions}` | `impl_consistent` + `impl_ready_for_codegen` | `/nf-impl-plan` + `/nf-impl-status` (internal) | PR C 가 산출 9 파일 의무화 |
+| (H) Engineering design freeze | `engineering/<nf>/engineering-design.md` | `eng_frozen` (tech decision freeze, *not* final codegen GO) | `/nf-eng-design` + `/nf-eng-status` (internal) | ADR-0002 wording 정정 (PR D) |
+| (I) Readiness aggregate | (계산값, 별 파일 없음 또는 `_readiness_status.yaml`) | `readiness_pack_ready` = handoff_ready ∧ contract_implementable ∧ arch_consistent ∧ impl_ready_for_codegen ∧ eng_frozen | `/nf-readiness` aggregate (public) | PR D 신설 |
+| (J) Autonomous implementation Phase 1 | `src/`, `generated/`, `sql/`, `tests/`, `vendored/`, CI | `tracer_bullet_passed` | `/nf-implement` Phase 1 (public) | PR E + PR G |
+| (K) Full implementation waves | (위 + module 별 산출) | `full_nf_done` | `/nf-implement` Phase 2~5 | follow-up |
+
+병합/단순화 검토.
+
+- `/nf-arch-design` + `/nf-arch-status` — 산출/gate 가 명확히 분리되어 유지.
+- `/nf-impl-plan` + `/nf-impl-status` — 같은 패턴, 유지. impl_consistent 와 impl_ready_for_codegen 두 gate 가 같은 status 파일 안.
+- `/nf-eng-design` + `/nf-eng-status` — 사람 ratify 단계 분리 위해 유지.
+- legacy alias (`/nf-init` / `/nf-build` / `/nf-status`) — 호환 유지하되 `/nf-readiness` 내부 호출만, public 직접 호출 비권장 (PR E 에서 SKILL.md 갱신).
 
 ## 4. Required skill upgrades
 
