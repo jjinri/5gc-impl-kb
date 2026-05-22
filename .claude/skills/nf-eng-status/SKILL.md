@@ -7,7 +7,7 @@ allowed-tools: Bash(.venv/bin/python3 design/scripts/nf-eng-status.py *) Bash(ca
 
 # nf-eng-status — Engineering Design Freeze 자기 일관성 검사
 
-Engineering Design Freeze 단계 status 검사다 (ADR-0002). contract=`/nf-contract-check`, architecture=`/nf-arch-status`, implementation-planning=`/nf-impl-status` 와 책임이 분리된다. `eng_frozen` 은 **자율 코드 생성의 유일한 GO 신호**다.
+Engineering Design Freeze 단계 status 검사다 (ADR-0002). contract=`/nf-contract-check`, architecture=`/nf-arch-status`, implementation-planning=`/nf-impl-status` 와 책임이 분리된다. `eng_frozen` 은 *technology decision freeze* 단일 게이트이며, autonomous implementation (`/nf-implement`) 의 최종 GO 신호인 **aggregate** `readiness_pack_ready` 의 한 구성요소다 (= `handoff_ready ∧ contract_implementable ∧ arch_consistent ∧ impl_ready_for_codegen ∧ eng_frozen`). aggregate 측정은 자매 script `design/scripts/nf-readiness-status.py` (PR D, 2026-05-22) 의 책임.
 
 ## 입력
 - `<nf>` — NF 이름.
@@ -30,7 +30,7 @@ Engineering Design Freeze 단계 status 검사다 (ADR-0002). contract=`/nf-cont
 - **CLAUDE.md 정책 + ADR-0002 가 우선.**
 - **read-only.** 측정과 수정이 같은 skill 에 있으면 측정이 수정에 흔들린다 — 생성·갱신은 `/nf-eng-design` 의 책임.
 - **blocking 은 결정론.** `gates.eng_frozen` 은 binary check 의 AND 로만 결정된다. LLM/sub-agent judge 는 blocking 판정에 절대 들어가지 않는다 (ADR-0002 Decision §2). 의미 잔여 위험은 비차단 `advisory` 가 표시만 한다.
-- **namespace 분리.** 출력의 `gates.eng_frozen` (PASS/FAIL, 자율 코드 생성 GO) 과 `advisory.impl_plan_alignment` (PASS/WARN/SKIP, 비차단) 는 절대 섞지 않는다. advisory 가 시간이 지나 blocking 처럼 오염되면 안 된다.
+- **namespace 분리.** 출력의 `gates.eng_frozen` (PASS/FAIL, technology decision freeze) 과 `advisory.impl_plan_alignment` (PASS/WARN/SKIP, 비차단) 는 절대 섞지 않는다. advisory 가 시간이 지나 blocking 처럼 오염되면 안 된다.
 - **inventory 하드코딩 금지.** core slot 은 `design/schemas/engineering-core-slots.yaml` profile (pipeline policy) 을 read-only 로 읽고, NF-specific 은 per-NF 연기 레지스터 (`design/<nf>/architecture/decisions/ADR-0001-architecture-baseline.md` `## Open choices`) 에서 흡수한다. 둘의 합집합이 inventory.
 - **deferral register 는 F-hard 입력.** 누락·파싱 실패는 조용한 PASS 가 아니라 `eng_frozen` FAIL 이다.
 
@@ -51,14 +51,14 @@ Engineering Design Freeze 단계 status 검사다 (ADR-0002). contract=`/nf-cont
 ### 3. 결과 보고
 사용자에게 한 화면에 묶어 전달.
 
-- **`gates.eng_frozen`** — PASS 면 *자율 코드 생성 진입 가능*, FAIL 이면 `blocked_by` 의 check.
+- **`gates.eng_frozen`** — PASS 면 *technology decision freeze* 완료, FAIL 이면 `blocked_by` 의 check.
 - **상위 FAIL check 의 to_pass** — 다음에 무엇을 `/nf-eng-design` 으로 고쳐야 하는지.
 - **`advisory.impl_plan_alignment`** — PASS / WARN / SKIP. *비차단* 임을 명시 (WARN 이어도 eng_frozen 은 PASS 가능).
 - `_engineering_status.yaml` 위치.
 
 ### 4. 다음 액션 안내
 - `eng_frozen` FAIL → `blocked_by` 의 첫 항목부터 `/nf-eng-design <nf>` 로 보강 후 재실행.
-- `eng_frozen` PASS → "자율 코드 생성 진입 가능. advisory 는 비차단 참고."
+- `eng_frozen` PASS → "tech decision freeze 완료. autonomous implementation GO 는 aggregate `readiness_pack_ready` 확인 필요 — `design/scripts/nf-readiness-status.py <nf>` 로 측정. advisory 는 비차단 참고."
 
 ## 자주 틀리는 지점
 - 사용자가 `_engineering_status.yaml` 을 직접 편집 — 금지. 기계 재생성물. `to_pass` 를 따라 *engineering-design.md* 를 고치고 재실행.

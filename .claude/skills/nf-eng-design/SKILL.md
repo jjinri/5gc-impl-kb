@@ -1,6 +1,6 @@
 ---
 name: nf-eng-design
-description: Canonical lifecycle skill — reviewed NF architecture(+impl-plan)와 contract 를 입력으로 사람 소유 엔지니어링 결정을 `engineering/<nf>/engineering-design.md` 로 freeze 하는 Engineering Design Freeze 단계. 사용자가 "/nf-eng-design nssf", "NSSF engineering design", "엔지니어링 결정 freeze", "자율 코드 생성 전 결정 잠그기", "eng design 만들어줘" 등을 말하거나 NF 이름 + engineering-design 생성을 지정하면 이 skill 을 사용한다. AI 가 F/G+contract 근거로 13 core slot + per-NF 연기 레지스터 결정을 *초안 자동생성* 하되, engineering decision 은 spec-derived 가 아니라 사람 ratify 전 frozen 아님. 검증은 `/nf-eng-status`.
+description: Canonical lifecycle skill — reviewed NF architecture(+impl-plan)와 contract 를 입력으로 사람 소유 엔지니어링 결정을 `engineering/<nf>/engineering-design.md` 로 freeze 하는 Engineering Design Freeze 단계. 사용자가 "/nf-eng-design nssf", "NSSF engineering design", "엔지니어링 결정 freeze", "tech decision freeze", "eng design 만들어줘" 등을 말하거나 NF 이름 + engineering-design 생성을 지정하면 이 skill 을 사용한다. AI 가 F/G+contract 근거로 13 core slot + per-NF 연기 레지스터 결정을 *초안 자동생성* 하되, engineering decision 은 spec-derived 가 아니라 사람 ratify 전 frozen 아님. `eng_frozen` 은 technology decision freeze 단일 게이트이며 autonomous implementation 의 최종 GO 는 aggregate `readiness_pack_ready` (= contract + arch + impl + eng AND). 본 단계 검증은 `/nf-eng-status`, aggregate 검증은 `design/scripts/nf-readiness-status.py`.
 argument-hint: "<nf>"
 allowed-tools: Bash(.venv/bin/python3 design/scripts/nf-eng-status.py *) Bash(cat *) Bash(ls *) Bash(find design/*) Bash(find dev/*) Bash(find engineering/*) Bash(mkdir -p *) Bash(grep *) Bash(sed *)
 ---
