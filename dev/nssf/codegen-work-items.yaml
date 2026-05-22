@@ -1,0 +1,414 @@
+schema_version: codegen-work-items-v1
+nf: nssf
+stage: implementation-planning
+status: draft
+source_architecture: design/nssf/architecture
+source_contract: handoff/nssf/contract.yaml
+generated_date: 2026-05-22
+
+# items[] — file-level autonomous codegen work units.
+# 각 item 필수 키 — id, owner_lane, depends_on, inputs, expected_files,
+#                   acceptance, tests, verification_commands.
+# `impl_ready_for_codegen` gate 의 다음 check 가 이 schema 를 본다.
+#   - all_work_items_have_expected_files  (expected_files 비어있지 않음)
+#   - all_work_items_have_tests           (tests 비어있지 않음)
+#   - all_work_items_have_verification_commands (verification_commands 비어있지 않음)
+
+items:
+  # ===== Phase 1 wave A (tracer-bullet, PR G) =====
+  - id: WI-codegen-bootstrap
+    owner_lane: code
+    depends_on: []
+    inputs:
+      - engineering/nssf/engineering-design.md (schema_codegen slot freeze)
+      - handoff/nssf/contract.yaml (api topics + data-model topics)
+      - specs/29.531/TS29531_Nnssf_NSSelection.yaml (generator input only, drift/trace source per spec-to-design-coverage)
+      - specs/29.531/TS29531_Nnssf_NSSAIAvailability.yaml (generator input only)
+    expected_files:
+      - infra/nssf/codegen/openapi-generator-cli.config.yaml
+      - infra/nssf/codegen/vendor/cJSON/ (pinned)
+      - "src/nssf/generated/models/*.{h,c} (generator-emitted models — at minimum 14 contract data-model generated schemas + TS29571 external dependency schemas + cJSON serializer)"
+      - src/nssf/generated/CMakeLists.txt
+      - CMakeLists.txt (root, generated subdirectory 등록)
+    acceptance:
+      - openapi-generator(C) 가 NSSF contract 의 14 generated data-model schema (AuthorizedNetworkSliceInfo, AuthorizedNssaiAvailabilityInfo, NfInstanceId, NssaiAvailabilityInfo, NssfEventSubscriptionCreateData, NssfEventSubscriptionCreatedData, PatchDocument, PlmnId, SliceInfoForPDUSession, SliceInfoForRegistration, SliceInfoForUEConfigurationUpdate, Snssai, SupportedFeatures, Tai) + TS29571 외부 dependency 를 모두 emit. 정확한 산출 count 는 build step 에서 validation.
+      - cJSON pinned version 이 engineering-design schema_codegen slot 인용과 일치.
+      - generated header 가 contract data-model JSON 의 c_type_hint 값과 1:1 일치.
+      - cmake configure + build 가 generated 모듈만으로 PASS.
+    tests:
+      - "tests/nssf/unit/test_generated_codegen_smoke.c — 14 contract generated schema 각 1회 alloc/serialize/free round-trip + TS29571 외부 schema (PatchItem 등) round-trip"
+      - tests/nssf/unit/test_generated_field_types.c — c_type_hint 일치 검증
+    verification_commands:
+      - cmake -S . -B build -DNSSF_BUILD_GENERATED=ON
+      - cmake --build build --target nssf_generated
+      - ctest --test-dir build -R nssf_generated_
+
+  - id: WI-schema-bootstrap
+    owner_lane: code
+    depends_on:
+      - WI-codegen-bootstrap
+    inputs:
+      - design/nssf/architecture/state-persistence.md (PostgreSQL/libpq backend 결정, table-as-queue strategy)
+      - design/nssf/module-decomposition/SubscriptionStore.md
+      - design/nssf/module-decomposition/AvailabilityEngine.md
+    expected_files:
+      - infra/nssf/schema.sql (PostgreSQL bootstrap — availability, subscription, retry_queue tables)
+      - infra/nssf/schema_README.md (운영자 적용 가이드)
+    acceptance:
+      - schema.sql 이 availability/subscription/retry_queue 3 table 을 생성 (core columns + JSONB filter/payload).
+      - retry_queue 는 FOR UPDATE SKIP LOCKED 패턴을 위한 index 보유.
+      - operator-provided DSN 으로 idempotent 재실행 가능 (CREATE TABLE IF NOT EXISTS).
+    tests:
+      - tests/nssf/integration/test_schema_bootstrap.c — psql -f schema.sql 후 3 table 존재 + index 검증
+    verification_commands:
+      - psql -h $POSTGRES_HOST -U $POSTGRES_USER -d $POSTGRES_DB -f infra/nssf/schema.sql
+      - ctest --test-dir build -R nssf_schema_bootstrap
+
+  - id: WI-tls-bootstrap
+    owner_lane: code
+    depends_on:
+      - WI-codegen-bootstrap
+    inputs:
+      - docs/adr/ADR-0004-project-security-baseline.md (7 항목 baseline)
+      - engineering/nssf/engineering-design.md (tls_security, oauth2_token_validation, sbi_client_stack slot)
+      - design/nssf/architecture/runtime-model.md (TLS context lifecycle, JWKS cache)
+    expected_files:
+      - src/nssf/runtime/tls_context.{h,c} (app_library mTLS context, peer cert verify)
+      - src/nssf/runtime/oauth2_jwks.{h,c} (libjwt JWKS fetch + cache)
+      - src/nssf/runtime/oauth2_scope_check.{h,c} (per-op scope 검증)
+      - src/nssf/runtime/CMakeLists.txt
+    acceptance:
+      - TLS context 가 ADR-0004 mode=enabled 일 때 mTLS handshake 수행 (mocked peer cert).
+      - JWKS cache 가 operator-provided endpoint 로부터 key set 을 fetch + TTL cache.
+      - scope_check 가 `nnssf-nsselection` / `nnssf-nssaiavailability` 두 scope 정확 매칭.
+    tests:
+      - tests/nssf/unit/test_tls_context_handshake.c — mocked peer cert 로 handshake PASS/FAIL
+      - tests/nssf/unit/test_oauth2_scope_check.c — scope 매칭 PASS, mismatched scope FAIL (401/403)
+      - tests/nssf/integration/test_jwks_fetch.c — mock JWKS server fixture
+    verification_commands:
+      - ctest --test-dir build -R nssf_tls_
+      - ctest --test-dir build -R nssf_oauth2_
+
+  - id: WI-problem-details-wrapper
+    owner_lane: code
+    depends_on:
+      - WI-codegen-bootstrap
+    inputs:
+      - design/nssf/contract/error-handling.md (operation × cause matrix)
+      - design/nssf/architecture/error-propagation.md
+      - handoff/nssf/contract.yaml (error topics 18종)
+    expected_files:
+      - src/nssf/wrappers/nf_problem_details_wrapper.{h,c}
+    acceptance:
+      - status-code 별 factory (`nf_problem_details_make_400` 등 17 status + default = 18 cause type) 가 모든 NSSF operation 의 ProblemDetails response 를 생성.
+      - mandatory header (Retry-After, Location, WWW-Authenticate, Allow) 가 status-code 별 자동 부착.
+      - cJSON serializer 가 RFC 7807 + 3GPP cause/instance 필드를 emit.
+    tests:
+      - tests/nssf/unit/test_problem_details_factory.c — 17 status + default = 18 cause type round-trip
+      - tests/nssf/unit/test_problem_details_headers.c — mandatory header 검증
+    verification_commands:
+      - ctest --test-dir build -R nssf_problem_details_
+
+  - id: WI-nftype-wrapper
+    owner_lane: code
+    depends_on:
+      - WI-codegen-bootstrap
+    inputs:
+      - design/nssf/contract/data-model/NFType.json (complexity_flags=['anyOf'])
+      - open-gaps-and-assumptions.md G-09 (forward-compat passthrough policy)
+    expected_files:
+      - src/nssf/wrappers/nf_type_wrapper.{h,c}
+    acceptance:
+      - NFType wrapper 가 3GPP enum probe 후 unknown 값을 passthrough + log warn (G-09 정책).
+      - generated struct 와 wrapper 사이 변환이 lossless.
+    tests:
+      - tests/nssf/unit/test_nftype_wrapper.c — known enum + unknown string + null/empty
+    verification_commands:
+      - ctest --test-dir build -R nssf_nftype_
+
+  - id: WI-availability-repo
+    owner_lane: code
+    depends_on:
+      - WI-codegen-bootstrap
+      - WI-schema-bootstrap
+    inputs:
+      - design/nssf/module-decomposition/AvailabilityEngine.md
+      - design/nssf/architecture/state-persistence.md
+      - data-model-implementation-map.md (NssaiAvailabilityInfo / AuthorizedNssaiAvailabilityInfo schema)
+    expected_files:
+      - src/nssf/repository/availability_repository.{h,c}
+      - src/nssf/repository/CMakeLists.txt
+    acceptance:
+      - "`AvailabilityRepository::find_for_plmn_tai()` — read-only, libpq SELECT (NSSelectionGet 가 사용)."
+      - "`AvailabilityRepository::upsert()` — libpq UPSERT in transaction (Phase 2 가 사용)."
+      - "`AvailabilityRepository::patch()` / `delete()` — Phase 2 가 사용."
+      - in-memory mock 변형 1종 — unit/module-integration 용도.
+    tests:
+      - tests/nssf/unit/test_availability_repo_inmemory.c — find/upsert/patch/delete round-trip (mock)
+      - tests/nssf/integration/test_availability_repo_pg.c — PostgreSQL fixture 로 round-trip
+    verification_commands:
+      - ctest --test-dir build -R nssf_availability_repo_
+
+  - id: WI-selection-engine
+    owner_lane: code
+    depends_on:
+      - WI-availability-repo
+      - WI-codegen-bootstrap
+      - WI-nftype-wrapper
+    inputs:
+      - design/nssf/module-decomposition/SelectionEngine.md
+      - design/nssf/architecture/request-flow.md (NSSelectionGet flow)
+      - api-implementation-matrix.md (NSSelectionGet row)
+      - open-gaps-and-assumptions.md G-07 (operator-provided redirect target)
+    expected_files:
+      - src/nssf/engine/selection_engine.{h,c}
+      - src/nssf/engine/CMakeLists.txt
+    acceptance:
+      - "`SelectionEngine::select()` 가 SliceInfoForRegistration / SliceInfoForPDUSession / SliceInfoForUEConfigurationUpdate 3 query payload 처리."
+      - business-rule — allowed/requested Snssai disjoint check, DNN + S-NSSAI match, PLMN/Tai filtering.
+      - operator-provided redirect table 참조 (G-07) — config 부재 시 redirect 결정하지 않음.
+    tests:
+      - tests/nssf/unit/test_selection_engine_registration.c — registration payload happy/edge
+      - tests/nssf/unit/test_selection_engine_pdu.c — pdu session payload
+      - tests/nssf/unit/test_selection_engine_ueconfig.c — UE configuration update payload
+      - tests/nssf/unit/test_selection_engine_redirect.c — redirect config 부재/존재
+    verification_commands:
+      - ctest --test-dir build -R nssf_selection_engine_
+
+  - id: WI-nsselection-handler
+    owner_lane: code
+    depends_on:
+      - WI-selection-engine
+      - WI-tls-bootstrap
+      - WI-problem-details-wrapper
+    inputs:
+      - api-implementation-matrix.md (NSSelectionGet row)
+      - design/nssf/architecture/runtime-model.md (nghttp2 server stack)
+      - engineering/nssf/engineering-design.md (sbi_server_stack slot)
+    expected_files:
+      - src/nssf/handlers/nsselection_get_handler.{h,c}
+      - src/nssf/handlers/CMakeLists.txt
+      - src/nssf/server/router.{h,c} (nghttp2 route 등록)
+      - src/nssf/server/CMakeLists.txt
+      - src/nssf/main.c (process bootstrap)
+      - src/nssf/CMakeLists.txt (root)
+    acceptance:
+      - "`nssf_nsselection_get_handler` 가 GET /network-slice-information 라우트 처리."
+      - TLS / OAuth2 scope `nnssf-nsselection` 검증을 handler 진입 전에 통과.
+      - 200 (AuthorizedNetworkSliceInfo) / 403 / 404 / 414 / 500 응답 정확.
+      - HTTP 응답 schema 가 generated struct serializer 산출과 일치.
+    tests:
+      - tests/nssf/integration/test_nsselection_get_happy.c — PostgreSQL fixture + nghttp2 client probe 로 200 검증
+      - tests/nssf/integration/test_nsselection_get_errors.c — 403 (scope miss), 404 (no availability), 414 (uri too long), 500 (db down)
+      - tests/nssf/contract/test_nsselection_response_schema.c — handoff contract.yaml 의 NSSelectionGet response schema 와 byte-level 일치
+    verification_commands:
+      - cmake --build build --target nssf
+      - ctest --test-dir build -R nssf_nsselection_
+
+  # ===== Phase 2 wave A (NSSAIAvailability writes, PR G 후속) =====
+  - id: WI-availability-engine
+    owner_lane: code
+    depends_on:
+      - WI-availability-repo
+      - WI-problem-details-wrapper
+    inputs:
+      - design/nssf/module-decomposition/AvailabilityEngine.md
+      - api-implementation-matrix.md (NSSAIAvailability Put/Patch/Delete row)
+      - open-gaps-and-assumptions.md G-04 (PatchDocument RFC 6902 confirmed), G-11 (amfSetReallocationInd default)
+    expected_files:
+      - src/nssf/engine/availability_engine.{h,c} (replace, patch, delete, options 4 entry)
+    acceptance:
+      - "`replace()` — full-replace semantics, AMF reallocation flag, snssai dedup."
+      - "`patch()` — RFC 6902 JSON Patch (op/path/value(/from) per 29.531 §6.1.6 + TS29571 PatchItem), atomic apply, 415 reject on non-application/json-patch+json content-type."
+      - "`delete()` — cascade to subscription tombstone via SubscriptionStore."
+      - "`options()` — static Allow header metadata."
+    tests:
+      - tests/nssf/unit/test_availability_engine_replace.c
+      - tests/nssf/unit/test_availability_engine_patch.c
+      - tests/nssf/unit/test_availability_engine_delete_cascade.c
+    verification_commands:
+      - ctest --test-dir build -R nssf_availability_engine_
+
+  - id: WI-availability-handlers
+    owner_lane: code
+    depends_on:
+      - WI-availability-engine
+      - WI-tls-bootstrap
+    inputs:
+      - api-implementation-matrix.md (NSSAIAvailability Put/Patch/Delete/Options 4 row)
+    expected_files:
+      - src/nssf/handlers/nssaiavailability_put_handler.{h,c}
+      - src/nssf/handlers/nssaiavailability_patch_handler.{h,c}
+      - src/nssf/handlers/nssaiavailability_delete_handler.{h,c}
+      - src/nssf/handlers/nssaiavailability_options_handler.{h,c}
+    acceptance:
+      - 각 handler 가 OAuth2 scope `nnssf-nssaiavailability` 검증.
+      - status code coverage — 200, 400, 411, 413, 415, 401/403/404/429/500/503.
+      - Put/Patch 후 NotificationDispatcher 의 retry_queue 에 row enqueue.
+    tests:
+      - tests/nssf/integration/test_nssaiavailability_put_integration.c
+      - tests/nssf/integration/test_nssaiavailability_patch_integration.c
+      - tests/nssf/integration/test_nssaiavailability_delete_integration.c
+      - tests/nssf/integration/test_nssaiavailability_options_integration.c
+    verification_commands:
+      - ctest --test-dir build -R nssf_nssaiavailability_
+
+  - id: WI-notification-dispatcher
+    owner_lane: code
+    depends_on:
+      - WI-schema-bootstrap
+      - WI-tls-bootstrap
+    inputs:
+      - design/nssf/module-decomposition/NotificationDispatcher.md
+      - design/nssf/architecture/state-persistence.md (retry queue strategy)
+      - open-gaps-and-assumptions.md G-08 (retry policy minimal in Phase 1~3)
+    expected_files:
+      - src/nssf/dispatcher/notification_dispatcher.{h,c}
+      - src/nssf/dispatcher/CMakeLists.txt
+    acceptance:
+      - retry_queue 에서 FOR UPDATE SKIP LOCKED 로 dequeue.
+      - 동기 dispatch + 한 차례 재시도 (G-08 minimum), tuning 은 Phase 4.
+      - outbound TLS / OAuth2 (sbi_client_stack) 사용.
+    tests:
+      - tests/nssf/unit/test_notification_dispatcher_queue.c — dequeue ordering
+      - tests/nssf/integration/test_notification_dispatcher_outbound.c — mocked AMF callback
+    verification_commands:
+      - ctest --test-dir build -R nssf_notification_dispatcher_
+
+  # ===== Phase 3 wave A (subscription, PR G 후속) =====
+  - id: WI-subscription-store
+    owner_lane: code
+    depends_on:
+      - WI-schema-bootstrap
+      - WI-notification-dispatcher
+    inputs:
+      - design/nssf/module-decomposition/SubscriptionStore.md
+      - api-implementation-matrix.md (NSSAIAvailability Post/Unsubscribe/SubModifyPatch row)
+      - open-gaps-and-assumptions.md G-04 (PatchDocument RFC 6902 confirmed), G-10 (default expiry 24h)
+    expected_files:
+      - src/nssf/store/subscription_store.{h,c}
+      - src/nssf/store/CMakeLists.txt
+    acceptance:
+      - "`create()` — JSONB filter column + Location header."
+      - "`delete()` — idempotent."
+      - "`patch()` — RFC 6902 JSON Patch (op/path/value(/from) per 29.531 §6.1.6 + TS29571 PatchItem), atomic apply, 415 reject on non-application/json-patch+json content-type."
+      - "`on_availability_deleted()` — cascade tombstone."
+    tests:
+      - tests/nssf/unit/test_subscription_store_create.c
+      - tests/nssf/unit/test_subscription_store_patch.c
+      - tests/nssf/unit/test_subscription_store_cascade.c
+    verification_commands:
+      - ctest --test-dir build -R nssf_subscription_store_
+
+  - id: WI-subscription-handlers
+    owner_lane: code
+    depends_on:
+      - WI-subscription-store
+      - WI-tls-bootstrap
+    inputs:
+      - api-implementation-matrix.md (Post/Unsubscribe/SubModifyPatch row)
+    expected_files:
+      - src/nssf/handlers/subscription_post_handler.{h,c}
+      - src/nssf/handlers/subscription_unsubscribe_handler.{h,c}
+      - src/nssf/handlers/subscription_patch_handler.{h,c}
+    acceptance:
+      - 201 Created with Location header (Post).
+      - 204 No Content (Unsubscribe).
+      - 200 OK (SubModifyPatch).
+      - subscription create 직후 initial snapshot dispatch.
+    tests:
+      - tests/nssf/integration/test_subscription_post_integration.c
+      - tests/nssf/integration/test_subscription_delete_integration.c
+      - tests/nssf/integration/test_subscription_patch_integration.c
+    verification_commands:
+      - ctest --test-dir build -R nssf_subscription_
+
+  # ===== Phase 4 (contract / security / e2e tests, PR G 후속) =====
+  - id: WI-contract-tests
+    owner_lane: tester
+    depends_on:
+      - WI-nsselection-handler
+      - WI-availability-handlers
+      - WI-subscription-handlers
+    inputs:
+      - handoff/nssf/contract.yaml
+      - verification-plan.md ## Contract
+    expected_files:
+      - tests/nssf/contract/test_handoff_contract_alignment.c
+      - tests/nssf/contract/test_error_matrix.c
+    acceptance:
+      - handoff contract.yaml 의 모든 8 op × cause matrix 실행.
+      - response schema 가 generated struct serializer 와 byte-level 일치.
+    tests:
+      - tests/nssf/contract/test_handoff_contract_alignment.c
+      - tests/nssf/contract/test_error_matrix.c
+    verification_commands:
+      - ctest --test-dir build -R nssf_contract_
+
+  - id: WI-security-tests
+    owner_lane: verifier
+    depends_on:
+      - WI-tls-bootstrap
+      - WI-nsselection-handler
+    inputs:
+      - docs/adr/ADR-0004-project-security-baseline.md (7 항목)
+      - verification-plan.md ## Security
+    expected_files:
+      - tests/nssf/security/test_tls_baseline.c
+      - tests/nssf/security/test_oauth2_inbound.c
+      - tests/nssf/security/test_oauth2_outbound.c
+      - tests/nssf/security/test_security_dev_disable.c
+    acceptance:
+      - ADR-0004 7 항목 각각 verification command + evidence emit.
+      - mocked peer cert / mocked JWKS server fixture 로 fail-closed 검증.
+    tests:
+      - tests/nssf/security/test_tls_baseline.c
+      - tests/nssf/security/test_oauth2_inbound.c
+      - tests/nssf/security/test_oauth2_outbound.c
+    verification_commands:
+      - ctest --test-dir build -R nssf_security_
+
+  - id: WI-e2e-tests
+    owner_lane: verifier
+    depends_on:
+      - WI-contract-tests
+      - WI-security-tests
+    inputs:
+      - design/nssf/architecture/request-flow.md (핵심 시나리오)
+      - verification-plan.md ## End-to-End
+    expected_files:
+      - tests/nssf/e2e/test_amf_register_nsselect.c (UE 등록 → NSSelectionGet 시나리오)
+      - tests/nssf/e2e/test_availability_subscription_notify.c
+    acceptance:
+      - end-to-end 시나리오 green (mocked AMF peer).
+      - retry_queue 동기 dispatch + 1회 재시도 시나리오 cover.
+    tests:
+      - tests/nssf/e2e/test_amf_register_nsselect.c
+      - tests/nssf/e2e/test_availability_subscription_notify.c
+    verification_commands:
+      - ctest --test-dir build -R nssf_e2e_
+
+  # ===== Phase 5 (hardening, PR G 후속) =====
+  - id: WI-observability-finalize
+    owner_lane: code
+    depends_on:
+      - WI-nsselection-handler
+      - WI-availability-handlers
+      - WI-subscription-handlers
+    inputs:
+      - design/nssf/architecture/observability.md
+      - open-gaps-and-assumptions.md G-14 (dashboard/alert tuning deferred)
+    expected_files:
+      - src/nssf/observability/metrics.{h,c}
+      - src/nssf/observability/log.{h,c}
+      - src/nssf/observability/trace.{h,c}
+      - src/nssf/observability/CMakeLists.txt
+    acceptance:
+      - metric/log/trace seam 가 architecture observability.md 의 모든 항목 emit.
+      - prod-ready signal (label cardinality, log level, trace sampler) freeze.
+    tests:
+      - tests/nssf/unit/test_observability_metrics.c
+      - tests/nssf/unit/test_observability_log.c
+      - tests/nssf/unit/test_observability_trace.c
+    verification_commands:
+      - ctest --test-dir build -R nssf_observability_
