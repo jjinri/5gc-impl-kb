@@ -2,7 +2,7 @@
 name: nf-build
 description: 매니페스트가 준비된 NF 에 대해 토픽 디렉터리 layout (handoff-v2) 으로 design 페이지를 생성·갱신하는 워크플로우. 사용자가 "/nf-build nssf", "NSSF 페이지 만들어", "NRF 빌드", "data-model 만 다시 뽑아", "build nf page" 등을 말하거나 NF 이름을 지정하면 무조건 이 skill 을 사용한다. 동작 — `design/<nf>/_manifest.yaml` 의 ready_for_build 가 true 인지 확인하고, `design/<nf>/_contract_seed.yaml` 의 categories/topics 정의에 따라 토픽 파일 (`design/<nf>/contract/<category>/<topic>.md` 또는 single-file `design/<nf>/contract/<category>.md`) 을 생성·갱신하고, data-model 토픽은 `resolve-yaml-refs.py --emit-json` 으로 `<topic>.json` 도 함께 emit, 마지막에 `build-handoff.py` 로 `handoff/<nf>/contract.yaml` (handoff-v2) 와 `validate-extraction.py` (basic 13) 를 한 사이클에서 호출한다. AUTO/USER marker 가 사람 산문 보존의 기계 계약 — frontmatter `generated_sections`·`user_sections` manifest 와 정확히 일치해야 한다. 매니페스트 생성·갱신은 sibling `/nf-init`, 완성도 검사는 `/nf-status` 의 책임이며 본 skill 은 페이지 *내용 생성* 에 집중한다. 커밋은 자동 수행 금지.
 argument-hint: "<nf> [--<category>] [--topic <topic-id>]"
-allowed-tools: Bash(.venv/bin/python3 design/scripts/extract.py *) Bash(.venv/bin/python3 design/scripts/spec-split.py *) Bash(.venv/bin/python3 design/scripts/resolve-yaml-refs.py *) Bash(.venv/bin/python3 design/scripts/nf-manifest.py *) Bash(.venv/bin/python3 design/scripts/build-handoff.py *) Bash(.venv/bin/python3 design/scripts/validate-extraction.py *) Bash(mkdir -p *) Bash(ls *) Bash(grep *) Bash(find *)
+allowed-tools: Bash(.venv/bin/python3 design/scripts/extract.py *) Bash(.venv/bin/python3 design/scripts/spec-split.py *) Bash(.venv/bin/python3 design/scripts/resolve-yaml-refs.py *) Bash(.venv/bin/python3 design/scripts/nf-manifest.py *) Bash(.venv/bin/python3 design/scripts/materialize-contract.py *) Bash(.venv/bin/python3 design/scripts/build-handoff.py *) Bash(.venv/bin/python3 design/scripts/validate-extraction.py *) Bash(mkdir -p *) Bash(ls *) Bash(grep *) Bash(find *)
 ---
 
 # nf-build — 토픽 디렉터리 layout (handoff-v2)
@@ -74,14 +74,16 @@ allowed-tools: Bash(.venv/bin/python3 design/scripts/extract.py *) Bash(.venv/bi
 - 새 토픽이 추가됐다면 seed 의 `topics` 항목에도 추가. spec_refs / depends_on / related / error_refs 가 사람이 정의.
 - AUTO 갱신 시 status 가 자동으로 바뀌지 *않는다* — status 는 사람이 의도로 결정 (draft → handoff_ready 격상은 명시적 의도).
 
-### 5. handoff yaml emit + validate
+### 5. fresh full materialize + handoff yaml emit + validate
 ```bash
+.venv/bin/python3 design/scripts/materialize-contract.py <nf>
 .venv/bin/python3 design/scripts/build-handoff.py <nf>
 .venv/bin/python3 design/scripts/validate-extraction.py <nf> --level basic
 ```
 
-- 첫 번째 — `handoff/<nf>/contract.yaml` 갱신 (handoff-v2, agent_contract 포함).
-- 두 번째 — basic 13 룰 검사. FAIL 가 1개라도 있으면 사용자에게 그 자리에 보고 (`/nf-status` 까지 끌고 가지 않음).
+- 첫 번째 — §"Fresh full materialization" 의 구현. seed.topics 전량을 `design/<nf>/contract/<category>/<topic>.{md,json}` 으로 emit 하고 spec-derived topic 의 status 를 promotion 한다. fresh checkout · `--reset` 후 design contract dir 부재 상태에서 *반드시* 선행해야 §3 의 topic file 들이 실제 디스크에 존재 — `build-handoff.py` 가 seed→yaml 변환만 하므로 본 step 이 빠지면 validate basic #3·#9 가 false FAIL. 멱등 (AUTO 만 재생성, USER marker 산문 보존).
+- 두 번째 — `handoff/<nf>/contract.yaml` 갱신 (handoff-v2, agent_contract 포함).
+- 세 번째 — basic 13 룰 검사. FAIL 가 1개라도 있으면 사용자에게 그 자리에 보고 (`/nf-status` 까지 끌고 가지 않음).
 
 ### 6. 결과 보고 (커밋 X)
 - 신규·갱신 파일 목록.
@@ -91,6 +93,8 @@ allowed-tools: Bash(.venv/bin/python3 design/scripts/extract.py *) Bash(.venv/bi
 - 사용자 다음 액션 — `/nf-status <nf>` 또는 사용자 prose 보강 위치.
 
 ## Fresh full materialization
+
+> §5 의 첫 step `materialize-contract.py <nf>` 의 동작 명세. fresh checkout · `--reset` 후 design contract dir 부재 상태에서 사람 수동 저작 없이 `handoff_ready` 까지 도달 가능하게 하는 메커니즘.
 
 `design/<nf>/contract/` 부재 (fresh checkout, `--reset` 후 등) 또는 seed.topics 중 파일 없는 topic 존재 시, *사람 수동 저작 없이* seed.topics 전량을 materialize 해 `handoff_ready` 까지 도달 가능하게 한다. 사람 = spec 원본·범위·`manual_overrides` 정책·결과 리뷰·선택적 USER prose. 그 외 전부 script/agent.
 
