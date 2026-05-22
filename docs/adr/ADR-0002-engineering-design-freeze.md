@@ -15,7 +15,9 @@ Status: Accepted (2026-05-19)
 
 ## Decision
 
-`/nf-impl-plan`(G)과 **자율 코드 생성** 사이에 **Engineering Design Freeze** 단계를 신설하고, 통과 게이트 `eng_frozen` 을 자율 코드 생성의 *유일한 GO 신호* 로 정의한다.
+> **2026-05-22 normative amendment (PR A2).** 본 ADR 작성 시점 (2026-05-19) 의 "`eng_frozen` 이 자율 코드 생성의 *유일한 GO 신호*" 결정은 *축소* 된다. `eng_frozen` 의미는 *technology decision freeze* (library / DB / runtime / tool / operator-policy) 의 단일 게이트로 유지되나, autonomous implementation (`/nf-implement`) 의 *최종 GO 신호* 는 aggregate gate **`readiness_pack_ready`** 다 — `handoff_ready` ∧ `contract_implementable` ∧ `arch_consistent` ∧ `impl_ready_for_codegen` ∧ `eng_frozen` 의 AND. 본 정정은 `docs/plans/2026-05-21-nf-readiness-implementation-workflow-upgrade-plan.md` §3 의 8 gate 재정리 + §3.3 lifecycle 표를 따른다. 본 ADR 의 *단계 신설* 결정은 유효 — `eng_frozen` 게이트 자체와 그 typed schema 메커니즘은 변동 없음. *역할* 만 "유일 GO" → "readiness 의 한 구성요소" 로 축소.
+
+`/nf-impl-plan`(G)과 **자율 코드 생성** 사이에 **Engineering Design Freeze** 단계를 신설하고, 통과 게이트 `eng_frozen` 을 *technology decision freeze* 의 단일 게이트로 정의한다. (자율 코드 생성 진입의 최종 GO 는 *aggregate* `readiness_pack_ready` — 위 normative amendment 참조.)
 
 1. **단계·산출물 위치.** `engineering/<nf>/engineering-design.md`(사람 소유, git 추적) + `engineering/<nf>/_engineering_status.yaml`(validator 생성 보고서, gitignored — `_contract_status.yaml`·`_arch_status.yaml`·`_impl_status.yaml` 와 동일 정책). `dev/<nf>/`(구현 작업 계획)·`design/<nf>/architecture/`(spec-derived) 와 분리된 영역으로 3분리한다.
 
