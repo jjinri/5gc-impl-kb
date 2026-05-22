@@ -52,3 +52,84 @@ def test_resolve_no_bootstrap_write_flag():
     assert doc["decision"] == "proceed"
     # bootstrap_action 은 dry-run 형태여야 함 (또는 up-to-date)
     assert "bootstrap_action" in doc
+
+
+def _import_resolve_module():
+    """module-level decide()/resolve_entry() 를 unit-test 용으로 import."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("nfrr", str(SCRIPT))
+    mod = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_decide_generated_medium_without_manual_is_blocker():
+    """PR #45 review Medium fix — generated medium 단독 시 blocker."""
+    mod = _import_resolve_module()
+    doc = {
+        "generated": {"nfs": {"foo": {
+            "primary_spec": "99.999",
+            "primary_spec_confidence": "medium",
+        }}},
+        "manual_overrides": {"nfs": {}},
+    }
+    entry, source = mod.resolve_entry(doc, "foo")
+    assert source == "generated"
+    decision, reason = mod.decide(entry, source, doc, "foo")
+    assert decision == "blocker", (decision, reason)
+    assert "medium" in reason.lower()
+    assert "manual_overrides" in reason
+
+
+def test_decide_generated_medium_with_manual_override_proceeds():
+    """manual_overrides 가 medium+ 로 같은 NF 를 확정하면 proceed."""
+    mod = _import_resolve_module()
+    doc = {
+        "generated": {"nfs": {"foo": {
+            "primary_spec": "99.999",
+            "primary_spec_confidence": "medium",
+        }}},
+        "manual_overrides": {"nfs": {"foo": {
+            "primary_spec": "99.999",
+            "primary_spec_confidence": "medium",
+        }}},
+    }
+    entry, source = mod.resolve_entry(doc, "foo")
+    assert source == "manual"
+    decision, reason = mod.decide(entry, source, doc, "foo")
+    assert decision == "proceed", (decision, reason)
+    assert "manual" in reason.lower()
+
+
+def test_decide_generated_low_is_blocker():
+    """generated low 는 항상 blocker."""
+    mod = _import_resolve_module()
+    doc = {
+        "generated": {"nfs": {"foo": {
+            "primary_spec": "99.999",
+            "primary_spec_confidence": "low",
+        }}},
+        "manual_overrides": {"nfs": {}},
+    }
+    entry, source = mod.resolve_entry(doc, "foo")
+    decision, reason = mod.decide(entry, source, doc, "foo")
+    assert decision == "blocker"
+    assert "low" in reason.lower()
+
+
+def test_decide_manual_low_is_blocker():
+    """manual_override 가 low 면 blocker (high/medium 으로 갱신 요구)."""
+    mod = _import_resolve_module()
+    doc = {
+        "generated": {"nfs": {}},
+        "manual_overrides": {"nfs": {"foo": {
+            "primary_spec": "99.999",
+            "primary_spec_confidence": "low",
+        }}},
+    }
+    entry, source = mod.resolve_entry(doc, "foo")
+    assert source == "manual"
+    decision, reason = mod.decide(entry, source, doc, "foo")
+    assert decision == "blocker"
+    assert "low" in reason.lower()

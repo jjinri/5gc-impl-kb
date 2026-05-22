@@ -39,9 +39,10 @@ allowed-tools: Bash(.venv/bin/python3 design/scripts/nf-readiness-resolve.py *) 
 2. effective entry resolve — `manual_overrides.nfs.<nf>` 우선 → `generated.nfs.<nf>` 다음.
 3. confidence policy.
    - **high (generated)** → proceed.
-   - **medium (generated)** → manual_override 또는 기존 tracked generated entry 와 primary_spec 일치 시 proceed, 아니면 blocker.
-   - **low (generated)** → blocker. manual_override 가 같은 NF 에 confidence ≥ medium 으로 있으면 override proceed.
-   - **manual_override (medium+)** → 항상 proceed.
+   - **medium (generated)** → blocker. `manual_overrides.nfs.<nf>` 에 `primary_spec/confidence(>=medium)/rationale` 을 추가해 사람이 확정해야 한다 (generated 단독으로는 insufficient).
+   - **low (generated)** → blocker. `manual_overrides.nfs.<nf>` 등록 필요.
+   - **manual_override (high/medium)** → 항상 proceed.
+   - **manual_override (low)** → blocker (manual 을 high/medium 으로 갱신 필요).
 4. effective primary_spec 의 `specs/<spec>/` 존재 확인. 없으면 blocker.
 
 Phase 0 결과는 YAML report 로 stdout. exit 0=proceed, exit 1=blocker.

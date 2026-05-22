@@ -107,27 +107,41 @@ def resolve_entry(doc: dict, nf: str) -> tuple[dict | None, str]:
 
 
 def decide(entry: dict | None, source: str, doc: dict, nf: str) -> tuple[str, str]:
-    """반환 (decision, reason). decision ∈ {proceed, blocker}."""
+    """반환 (decision, reason). decision ∈ {proceed, blocker}.
+
+    정책 (PR E1 plan §3.1 + PR #45 review Medium fix).
+      manual:
+        high / medium → proceed
+        low           → blocker
+      generated:
+        high          → proceed
+        medium        → blocker (manual_overrides.nfs.<nf> 로 확정 필요)
+        low           → blocker
+      entry 부재    → blocker
+
+    이전 버그 — generated medium 의 fallback 에서 entry == gen_entry 의
+    primary_spec 자기 비교로 항상 proceed 했음 (PR #45 Medium finding).
+    수정: generated medium 은 manual_override 가 resolve_entry 에서 우선
+    적용된 경우 (source=='manual') 에만 proceed. source='generated' medium
+    은 무조건 blocker — manual_overrides.nfs.<nf> 등록을 요구한다.
+    """
     if entry is None:
         return "blocker", (f"effective entry 없음 — registry 의 generated.nfs.{nf} "
                            f"또는 manual_overrides.nfs.{nf} 가 필요")
     conf = entry.get("primary_spec_confidence")
     if conf not in ("high", "medium", "low"):
         return "blocker", f"primary_spec_confidence 잘못된 값 — {conf!r}"
-    if source == "manual" and conf in ("high", "medium"):
-        return "proceed", "manual_override 가 confidence ≥ medium"
+    if source == "manual":
+        if conf in ("high", "medium"):
+            return "proceed", f"manual_override confidence={conf}"
+        return "blocker", "manual_override confidence=low — high 또는 medium 으로 갱신 필요"
+    # source == "generated"
     if conf == "high":
         return "proceed", "generated.nfs entry confidence=high"
     if conf == "medium":
-        mo_entry = ((doc.get("manual_overrides") or {}).get("nfs") or {}).get(nf)
-        if isinstance(mo_entry, dict):
-            return "proceed", "manual_override 가 medium entry 를 확정"
-        gen_entry = ((doc.get("generated") or {}).get("nfs") or {}).get(nf)
-        if (isinstance(gen_entry, dict)
-                and gen_entry.get("primary_spec") == entry.get("primary_spec")):
-            return "proceed", "tracked generated entry 가 같은 primary_spec 로 일치"
-        return "blocker", (f"primary_spec_confidence=medium — manual_overrides.nfs.{nf} "
-                           f"또는 tracked generated entry 가 필요")
+        return "blocker", (f"primary_spec_confidence=medium — generated 단독으로는 "
+                           f"insufficient. manual_overrides.nfs.{nf} 에 primary_spec/"
+                           f"confidence(>=medium)/rationale 을 추가해 확정 필요")
     return "blocker", (f"primary_spec_confidence=low — manual_overrides.nfs.{nf} 로 "
                        f"primary_spec/confidence/rationale 등록 필요")
 
