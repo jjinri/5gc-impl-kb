@@ -41,7 +41,7 @@ python3 -m venv .venv
 | Readiness | `/nf-readiness <nf>` (PR E2, 2026-05-22) | spec → contract → arch → impl → eng-design 11-step lifecycle chain 자동 실행, registry resolve + first-blocker short-circuit, aggregate gate `readiness_pack_ready` 평가 | `dev/<nf>/` readiness pack (Agent Execution Pack 5 + Human Review Pack 4) + `dev/<nf>/_readiness_status.yaml` |
 | Implementation | `/nf-implement <nf>` (PR E3, 2026-05-22 — skeleton) | readiness pack 입력 autonomous code generation. Phase 0 readiness gate → Phase 1 tracer-bullet → Phase 2 task graph → Phase 3 feature wave → Phase 4 contract/security/e2e → Phase 5 hardening. run state `dev/<nf>/_implementation_run_state.yaml` 로 stop/resume. *no spec semantic rediscovery* 강제. 실제 NSSF Phase 1 산출은 PR G | `src/`, `generated/`, `sql/`, `tests/`, `vendored/`, CI 산출 |
 
-### Internal subroutine skills (현재 PR A 시점에서는 사람이 직접 호출, PR E 이후 wrapper 가 내부 호출)
+### Internal subroutine skills (public wrappers 내부에서 호출; 새 계약 / override 상황에서만 직접 호출)
 
 | 단계 | 호환 skill | canonical skill | 기능 | 주요 산출물 |
 |---|---|---|---|---|
