@@ -634,6 +634,15 @@ def emit_json(
 
     _walk(body)
 
+    # PR B (2026-05-21) — implementability metadata extension.
+    complexity_flags = _derive_complexity_flags(root_schema, body, unresolved)
+    wrapper_required = bool(
+        set(complexity_flags) & {"oneOf", "allOf", "anyOf", "discriminator"}
+        or any(r for r in unresolved)
+    )
+    c_type_hint = _derive_c_type_hint(root_schema, root_schema_name)
+    validation_hint = _derive_validation_hint(root_schema)
+
     return {
         "schema_version": "data-model-v1",
         "nf": nf,
@@ -651,7 +660,86 @@ def emit_json(
         "fields": body.get("properties", []),
         "dependencies": sorted(dependencies),
         "unresolved_refs": unresolved,
+        # PR B implementability metadata (codegen agent input)
+        "complexity_flags": complexity_flags,
+        "wrapper_required": wrapper_required,
+        "c_type_hint": c_type_hint,
+        "validation_hint": validation_hint,
+        "normalized_schema": body,  # alias for codegen friendliness; same content as root
     }
+
+
+def _derive_complexity_flags(root_schema: dict, body: dict, unresolved: list[dict]) -> list[str]:
+    """OpenAPI 복잡 패턴 검출 — codegen agent 가 wrapper 필요 여부 판단 입력."""
+    flags: set[str] = set()
+
+    def _scan(node: object) -> None:
+        if isinstance(node, dict):
+            for key in ("oneOf", "allOf", "anyOf"):
+                if key in node and isinstance(node[key], list) and node[key]:
+                    flags.add(key)
+            if "discriminator" in node:
+                flags.add("discriminator")
+            for v in node.values():
+                _scan(v)
+        elif isinstance(node, list):
+            for v in node:
+                _scan(v)
+
+    _scan(root_schema)
+    _scan(body)
+    if unresolved:
+        flags.add("external_ref")
+    return sorted(flags)
+
+
+def _derive_c_type_hint(root_schema: dict, root_name: str) -> str:
+    """root schema 의 top-level C type hint. openapi-generator C heuristic."""
+    if not isinstance(root_schema, dict):
+        return "void*"
+    schema_type = root_schema.get("type")
+    if schema_type == "string":
+        if root_schema.get("format") == "date-time":
+            return "char* /* RFC3339 timestamp */"
+        if root_schema.get("enum"):
+            return f"enum nf_{root_name.lower()}"
+        return "char*"
+    if schema_type == "integer":
+        fmt = root_schema.get("format", "int32")
+        return {"int32": "int32_t", "int64": "int64_t"}.get(fmt, "int32_t")
+    if schema_type == "boolean":
+        return "bool"
+    if schema_type == "number":
+        return "double"
+    if schema_type == "array":
+        return f"struct nf_{root_name.lower()}_list*"
+    if schema_type == "object" or "properties" in root_schema or root_schema.get("allOf"):
+        return f"struct nf_{root_name.lower()}*"
+    return "void*"
+
+
+def _derive_validation_hint(root_schema: dict) -> str | None:
+    """validation rule 패턴 — runtime validator 가 적용할 핵심 규칙."""
+    if not isinstance(root_schema, dict):
+        return None
+    hints: list[str] = []
+    if root_schema.get("enum"):
+        hints.append("enum")
+    if root_schema.get("pattern"):
+        hints.append(f"regex: {root_schema['pattern']}")
+    if "minLength" in root_schema or "maxLength" in root_schema:
+        lo = root_schema.get("minLength", 0)
+        hi = root_schema.get("maxLength", "∞")
+        hints.append(f"length: {lo}-{hi}")
+    if "minimum" in root_schema or "maximum" in root_schema:
+        lo = root_schema.get("minimum", "-∞")
+        hi = root_schema.get("maximum", "∞")
+        hints.append(f"range: {lo}-{hi}")
+    if root_schema.get("format"):
+        hints.append(f"format: {root_schema['format']}")
+    if "PatchDocument" in (root_schema.get("title") or ""):
+        hints.append("jsonpatch")
+    return "; ".join(hints) if hints else None
 
 
 def main() -> None:
