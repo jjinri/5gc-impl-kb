@@ -1,0 +1,30 @@
+schema_version: codegen-work-items-v1
+nf: {{nf}}
+stage: implementation-planning
+status: draft
+source_architecture: {{architecture_root}}
+source_contract: {{contract_path}}
+generated_date: {{generated_date}}
+
+# items[] — file-level autonomous codegen work units.
+# 각 item 필수 키 — id, owner_lane, depends_on, inputs, expected_files,
+#                   acceptance, tests, verification_commands.
+# `impl_ready_for_codegen` gate 의 다음 check 가 이 schema 를 본다.
+#   - all_work_items_have_expected_files  (expected_files 비어있지 않음)
+#   - all_work_items_have_tests           (tests 비어있지 않음)
+#   - all_work_items_have_verification_commands (verification_commands 비어있지 않음)
+
+items:
+  - id: {{nf}}-codegen-todo-001
+    owner_lane: code
+    depends_on: []
+    inputs:
+      - TODO
+    expected_files:
+      - TODO
+    acceptance:
+      - TODO
+    tests:
+      - TODO
+    verification_commands:
+      - TODO

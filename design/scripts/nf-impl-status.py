@@ -52,12 +52,78 @@ DEV_FM_KEYS = {"nf", "stage", "status", "source_architecture",
                "source_contract", "generated_date"}
 TASKS_SCHEMA = "impl-plan-v1"
 
+# Implementation Readiness Pack — plan §4.4 (2026-05-21).
+# SKILL.md mandate 와 1:1 동기화. SKILL.md 갱신 시 본 상수도 함께 갱신.
+READINESS_PACK_MD_CANON = {
+    "api-implementation-matrix.md": [
+        "## Operation Matrix", "## Coverage", "## Open Questions", "## References",
+    ],
+    "data-model-implementation-map.md": [
+        "## Schema Classification", "## Wrapper Rationale", "## Open Schemas",
+        "## References",
+    ],
+    "team-execution-plan.md": [
+        "## Orchestrator Lane", "## Code Lane", "## Reviewer Lane",
+        "## Tester Lane", "## Verifier Lane", "## Integration Order",
+        "## References",
+    ],
+    "verification-plan.md": [
+        "## Unit", "## Integration", "## Contract", "## Security",
+        "## End-to-End", "## Observability", "## References",
+    ],
+    "implementation-readiness-review.md": [
+        "## Executive Summary", "## Scope Confirmation", "## Risk Assessment",
+        "## Decision Audit", "## Recommendation", "## References",
+    ],
+    "design-adequacy-checklist.md": [
+        "## Checklist", "## Outstanding", "## References",
+    ],
+    "spec-to-design-coverage.md": [
+        "## Coverage Trace", "## Gaps", "## References",
+    ],
+    "open-gaps-and-assumptions.md": [
+        "## Gaps", "## Summary", "## References",
+    ],
+}
+READINESS_PACK_FILES = list(READINESS_PACK_MD_CANON) + ["codegen-work-items.yaml"]
+HUMAN_REVIEW_PACK = (
+    "implementation-readiness-review.md",
+    "design-adequacy-checklist.md",
+    "spec-to-design-coverage.md",
+    "open-gaps-and-assumptions.md",
+)
+WORK_ITEMS_SCHEMA = "codegen-work-items-v1"
+# SKILL.md mandate — 각 items[] 가 가져야 하는 8 키.
+# `depends_on` 은 empty list 허용, 나머지는 non-empty 요구.
+WORK_ITEM_REQUIRED_SCALAR_KEYS = ("id", "owner_lane")
+WORK_ITEM_REQUIRED_LIST_KEYS_NONEMPTY = (
+    "inputs", "expected_files", "acceptance", "tests", "verification_commands",
+)
+WORK_ITEM_REQUIRED_LIST_KEYS_MAY_EMPTY = ("depends_on",)
+GAP_CATEGORIES = {
+    "blocker", "deferred", "operator-provided", "library-assumed",
+    "test-gap", "assumption",
+}
+
 GATE_DEFS = [
     ("impl_consistent", [
         "impl_files_present",
         "impl_sections_exact",
         "tasks_schema_valid",
         "impl_frontmatter_valid",
+    ]),
+    ("impl_ready_for_codegen", [
+        "readiness_pack_files_present",
+        "api_matrix_covers_all_operations",
+        "data_model_map_covers_all_contract_models",
+        "all_work_items_have_expected_files",
+        "all_work_items_have_tests",
+        "all_work_items_have_verification_commands",
+        "team_execution_plan_present",
+        "human_review_pack_traceable",
+        "gaps_classified",
+        "blocker_gaps_zero",
+        "no_spec_reread_required",
     ]),
 ]
 
@@ -226,6 +292,491 @@ def check_traceability_xref(dev_dir: pathlib.Path) -> dict:
     return base
 
 
+def parse_md_table_section(text: str, header: str) -> list[list[str]]:
+    """Return data rows (list of stripped cells) of the first markdown table
+    inside `## {header}` section. Header row + separator row are skipped.
+    Returns [] when section absent or table absent."""
+    needle = f"## {header}"
+    start = text.find(needle)
+    if start == -1:
+        return []
+    next_h = text.find("\n## ", start + len(needle))
+    section = text[start:next_h] if next_h != -1 else text[start:]
+    rows: list[list[str]] = []
+    for ln in section.splitlines():
+        s = ln.strip()
+        if not s.startswith("|") or not s.endswith("|"):
+            continue
+        cells = [c.strip() for c in s.strip("|").split("|")]
+        # separator row (---) — drop
+        if all(set(c) <= set("-: ") for c in cells):
+            continue
+        rows.append(cells)
+    # first remaining row = header; drop
+    return rows[1:] if rows else []
+
+
+def load_contract(nf: str) -> dict | None:
+    p = REPO / "handoff" / nf / "contract.yaml"
+    if not p.exists():
+        return None
+    try:
+        return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError:
+        return None
+
+
+def contract_topic_names(contract: dict | None, prefix: str) -> set[str]:
+    if not contract:
+        return set()
+    topics = contract.get("topics") or {}
+    if not isinstance(topics, dict):
+        return set()
+    out = set()
+    pref = prefix.rstrip("/") + "/"
+    for k in topics:
+        if isinstance(k, str) and k.startswith(pref):
+            tail = k[len(pref):]
+            if tail:
+                out.add(tail)
+    return out
+
+
+def check_readiness_pack_files_present(dev_dir: pathlib.Path) -> dict:
+    base = {
+        "id": "readiness_pack_files_present", "tier": 1,
+        "name": "Readiness Pack 9 파일 존재",
+        "criterion": "dev/<nf>/ 에 " + ", ".join(READINESS_PACK_FILES) + " 모두 존재.",
+    }
+    missing = [f for f in READINESS_PACK_FILES if not (dev_dir / f).exists()]
+    if missing:
+        base.update(status="FAIL", current=f"누락 — {missing}",
+                    to_pass=[f"/nf-impl-plan <nf> 으로 누락 파일 생성 — {missing}"])
+    else:
+        base.update(status="PASS", current="9개 파일 모두 존재", to_pass=[])
+    return base
+
+
+def _matrix_first_column(dev_dir: pathlib.Path, fname: str, header: str) -> set[str]:
+    p = dev_dir / fname
+    if not p.exists():
+        return set()
+    rows = parse_md_table_section(p.read_text(encoding="utf-8"), header)
+    return {r[0] for r in rows if r and r[0] and r[0].upper() != "TODO"}
+
+
+def check_api_matrix_covers_all_operations(dev_dir: pathlib.Path,
+                                           contract: dict | None) -> dict:
+    base = {
+        "id": "api_matrix_covers_all_operations", "tier": 1,
+        "name": "api-implementation-matrix.md 가 contract API operation 전체 cover",
+        "criterion": ("api-implementation-matrix.md `## Operation Matrix` 표의 "
+                      "operationId 열이 handoff/<nf>/contract.yaml 의 "
+                      "`topics.api/<Op>` 키 집합을 모두 포함."),
+    }
+    contract_ops = contract_topic_names(contract, "api")
+    if not contract_ops:
+        base.update(status="FAIL",
+                    current="contract.yaml 의 topics.api/* 키 없음 또는 load 실패",
+                    to_pass=["/nf-contract-check <nf> 로 contract 재생성 후 재실행"])
+        return base
+    have = _matrix_first_column(dev_dir, "api-implementation-matrix.md",
+                                "Operation Matrix")
+    missing = sorted(contract_ops - have)
+    if missing:
+        base.update(status="FAIL",
+                    current=f"누락 operation — {missing}",
+                    to_pass=[f"api-implementation-matrix.md `## Operation Matrix` "
+                             f"표에 {missing} 행 추가"])
+    else:
+        base.update(status="PASS",
+                    current=f"{len(contract_ops)}개 operation 모두 cover",
+                    to_pass=[])
+    return base
+
+
+def check_data_model_map_covers_all_contract_models(dev_dir: pathlib.Path,
+                                                    contract: dict | None) -> dict:
+    base = {
+        "id": "data_model_map_covers_all_contract_models", "tier": 1,
+        "name": "data-model-implementation-map.md 가 contract data-model 전체 cover",
+        "criterion": ("data-model-implementation-map.md `## Schema Classification` "
+                      "표의 schema 열이 contract.yaml 의 `topics.data-model/<S>` 키 "
+                      "집합을 모두 포함."),
+    }
+    contract_models = contract_topic_names(contract, "data-model")
+    if not contract_models:
+        base.update(status="FAIL",
+                    current="contract.yaml 의 topics.data-model/* 키 없음 또는 load 실패",
+                    to_pass=["/nf-contract-check <nf> 로 contract 재생성 후 재실행"])
+        return base
+    have = _matrix_first_column(dev_dir, "data-model-implementation-map.md",
+                                "Schema Classification")
+    missing = sorted(contract_models - have)
+    if missing:
+        base.update(status="FAIL",
+                    current=f"누락 schema — {missing[:8]}"
+                            + (" ..." if len(missing) > 8 else ""),
+                    to_pass=[f"data-model-implementation-map.md `## Schema "
+                             f"Classification` 표에 {len(missing)}개 schema 행 추가"])
+    else:
+        base.update(status="PASS",
+                    current=f"{len(contract_models)}개 schema 모두 cover",
+                    to_pass=[])
+    return base
+
+
+def _load_work_items(dev_dir: pathlib.Path) -> tuple[list, str | None]:
+    p = dev_dir / "codegen-work-items.yaml"
+    if not p.exists():
+        return [], "codegen-work-items.yaml 없음"
+    try:
+        data = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as e:
+        return [], f"YAML 파싱 실패 — {e}"
+    if data.get("schema_version") != WORK_ITEMS_SCHEMA:
+        return [], (f"schema_version != {WORK_ITEMS_SCHEMA} "
+                    f"(현 {data.get('schema_version')!r})")
+    items = data.get("items") or []
+    if not isinstance(items, list):
+        return [], "items 가 list 가 아님"
+    if not items:
+        return [], "items 비어있음"
+    return items, None
+
+
+def _work_item_schema_errors(items: list) -> list[str]:
+    """SKILL.md mandate 의 8 키 schema 검증. PR #42 Finding 1 보강.
+    각 items[i] 가 다음을 만족해야 함.
+      - scalar keys (id, owner_lane) — 비어있지 않은 string
+      - list keys non-empty (inputs/expected_files/acceptance/tests/
+        verification_commands) — non-empty list 이며 모든 원소 TODO 아님
+      - list keys may-empty (depends_on) — 키 존재 + list 타입 (empty 허용)
+    """
+    errs: list[str] = []
+    for i, it in enumerate(items):
+        if not isinstance(it, dict):
+            errs.append(f"items[{i}] (dict 아님)")
+            continue
+        ident = it.get("id", f"index {i}")
+        for k in WORK_ITEM_REQUIRED_SCALAR_KEYS:
+            v = it.get(k)
+            if not (isinstance(v, str) and v.strip()
+                    and v.strip().upper() != "TODO"):
+                errs.append(f"items[{i}] id={ident!r} scalar {k!r} 누락/TODO")
+        for k in WORK_ITEM_REQUIRED_LIST_KEYS_MAY_EMPTY:
+            v = it.get(k)
+            if not isinstance(v, list):
+                errs.append(f"items[{i}] id={ident!r} list-key {k!r} "
+                            f"누락 또는 list 아님 (empty list 허용)")
+    return errs
+
+
+def _check_work_items_key(dev_dir: pathlib.Path, key: str, check_id: str,
+                          name_ko: str) -> dict:
+    base = {
+        "id": check_id, "tier": 1, "name": name_ko,
+        "criterion": (f"codegen-work-items.yaml schema_version "
+                      f"{WORK_ITEMS_SCHEMA}, 각 items[] 가 SKILL.md mandate "
+                      f"8 키 모두 보유 + 본 check 의 {key!r} 가 비어있지 않은 list."),
+    }
+    items, err = _load_work_items(dev_dir)
+    if err:
+        base.update(status="FAIL", current=err,
+                    to_pass=["/nf-impl-plan <nf> 으로 codegen-work-items.yaml 재생성"])
+        return base
+    schema_errs = _work_item_schema_errors(items)
+    bad = []
+    for i, it in enumerate(items):
+        if not isinstance(it, dict):
+            continue  # scheme errs 가 이미 잡음
+        v = it.get(key)
+        if not (isinstance(v, list) and v and any(
+                str(x).strip() and str(x).strip().upper() != "TODO" for x in v)):
+            bad.append(f"items[{i}] id={it.get('id', '?')} {key} 비어있음/TODO")
+    all_problems = schema_errs + bad
+    if all_problems:
+        base.update(status="FAIL", current=f"불량 — {all_problems[:5]}"
+                                            + (" ..." if len(all_problems) > 5
+                                               else ""),
+                    to_pass=[f"각 work item 의 SKILL.md mandate 8 키 + "
+                             f"{key!r} non-empty 보강"])
+    else:
+        base.update(status="PASS",
+                    current=f"{len(items)}개 work item 모두 8 키 + {key} 보유",
+                    to_pass=[])
+    return base
+
+
+def check_all_work_items_have_expected_files(dev_dir: pathlib.Path) -> dict:
+    return _check_work_items_key(
+        dev_dir, "expected_files",
+        "all_work_items_have_expected_files",
+        "모든 codegen work item 이 expected_files 보유")
+
+
+def check_all_work_items_have_tests(dev_dir: pathlib.Path) -> dict:
+    return _check_work_items_key(
+        dev_dir, "tests",
+        "all_work_items_have_tests",
+        "모든 codegen work item 이 tests 보유")
+
+
+def check_all_work_items_have_verification_commands(dev_dir: pathlib.Path) -> dict:
+    return _check_work_items_key(
+        dev_dir, "verification_commands",
+        "all_work_items_have_verification_commands",
+        "모든 codegen work item 이 verification_commands 보유")
+
+
+def check_team_execution_plan_present(dev_dir: pathlib.Path) -> dict:
+    base = {
+        "id": "team_execution_plan_present", "tier": 1,
+        "name": "team-execution-plan.md 5 lane 섹션 존재",
+        "criterion": ("team-execution-plan.md 가 존재하고 canonical 5 lane H2 "
+                      "(Orchestrator/Code/Reviewer/Tester/Verifier) + "
+                      "Integration Order/References 순서 일치."),
+    }
+    p = dev_dir / "team-execution-plan.md"
+    if not p.exists():
+        base.update(status="FAIL", current="team-execution-plan.md 없음",
+                    to_pass=["/nf-impl-plan <nf> 으로 team-execution-plan.md 생성"])
+        return base
+    got = h2(p)
+    want = READINESS_PACK_MD_CANON["team-execution-plan.md"]
+    if got != want:
+        base.update(status="FAIL", current=f"H2 불일치 — {got}",
+                    to_pass=[f"canonical 5 lane 섹션 순서 일치 — {want}"])
+    else:
+        base.update(status="PASS", current="5 lane + integration order 일치",
+                    to_pass=[])
+    return base
+
+
+def _checklist_human_reviewed(dev_dir: pathlib.Path) -> str | None:
+    """design-adequacy-checklist.md 의 `## Checklist` 표에 status 컬럼 (열 3) 이
+    'pending'/'TODO' 외 (예 ok/concern) 인 행이 1 개 이상."""
+    p = dev_dir / "design-adequacy-checklist.md"
+    if not p.exists():
+        return "design-adequacy-checklist.md 없음"
+    rows = parse_md_table_section(p.read_text(encoding="utf-8"), "Checklist")
+    if not rows:
+        return "design-adequacy-checklist.md `## Checklist` 표 없음"
+    for r in rows:
+        if len(r) >= 3 and r[2].strip().lower() not in ("pending", "todo", ""):
+            return None
+    return ("design-adequacy-checklist.md 의 Checklist 모든 행이 status=pending/TODO "
+            "— 사람 audit 흔적 없음")
+
+
+def _coverage_trace_has_content(dev_dir: pathlib.Path) -> str | None:
+    """spec-to-design-coverage.md `## Coverage Trace` 표에 첫 컬럼 non-TODO 행 1+."""
+    p = dev_dir / "spec-to-design-coverage.md"
+    if not p.exists():
+        return "spec-to-design-coverage.md 없음"
+    rows = parse_md_table_section(p.read_text(encoding="utf-8"), "Coverage Trace")
+    if any(r and r[0].strip() and r[0].strip().upper() != "TODO" for r in rows):
+        return None
+    return ("spec-to-design-coverage.md 의 Coverage Trace 가 비어있거나 "
+            "첫 컬럼이 모두 TODO")
+
+
+def _gaps_table_non_todo(dev_dir: pathlib.Path) -> str | None:
+    """open-gaps-and-assumptions.md `## Gaps` 에 id 컬럼 non-TODO 행 1+."""
+    rows, err = _parse_gaps_table(dev_dir)
+    if err:
+        return err
+    if any(r and r[0].strip() and r[0].strip().upper() != "TODO" for r in rows):
+        return None
+    return "open-gaps-and-assumptions.md 의 Gaps 모든 행이 id=TODO"
+
+
+def _review_recommendation_non_todo(dev_dir: pathlib.Path) -> str | None:
+    """implementation-readiness-review.md `## Recommendation` 안에 TODO 가 아닌
+    실질적 본문 (텍스트 길이 ≥ 30 글자) 1줄 이상."""
+    p = dev_dir / "implementation-readiness-review.md"
+    if not p.exists():
+        return "implementation-readiness-review.md 없음"
+    text = p.read_text(encoding="utf-8")
+    start = text.find("## Recommendation")
+    if start == -1:
+        return "implementation-readiness-review.md `## Recommendation` 섹션 없음"
+    nxt = text.find("\n## ", start + len("## Recommendation"))
+    section = text[start:nxt] if nxt != -1 else text[start:]
+    for ln in section.splitlines()[1:]:  # skip H2 헤더
+        s = ln.strip()
+        if not s or s.startswith("#"):
+            continue
+        cleaned = s.lstrip("- *").strip()
+        if cleaned.upper() == "TODO":
+            continue
+        if "TODO" in cleaned and len(cleaned) < 40:
+            continue
+        if len(cleaned) >= 30:
+            return None
+    return ("implementation-readiness-review.md Recommendation 섹션에 30자 이상 "
+            "비-TODO 본문 없음")
+
+
+def check_human_review_pack_traceable(dev_dir: pathlib.Path) -> dict:
+    base = {
+        "id": "human_review_pack_traceable", "tier": 1,
+        "name": "Human Review Pack 4 파일 존재 + frontmatter + 사람 audit 흔적",
+        "criterion": (", ".join(HUMAN_REVIEW_PACK) + " 4 파일 모두 존재, "
+                      "frontmatter 필수 키 충족, "
+                      "design-adequacy-checklist 의 Checklist 표에 status != "
+                      "pending/TODO 행 1+, spec-to-design-coverage Coverage Trace "
+                      "에 non-TODO 행 1+, open-gaps Gaps 에 id != TODO 행 1+, "
+                      "implementation-readiness-review Recommendation 에 30자+ "
+                      "비-TODO 본문 1+."),
+    }
+    bad: list[str] = []
+    # 1. 4 파일 존재 + frontmatter
+    for fn in HUMAN_REVIEW_PACK:
+        p = dev_dir / fn
+        if not p.exists():
+            bad.append(f"{fn} 없음")
+            continue
+        fm, _ = parse_frontmatter(p.read_text(encoding="utf-8"))
+        if not fm or (DEV_FM_KEYS - set(fm.keys())):
+            bad.append(f"{fn} frontmatter 누락")
+    # 2. per-file substantive 증거 — boilerplate 통과 차단 (PR #42 Finding 2 보강)
+    for err in (
+        _checklist_human_reviewed(dev_dir),
+        _coverage_trace_has_content(dev_dir),
+        _gaps_table_non_todo(dev_dir),
+        _review_recommendation_non_todo(dev_dir),
+    ):
+        if err:
+            bad.append(err)
+    if bad:
+        base.update(status="FAIL", current=f"불량 — {bad}",
+                    to_pass=["Human Review Pack 본문을 사람이 audit 가능한 "
+                             "수준으로 작성 — 각 표/섹션의 placeholder 행 채움"])
+    else:
+        base.update(status="PASS",
+                    current="4 파일 모두 사람 audit 흔적 보유", to_pass=[])
+    return base
+
+
+def _parse_gaps_table(dev_dir: pathlib.Path) -> tuple[list[list[str]], str | None]:
+    p = dev_dir / "open-gaps-and-assumptions.md"
+    if not p.exists():
+        return [], "open-gaps-and-assumptions.md 없음"
+    rows = parse_md_table_section(p.read_text(encoding="utf-8"), "Gaps")
+    if not rows:
+        return [], "## Gaps 섹션에 표가 없음"
+    return rows, None
+
+
+def check_gaps_classified(dev_dir: pathlib.Path) -> dict:
+    base = {
+        "id": "gaps_classified", "tier": 1,
+        "name": "open-gaps-and-assumptions.md 의 모든 gap 행이 category 분류됨",
+        "criterion": ("`## Gaps` 표의 모든 행이 category 컬럼 (열 2) 값이 "
+                      f"{sorted(GAP_CATEGORIES)} 중 하나. TODO/빈 값 금지."),
+    }
+    rows, err = _parse_gaps_table(dev_dir)
+    if err:
+        base.update(status="FAIL", current=err,
+                    to_pass=["/nf-impl-plan <nf> 으로 open-gaps-and-assumptions.md 생성"])
+        return base
+    bad = []
+    for r in rows:
+        if len(r) < 2:
+            bad.append(f"row {r} (열 부족)")
+            continue
+        cat = r[1].lower()
+        if cat == "todo" or not cat:
+            bad.append(f"id={r[0]!r} category=TODO")
+        elif cat not in GAP_CATEGORIES:
+            bad.append(f"id={r[0]!r} category={cat!r} (허용 집합 밖)")
+    if bad:
+        base.update(status="FAIL", current=f"불량 — {bad[:5]}"
+                                            + (" ..." if len(bad) > 5 else ""),
+                    to_pass=[f"각 gap 행의 category 를 {sorted(GAP_CATEGORIES)} "
+                             "중 하나로 분류"])
+    else:
+        base.update(status="PASS", current=f"{len(rows)}개 gap 모두 분류됨",
+                    to_pass=[])
+    return base
+
+
+def check_blocker_gaps_zero(dev_dir: pathlib.Path) -> dict:
+    base = {
+        "id": "blocker_gaps_zero", "tier": 1,
+        "name": "open-gaps-and-assumptions.md 의 `blocker` gap 수 = 0",
+        "criterion": "`## Gaps` 표의 category=blocker 행이 0개.",
+    }
+    rows, err = _parse_gaps_table(dev_dir)
+    if err:
+        base.update(status="FAIL", current=err,
+                    to_pass=["/nf-impl-plan <nf> 으로 open-gaps-and-assumptions.md 생성"])
+        return base
+    blockers = [r for r in rows if len(r) >= 2 and r[1].lower() == "blocker"]
+    if blockers:
+        ids = [r[0] for r in blockers]
+        base.update(status="FAIL", current=f"blocker {len(blockers)}개 — {ids}",
+                    to_pass=["blocker gap 을 모두 해결하거나 다른 category 로 "
+                             "재분류 후 codegen 시작"])
+    else:
+        base.update(status="PASS", current="blocker 0개", to_pass=[])
+    return base
+
+
+def check_no_spec_reread_required(dev_dir: pathlib.Path) -> dict:
+    """Aggregate sentinel — autonomous codegen 이 원본 OpenAPI YAML 을 다시 읽지
+    않아도 됨을 보장. 다음 조건 AND.
+      1. blocker gap 0 (= blocker_gaps_zero 와 동일)
+      2. spec-to-design-coverage.md `## Coverage Trace` 에 최소 1 non-TODO 행
+      3. open-gaps 또는 design-adequacy-checklist 본문에 "spec 재독해" 단서 없음
+    """
+    base = {
+        "id": "no_spec_reread_required", "tier": 1,
+        "name": "원본 spec 재독해 없이 codegen 가능 (aggregate sentinel)",
+        "criterion": ("blocker_gaps_zero PASS + spec-to-design-coverage.md "
+                      "`## Coverage Trace` 표에 최소 1 non-TODO 행 + open-gaps/"
+                      "design-adequacy 본문에 'spec 재독해/re-read' 단서 부재."),
+    }
+    rows, gap_err = _parse_gaps_table(dev_dir)
+    fails = []
+    if gap_err:
+        # gap table 미존재/파싱 실패 = blocker count 신뢰 불가 = FAIL (PR #42 Finding 3 보강).
+        fails.append(f"gap table 신뢰 불가 — {gap_err}")
+        blocker_n = 0
+    else:
+        blocker_n = sum(1 for r in rows if len(r) >= 2 and r[1].lower() == "blocker")
+        if blocker_n:
+            fails.append(f"blocker {blocker_n}개")
+    cov_path = dev_dir / "spec-to-design-coverage.md"
+    cov_ok = False
+    if cov_path.exists():
+        cov_rows = parse_md_table_section(
+            cov_path.read_text(encoding="utf-8"), "Coverage Trace")
+        cov_ok = any(r and r[0] and r[0].upper() != "TODO" for r in cov_rows)
+    sentinel_hits = []
+    for fn in ("open-gaps-and-assumptions.md", "design-adequacy-checklist.md"):
+        p = dev_dir / fn
+        if not p.exists():
+            continue
+        t = p.read_text(encoding="utf-8")
+        for kw in ("spec 재독해", "re-read spec", "spec 재해석"):
+            if kw in t:
+                sentinel_hits.append(f"{fn}:{kw}")
+    if not cov_ok:
+        fails.append("Coverage Trace 가 비어있거나 TODO 만")
+    if sentinel_hits:
+        fails.append(f"재독해 단서 — {sentinel_hits}")
+    if fails:
+        base.update(status="FAIL", current=", ".join(fails),
+                    to_pass=["blocker 0 + Coverage Trace 채움 + 재독해 단서 해소"])
+    else:
+        base.update(status="PASS",
+                    current="blocker 0 + coverage trace 존재 + 재독해 단서 없음",
+                    to_pass=[])
+    return base
+
+
 def load_prev_pass_anyway(status_path: pathlib.Path) -> list:
     """기존 _impl_status.yaml 의 manual_overrides.pass_anyway 를 읽는다.
     이를 보존·적용하지 않으면 매 실행이 빈 리스트로 덮어써 우회가 영영 무효다."""
@@ -328,12 +879,24 @@ def main() -> None:
               file=sys.stderr)
         sys.exit(1)
 
+    contract = load_contract(nf)
     checks = [
         check_impl_files_present(dev_dir),
         check_impl_sections_exact(dev_dir),
         check_tasks_schema_valid(dev_dir),
         check_impl_frontmatter_valid(dev_dir),
         check_traceability_xref(dev_dir),
+        check_readiness_pack_files_present(dev_dir),
+        check_api_matrix_covers_all_operations(dev_dir, contract),
+        check_data_model_map_covers_all_contract_models(dev_dir, contract),
+        check_all_work_items_have_expected_files(dev_dir),
+        check_all_work_items_have_tests(dev_dir),
+        check_all_work_items_have_verification_commands(dev_dir),
+        check_team_execution_plan_present(dev_dir),
+        check_human_review_pack_traceable(dev_dir),
+        check_gaps_classified(dev_dir),
+        check_blocker_gaps_zero(dev_dir),
+        check_no_spec_reread_required(dev_dir),
     ]
     out_path = dev_dir / "_impl_status.yaml"
     pass_anyway = load_prev_pass_anyway(out_path)
