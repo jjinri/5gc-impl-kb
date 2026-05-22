@@ -47,10 +47,11 @@ TS_FILENAME_RE = re.compile(r"^TS(\d{2})(\d{3})_")
 # classified JSON 으로 직접 반환 (Pane 2 권고 정책 C).
 STATUS_CODE_RE = re.compile(r"^(default|[1-5][0-9][0-9])$")
 
-# PR F1.2 — unresolved $ref classification enum. codegen agent 가 "unresolved 인데
-# 처리 방침은 닫혔다" 를 명시할 수 있게 8 가지 분류 도입.
-CLASSIFICATION_ENUM = {
-    "resolved",                       # not used in unresolved entry — sentinel
+# PR F1.2 — classification 어휘. unresolved_refs[].classification 에 실제 emit 되는 값은
+# 아래 7 enum (UNRESOLVED_CLASSIFICATIONS). 'resolved' 는 schema 가 정상 resolve 된 경우의
+# 개념적 sentinel 이며 unresolved entry 에 emit 되지 않는다 — sibling code (nf-status.py
+# 의 _CLASSIFICATION_ENUM) 는 7 enum 만 검증한다 (PR #48 review Low finding 정정).
+UNRESOLVED_CLASSIFICATIONS = {
     "external_common_data",           # TS29571_CommonData 등 공용 데이터 spec 의 schema
     "responses_only_schema",          # response status code 만 표시 (path responses, components.schemas X)
     "problem_details_response",       # 4xx/5xx 응답 = ProblemDetails wrapper
@@ -59,6 +60,8 @@ CLASSIFICATION_ENUM = {
     "operator_policy_external",       # operator policy / O&M 영역 외부 결정
     "implementation_blocker",         # 정말 막힘 — codegen 시작 전 결정 필요
 }
+# 호환성을 위한 superset (resolved sentinel 포함) — 외부에서 import 하면 7 + 1.
+CLASSIFICATION_ENUM = UNRESOLVED_CLASSIFICATIONS | {"resolved"}
 
 
 @dataclasses.dataclass
