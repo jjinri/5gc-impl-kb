@@ -27,7 +27,7 @@ PR #38 (`codegen-nssf-tracer-bullet-plan`) 은 현재 형태로 merge 하지 않
 Human input:
   specs/<spec>/*.docx|*.yaml 준비
 
-/nf-readiness nssf --primary 29.531
+/nf-readiness nssf
   → specs_ready
   → contract_implementable
   → arch_consistent
@@ -43,6 +43,8 @@ Human input:
   → Phase 4 contract/security/e2e verification
   → Phase 5 hardening/review/merge
 ```
+
+Note. `--primary <spec>` 는 *override / bootstrap* 용 보조 인자다 (`design/nf-registry.yaml` 부재·저신뢰일 때만). canonical public UX 는 `/nf-readiness <nf>` 형태이며 `primary_spec` 은 registry resolve. 자세한 routing 은 §3.1.
 
 ## 3. Gate semantics 정정
 
