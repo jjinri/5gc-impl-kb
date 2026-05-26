@@ -1,0 +1,512 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>handover — 5gc-impl-kb</title>
+<style>
+:root {
+  --fg: #1f2328;
+  --fg-muted: #57606a;
+  --bg: #ffffff;
+  --bg-alt: #f6f8fa;
+  --border: #d8dee4;
+  --border-muted: #eaeef2;
+  --accent: #0969da;
+  --accent-emphasis: #0550ae;
+  --hover-bg: #ddf4ff;
+  --success: #1a7f37;
+  --danger: #cf222e;
+  --neutral: #59636e;
+  --shadow-sm: 0 1px 0 rgba(31,35,40,.04);
+  --radius: 6px;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR",
+    "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono",
+    "D2Coding", monospace;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 1rem; }
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--fg);
+  background: var(--bg);
+}
+
+.wrap {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 3rem;
+  padding: 2rem 1.5rem 4rem;
+}
+
+aside.toc {
+  position: sticky;
+  top: 1rem;
+  align-self: start;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  padding-right: 1.5rem;
+  border-right: 1px solid var(--border-muted);
+  font-size: .87rem;
+}
+aside.toc::before {
+  content: "Contents";
+  display: block;
+  font-size: .72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--fg-muted);
+  margin-bottom: .65rem;
+  padding-bottom: .5rem;
+  border-bottom: 1px solid var(--border-muted);
+}
+aside.toc ul { list-style: none; padding-left: 0; margin: 0; }
+aside.toc ul ul { padding-left: 1rem; margin-top: .15rem; }
+aside.toc li { margin: .1rem 0; }
+aside.toc a {
+  display: block;
+  padding: .18rem .4rem;
+  color: var(--fg-muted);
+  text-decoration: none;
+  border-radius: 4px;
+  transition: background .1s, color .1s;
+}
+aside.toc a:hover { background: var(--bg-alt); color: var(--fg); }
+
+main { max-width: 980px; min-width: 0; }
+
+h1, h2, h3, h4, h5, h6 {
+  position: relative;
+  margin: 2rem 0 .65rem;
+  font-weight: 700;
+  scroll-margin-top: 1rem;
+}
+h1 {
+  font-size: 2rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: .35rem;
+  margin-top: 0;
+}
+h2 {
+  font-size: 1.45rem;
+  border-bottom: 1px solid var(--border-muted);
+  padding-bottom: .3rem;
+  margin-top: 2.5rem;
+}
+h3 { font-size: 1.18rem; margin-top: 1.75rem; }
+h4 {
+  font-size: .94rem;
+  margin-top: 1.25rem;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+/* Anchor link on heading hover */
+h1 .headerlink, h2 .headerlink, h3 .headerlink, h4 .headerlink {
+  position: absolute;
+  left: -1.4em;
+  width: 1.25em;
+  text-align: center;
+  color: var(--accent);
+  opacity: 0;
+  text-decoration: none;
+  font-weight: 400;
+  transition: opacity .1s;
+}
+h1:hover .headerlink, h2:hover .headerlink, h3:hover .headerlink,
+h4:hover .headerlink { opacity: 1; }
+.headerlink::before { content: "#"; }
+
+p { margin: .65rem 0; }
+ul, ol { padding-left: 1.5rem; margin: .5rem 0; }
+li { margin: .2rem 0; }
+li > p { margin: .25rem 0; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+code {
+  font-family: var(--font-mono);
+  font-size: .87em;
+  background: var(--bg-alt);
+  padding: .12em .35em;
+  border-radius: 3px;
+}
+pre {
+  background: var(--bg-alt);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius);
+  padding: .95rem 1.1rem;
+  overflow-x: auto;
+  font-size: .86rem;
+  line-height: 1.5;
+  margin: .8rem 0;
+  box-shadow: var(--shadow-sm);
+}
+pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+  border-radius: 0;
+}
+.codehilite pre { margin: 0; border: none; box-shadow: none; }
+.codehilite {
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin: .8rem 0;
+  box-shadow: var(--shadow-sm);
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0 1.5rem;
+  font-size: .9rem;
+  background: var(--bg);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+thead { background: var(--bg-alt); }
+thead th {
+  text-align: left;
+  padding: .55rem .8rem;
+  border-bottom: 2px solid var(--border);
+  font-weight: 600;
+  font-size: .8rem;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  white-space: nowrap;
+}
+tbody td {
+  padding: .55rem .8rem;
+  border-bottom: 1px solid var(--border-muted);
+  vertical-align: top;
+}
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: var(--hover-bg); transition: background .1s; }
+td code { font-size: .82em; }
+
+blockquote {
+  border-left: 4px solid var(--accent);
+  margin: 1rem 0;
+  padding: .35rem 1rem;
+  background: var(--bg-alt);
+  color: var(--fg-muted);
+}
+blockquote p:first-child { margin-top: 0; }
+blockquote p:last-child { margin-bottom: 0; }
+
+hr {
+  border: none;
+  border-top: 1px solid var(--border-muted);
+  margin: 2.5rem 0;
+}
+
+strong { font-weight: 600; }
+em { font-style: italic; color: var(--fg-muted); }
+
+/* Generated by render-doc.py footer */
+.render-footer {
+  margin-top: 4rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-muted);
+  font-size: .78rem;
+  color: var(--fg-muted);
+  text-align: center;
+}
+.render-footer code { font-size: .85em; }
+
+@media (max-width: 920px) {
+  .wrap {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    padding: 1rem 1rem 2.5rem;
+  }
+  aside.toc {
+    position: static;
+    max-height: none;
+    border-right: none;
+    border-bottom: 1px solid var(--border-muted);
+    padding-right: 0;
+    padding-bottom: 1rem;
+  }
+  main { max-width: 100%; }
+  table { font-size: .82rem; }
+}
+
+@media print {
+  aside.toc { display: none; }
+  .wrap { display: block; max-width: 100%; padding: 0; }
+  main { max-width: 100%; }
+  pre, table, .codehilite { box-shadow: none; border-color: #ccc; }
+  a { color: var(--fg); text-decoration: none; }
+  h1, h2 { page-break-after: avoid; }
+  table, pre, blockquote { page-break-inside: avoid; }
+}
+
+.badge-blocking {
+  display: inline-block;
+  padding: .05em .5em;
+  font-size: .78em;
+  font-weight: 600;
+  color: var(--danger);
+  background: #ffebe9;
+  border: 1px solid #ffc1ba;
+  border-radius: 999px;
+  font-style: normal;
+  letter-spacing: .02em;
+}
+
+pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #ffffcc }
+.codehilite { background: #f8f8f8; }
+.codehilite .c { color: #3D7B7B; font-style: italic } /* Comment */
+.codehilite .err { border: 1px solid #F00 } /* Error */
+.codehilite .k { color: #008000; font-weight: bold } /* Keyword */
+.codehilite .o { color: #666 } /* Operator */
+.codehilite .ch { color: #3D7B7B; font-style: italic } /* Comment.Hashbang */
+.codehilite .cm { color: #3D7B7B; font-style: italic } /* Comment.Multiline */
+.codehilite .cp { color: #9C6500 } /* Comment.Preproc */
+.codehilite .cpf { color: #3D7B7B; font-style: italic } /* Comment.PreprocFile */
+.codehilite .c1 { color: #3D7B7B; font-style: italic } /* Comment.Single */
+.codehilite .cs { color: #3D7B7B; font-style: italic } /* Comment.Special */
+.codehilite .gd { color: #A00000 } /* Generic.Deleted */
+.codehilite .ge { font-style: italic } /* Generic.Emph */
+.codehilite .ges { font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #E40000 } /* Generic.Error */
+.codehilite .gh { color: #000080; font-weight: bold } /* Generic.Heading */
+.codehilite .gi { color: #008400 } /* Generic.Inserted */
+.codehilite .go { color: #717171 } /* Generic.Output */
+.codehilite .gp { color: #000080; font-weight: bold } /* Generic.Prompt */
+.codehilite .gs { font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #800080; font-weight: bold } /* Generic.Subheading */
+.codehilite .gt { color: #04D } /* Generic.Traceback */
+.codehilite .kc { color: #008000; font-weight: bold } /* Keyword.Constant */
+.codehilite .kd { color: #008000; font-weight: bold } /* Keyword.Declaration */
+.codehilite .kn { color: #008000; font-weight: bold } /* Keyword.Namespace */
+.codehilite .kp { color: #008000 } /* Keyword.Pseudo */
+.codehilite .kr { color: #008000; font-weight: bold } /* Keyword.Reserved */
+.codehilite .kt { color: #B00040 } /* Keyword.Type */
+.codehilite .m { color: #666 } /* Literal.Number */
+.codehilite .s { color: #BA2121 } /* Literal.String */
+.codehilite .na { color: #687822 } /* Name.Attribute */
+.codehilite .nb { color: #008000 } /* Name.Builtin */
+.codehilite .nc { color: #00F; font-weight: bold } /* Name.Class */
+.codehilite .no { color: #800 } /* Name.Constant */
+.codehilite .nd { color: #A2F } /* Name.Decorator */
+.codehilite .ni { color: #717171; font-weight: bold } /* Name.Entity */
+.codehilite .ne { color: #CB3F38; font-weight: bold } /* Name.Exception */
+.codehilite .nf { color: #00F } /* Name.Function */
+.codehilite .nl { color: #767600 } /* Name.Label */
+.codehilite .nn { color: #00F; font-weight: bold } /* Name.Namespace */
+.codehilite .nt { color: #008000; font-weight: bold } /* Name.Tag */
+.codehilite .nv { color: #19177C } /* Name.Variable */
+.codehilite .ow { color: #A2F; font-weight: bold } /* Operator.Word */
+.codehilite .w { color: #BBB } /* Text.Whitespace */
+.codehilite .mb { color: #666 } /* Literal.Number.Bin */
+.codehilite .mf { color: #666 } /* Literal.Number.Float */
+.codehilite .mh { color: #666 } /* Literal.Number.Hex */
+.codehilite .mi { color: #666 } /* Literal.Number.Integer */
+.codehilite .mo { color: #666 } /* Literal.Number.Oct */
+.codehilite .sa { color: #BA2121 } /* Literal.String.Affix */
+.codehilite .sb { color: #BA2121 } /* Literal.String.Backtick */
+.codehilite .sc { color: #BA2121 } /* Literal.String.Char */
+.codehilite .dl { color: #BA2121 } /* Literal.String.Delimiter */
+.codehilite .sd { color: #BA2121; font-style: italic } /* Literal.String.Doc */
+.codehilite .s2 { color: #BA2121 } /* Literal.String.Double */
+.codehilite .se { color: #AA5D1F; font-weight: bold } /* Literal.String.Escape */
+.codehilite .sh { color: #BA2121 } /* Literal.String.Heredoc */
+.codehilite .si { color: #A45A77; font-weight: bold } /* Literal.String.Interpol */
+.codehilite .sx { color: #008000 } /* Literal.String.Other */
+.codehilite .sr { color: #A45A77 } /* Literal.String.Regex */
+.codehilite .s1 { color: #BA2121 } /* Literal.String.Single */
+.codehilite .ss { color: #19177C } /* Literal.String.Symbol */
+.codehilite .bp { color: #008000 } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #00F } /* Name.Function.Magic */
+.codehilite .vc { color: #19177C } /* Name.Variable.Class */
+.codehilite .vg { color: #19177C } /* Name.Variable.Global */
+.codehilite .vi { color: #19177C } /* Name.Variable.Instance */
+.codehilite .vm { color: #19177C } /* Name.Variable.Magic */
+.codehilite .il { color: #666 } /* Literal.Number.Integer.Long */
+</style>
+</head>
+<body>
+<div class="wrap">
+<aside class="toc" aria-label="목차">
+<div class="toc">
+<ul>
+<li><a href="#pc-auto-memory">세션 간 / PC 간 인계 — auto-memory 보존</a><ul>
+<li><a href="#1-memory-5-verbatim">1. Memory 파일 5개 (verbatim)</a><ul>
+<li><a href="#11-feedback_option_labelsmd">1.1 feedback_option_labels.md</a></li>
+<li><a href="#12-feedback_task_listmd">1.2 feedback_task_list.md</a></li>
+<li><a href="#13-project_framingmd-2026-05-10-wrap-up">1.3 project_framing.md (정정본 — 2026-05-10 wrap-up 사용자 지적 반영)</a></li>
+<li><a href="#14-project_gate_namingmd">1.4 project_gate_naming.md</a></li>
+<li><a href="#15-project_no_jvmmd">1.5 project_no_jvm.md</a></li>
+<li><a href="#16-memorymd">1.6 MEMORY.md (인덱스)</a></li>
+</ul>
+</li>
+<li><a href="#2-pc-memory">2. 새 PC 에서 memory 디렉터리 재생성 — 한 줄 가이드</a></li>
+<li><a href="#3-wrapping">3. 본 wrapping 이 보존하지 않는 것</a></li>
+</ul>
+</li>
+</ul>
+</div>
+
+</aside>
+<main>
+<h1 id="pc-auto-memory">세션 간 / PC 간 인계 — auto-memory 보존<a class="headerlink" href="#pc-auto-memory" title="Link to this section">&para;</a></h1>
+<blockquote>
+<p><strong>목적.</strong> Claude Code 의 auto-memory (<code>~/.claude/projects/&lt;path&gt;/memory/</code>) 는 PC 별 local 이라 git clone 으로 동기화되지 않는다. 본 파일은 그 내용을 git tracked 형태로 보존해 다른 PC 의 첫 세션에서 <em>행동 일관성</em> 이 유지되게 한다.</p>
+<p><strong>다음 세션 시작 시 행동.</strong> Claude (또는 사람) 이 새 PC 에서 본 repo 를 처음 열 때, 본 파일 내용을 읽고 <code>~/.claude/projects/&lt;현 repo path&gt;/memory/</code> 디렉터리 부재 시 아래 <em>5개 메모리 파일 + MEMORY.md 인덱스</em> 를 그대로 cp 한다. Claude 가 자동 처리해도 OK.</p>
+</blockquote>
+<hr />
+<h2 id="1-memory-5-verbatim">1. Memory 파일 5개 (verbatim)<a class="headerlink" href="#1-memory-5-verbatim" title="Link to this section">&para;</a></h2>
+<h3 id="11-feedback_option_labelsmd">1.1 <code>feedback_option_labels.md</code><a class="headerlink" href="#11-feedback_option_labelsmd" title="Link to this section">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code>---
+name: 선택지 라벨에 그리스 문자·특수기호 금지
+description: 사용자에게 옵션을 제시할 때 키보드로 직접 타이핑할 수 있는 라벨만 사용
+<span class="gu">type: feedback</span>
+<span class="gu">---</span>
+선택지를 제시할 때 라벨은 키보드로 직접 입력 가능한 문자만 사용한다. (1)·(2)·(a)·(b) 같은 숫자/알파벳 OK. α·β·γ·δ·ε 같은 그리스 문자, ①·② 같은 enclosed 숫자, 한자, emoji 금지.
+
+<span class="gs">**Why:**</span> 사용자가 답할 때 라벨을 다시 타이핑해야 하는 경우가 있는데, 그리스 문자는 키보드에 없어 답변 자체가 불가. 본 세션에서 Q2 답변 시점에 사용자가 직접 지적함.
+
+<span class="gs">**How to apply:**</span> AskUserQuestion 의 label 필드, 본문 글머리 (a)/(b)/(1)/(2), grill-me 같이 &quot;추천 답안&quot; 표기에서도 동일. 이미 본문에 포함된 표 등 <span class="ge">*사용자가 답하지 않는 영역*</span> 의 그리스 문자 (예 — 수식, 알파/베타 테스트 단계) 는 무관.
+</code></pre></div>
+
+<h3 id="12-feedback_task_listmd">1.2 <code>feedback_task_list.md</code><a class="headerlink" href="#12-feedback_task_listmd" title="Link to this section">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code>---
+name: 작업 리스트 의무화
+description: non-trivial 작업은 시작 전 TaskCreate 로 작업 리스트를 만들고, 사용자가 진행 과정을 볼 수 있게 in_progress / completed 갱신을 한다. 5gc-impl-kb 프로젝트에 명시 적용된 정책이지만 일반 행동 규칙으로도 따른다.
+<span class="gu">type: feedback</span>
+<span class="gu">---</span>
+3개 이상 단계의 작업을 시작할 때 <span class="ge">*반드시*</span> TaskCreate 로 작업 리스트를 만든 뒤 진행. 각 작업 시작 시 in_progress, 끝나면 completed.
+
+<span class="gs">**Why.**</span> 사용자가 진행 과정을 볼 수 없으면 (a) 어떤 단계가 끝났는지 모르고 (b) 도중에 우선순위 조정이 어렵다. &quot;구체적인 지시사항으로 명시&quot; 라는 사용자 표현 — 모호한 통합 작업이 아니라 <span class="ge">*분리된 task*</span> 로 시각화되어야 한다.
+
+<span class="gs">**How to apply.**</span>
+<span class="k">-</span><span class="w"> </span>non-trivial = 3+ steps, 또는 30초 이상 걸리는 작업, 또는 여러 파일 변경.
+<span class="k">-</span><span class="w"> </span>단순 1-shot 답변·1-파일 1-줄 fix 는 제외.
+<span class="k">-</span><span class="w"> </span>작업 리스트는 <span class="ge">*사용자 결정 사항*</span> 도 한 task 로 표시 (예 &quot;frontmatter 4키 vs 9키 결정 받기&quot;).
+<span class="k">-</span><span class="w"> </span>매 sub-agent 위임도 task 로.
+</code></pre></div>
+
+<h3 id="13-project_framingmd-2026-05-10-wrap-up">1.3 <code>project_framing.md</code> (정정본 — 2026-05-10 wrap-up 사용자 지적 반영)<a class="headerlink" href="#13-project_framingmd-2026-05-10-wrap-up" title="Link to this section">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code>---
+name: 본 repo 는 design + dev 통합 단일 monorepo (논리적 분리)
+description: 본 프로젝트의 정체성·범위·사람 역할 — design ↔ dev 분리 합의 (2026-05-10 grill + wrap-up 정정)
+<span class="gu">type: project</span>
+<span class="gu">---</span>
+본 repo (<span class="sb">`5gc-impl-kb`</span>, 추후 rename 예정) 는 <span class="ge">*5gc-design + 5gc-dev 를 한 git repo 안에 통합한 단일 monorepo*</span>. 안에서 <span class="ge">*논리적으로*</span> 두 시스템 역할을 분리.
+<span class="k">-</span><span class="w"> </span><span class="sb">`design/`</span> — 5gc-design 영역. 3GPP spec 으로부터 LLM agent 자동 파이프라인으로 <span class="ge">*NF design deliverable*</span> (<span class="sb">`design/&lt;nf&gt;/3gpp-*.md`</span> + <span class="sb">`handoff/&lt;nf&gt;/contract.yaml`</span>) 생산.
+<span class="k">-</span><span class="w"> </span><span class="sb">`handoff/`</span> — design ↔ dev contract.
+<span class="k">-</span><span class="w"> </span><span class="sb">`dev/`</span> — 5gc-dev 영역 (현재 placeholder, 추후 채워질 예정).
+
+<span class="gs">**Why:**</span> 2026-05-10 grill-me 세션에서 사용자가 &quot;현재 프로젝트 방향성이 잘못되어 가는 걸로 보여서 바로 잡고 싶다&quot; 고 명시. yaml-to-c.py 가 design/ 책임 안으로 들어와 있고 acceptance gate 이름이 <span class="sb">`implementation_ready`</span>·<span class="sb">`production`</span> 인 것이 <span class="ge">*dev 책임을 design 측이 끌어안는 드리프트*</span> 로 진단됨. 두 시스템은 입력·cadence·검증 방식이 다르므로 <span class="ge">*논리적으로*</span> 분리. 솔로 개발자 + 초기 단계라 <span class="ge">*물리적*</span> 분리 (별도 repo) 는 과해서 단일 monorepo 유지. 2026-05-10 wrap-up 에서 &quot;이 repo 는 design 과 dev 를 논리적으로 구분했지만 사실 design, dev를 모두 통합한 단일 통합 repo&quot; 라는 사용자 재확인.
+
+<span class="gs">**How to apply:**</span>
+<span class="k">-</span><span class="w"> </span><span class="sb">`design/`</span> 안에 코드 컴파일러, 빌드 시스템 (CMake), 시뮬레이터 코드, 테스트 코드 추가 금지. 그건 dev/ 책임.
+<span class="k">-</span><span class="w"> </span><span class="sb">`yaml-to-c.py`</span> 는 <span class="ge">*schema 가 어떤 언어로든 구현 가능한지 증명하는 sanity probe*</span> 로만 잔존 (gate 이름 <span class="sb">`schema_implementable`</span>). 본격 codegen 아님.
+<span class="k">-</span><span class="w"> </span>사람 역할은 (1) target NF 이름 결정 (2) 3GPP docx/yaml 을 <span class="sb">`specs/&lt;spec&gt;/`</span> 에 cp (3) <span class="sb">`/nf-readiness &lt;nf&gt;`</span> 트리거와 결과 리뷰 — 이 3가지로 한정. 내부 spec discovery/contract build/check 단계는 wrapper 가 순서대로 수행하며, markdown·yaml 본문은 사람이 손대지 않음 (손대면 다음 contract build 에 덮어씌워질 수 있음).
+<span class="k">-</span><span class="w"> </span>결정 배치 — <span class="ge">*spec 이 글자로 박혀있으면 design, 사용자가 고르면 dev*</span> 가 한 줄 원칙. OS / 언어 / DBMS / 배포 (bare/docker/VM) / HTTP 라이브러리 / threading model = 모두 dev. OpenAPI path·schema, error matrix, service scenario sequence, cross-NF spec, configuration key·default = design.
+<span class="k">-</span><span class="w"> </span>본 repo 가 제공하는 <span class="ge">*내부 contract*</span> 는 <span class="sb">`handoff/&lt;nf&gt;/contract.yaml`</span> (markdown 의 7 카테고리를 1:1 미러한 self-contained yaml). dev/ 가 markdown 재파싱 없이 이 yaml 만 보면 됨.
+</code></pre></div>
+
+<h3 id="14-project_gate_namingmd">1.4 <code>project_gate_naming.md</code><a class="headerlink" href="#14-project_gate_namingmd" title="Link to this section">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code>---
+name: Acceptance gate 이름 정정 — implementation/production 단어 금지
+description: design ↔ dev 분리 후 gate 이름 재정의 (2026-05-10 grill 합의)
+<span class="gu">type: project</span>
+<span class="gu">---</span>
+본 repo 의 acceptance gate 이름은 <span class="sb">`draft / review_ready / handoff_ready / canonical`</span>. 이전의 <span class="sb">`implementation_ready`</span>·<span class="sb">`production`</span> 은 폐기.
+
+<span class="gs">**Why:**</span> &quot;implementation_ready&quot; 는 &quot;NF 가 구현 준비 됨&quot; 으로, &quot;production&quot; 은 &quot;NF 가 production 됐음&quot; 으로 잘못 읽힘. 그건 dev/ 의 책임. design/ 의 acceptance 는 <span class="ge">*문서가 어느 단계까지 성숙했는가*</span> 만 표현해야 함 — 단어에 &quot;implementation&quot;·&quot;production&quot; 이 들어가면 즉시 책임 경계 위반.
+
+<span class="gs">**How to apply:**</span>
+<span class="k">-</span><span class="w"> </span>신규 명명 의미 —
+<span class="w">  </span><span class="k">-</span><span class="w"> </span><span class="sb">`draft`</span>: 페이지 골격 (frontmatter_valid).
+<span class="w">  </span><span class="k">-</span><span class="w"> </span><span class="sb">`review_ready`</span>: 사람 검토 가능 (+ sections_complete, manifest_ready, wikilinks_resolve, no_korean_colon_end).
+<span class="w">  </span><span class="k">-</span><span class="w"> </span><span class="sb">`handoff_ready`</span>: <span class="ge">*dev 가 `contract.yaml` 만으로 NF build planning 을 시작 가능*</span> (+ data_model_chain_complete, api_operation_coverage, service_flow_coverage, handoff_yaml_valid [신규 — C4], handoff_yaml_self_contained [신규 — C4], schema_implementable [yaml_to_c_compiles 에서 rename]).
+<span class="w">  </span><span class="k">-</span><span class="w"> </span><span class="sb">`canonical`</span>: <span class="ge">*해당 spec 버전의 design 정본*</span> (+ implementation_guidance_quality — sub-agent judge 4/5 이상).
+<span class="k">-</span><span class="w"> </span>check id <span class="sb">`yaml_to_c_compiles`</span> → <span class="sb">`schema_implementable`</span> 로 rename. 도구 (<span class="sb">`yaml-to-c.py`</span>) 는 그대로, 의미만 <span class="ge">*언어 무관 구현 가능성 증명*</span> 으로 변경. C 는 <span class="ge">*증명의 수단*</span> 일 뿐.
+<span class="k">-</span><span class="w"> </span>본 repo 의 어떤 새 도구·문서·skill 에서도 &quot;implementation&quot;·&quot;production&quot; 이라는 단어로 <span class="ge">*design 산출 상태*</span> 를 가리키지 않는다. 두 단어는 dev/ 만의 단어.
+</code></pre></div>
+
+<h3 id="15-project_no_jvmmd">1.5 <code>project_no_jvm.md</code><a class="headerlink" href="#15-project_no_jvmmd" title="Link to this section">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code>---
+name: NF 의 runtime binary + 생성 코드 + linked libs 에서 JVM/Java 금지 (build-time tool 은 허용)
+description: 본 5gc-impl-kb 의 NF runtime artifact + 생성 C 코드 + linked third-party 라이브러리에는 JVM 의존 금지. build-time tool (codegen·lint·doc) 의 host 언어는 자유. 사용자 명시 (2026-05-27)
+<span class="gu">type: project</span>
+<span class="gu">---</span>
+본 repo (5gc-impl-kb) 의 <span class="ge">*NF runtime artifact*</span>, <span class="ge">*생성된 C 코드*</span>, <span class="ge">*C 코드가 link 하는 third-party 라이브러리*</span> 에 JVM/Java 의존 금지. <span class="gs">**build-time tool 의 host 언어는 자유**</span> (openapi-generator-cli 같은 JVM 도구도 build step 으로 OK 단 산출은 C).
+
+<span class="gs">**Why:**</span> 2026-05-27 <span class="sb">`/nf-implement nssf`</span> Phase 1 진입 직전 사용자 명시 → &quot;JVM 의존, java 는 존재해서는 안됨&quot; + 직후 보강 &quot;build 툴은 CMake, tool 언어 무관. C 언어 작성 툴은 언어 무관. 생성되는 코드는 C 이고, C 코드 내에서 호출해서 사용해야 하는 third-party 라이브러리&quot;. 추정 배경 — embedded / native deployment 의 footprint 최소화, JVM 의 cold-start / memory overhead 회피, license/distribution 단순화 (단 build 머신은 무관).
+
+<span class="gs">**How to apply (allowed):**</span>
+<span class="k">-</span><span class="w"> </span><span class="gs">**openapi-generator-cli (Java)**</span> — build-time codegen tool 로 OK. C generator backend 출력 사용. JRE 가 build 머신에 있어야 하지만 NF 산출에는 들어가지 않음.
+<span class="k">-</span><span class="w"> </span><span class="gs">**CMake**</span> — host C++ tool, 무관.
+<span class="k">-</span><span class="w"> </span><span class="gs">**Python toolchain**</span> (pyyaml, jinja2, pytest 등) — build/test/doc tool, 무관.
+<span class="k">-</span><span class="w"> </span><span class="gs">**clang-tidy / clang-analyzer**</span> — C++ tool, 무관 (lint/analysis).
+
+<span class="gs">**How to apply (forbidden):**</span>
+<span class="k">-</span><span class="w"> </span><span class="gs">**NF binary 가 JVM 을 require**</span> — 절대 금지 (e.g. Cassandra Java client native bridge 등).
+<span class="k">-</span><span class="w"> </span><span class="gs">**생성된 코드가 JNI/JVM 호출**</span> — 금지.
+<span class="k">-</span><span class="w"> </span><span class="gs">**link 되는 third-party 라이브러리가 JVM 의존**</span> — 금지 (예 일부 Cassandra client native 가 JVM 의존). libcurl / nghttp2 / libpq / libjwt / openssl / cJSON 같은 <span class="ge">*순수 C 라이브러리*</span> 만 허용.
+<span class="k">-</span><span class="w"> </span><span class="gs">**CI 에서 NF artifact 에 java 포함**</span> — 산출 docker image / binary 에 JRE 가 들어가면 안 됨 (단 build stage 에서 JRE 사용해서 generator 돌리는 것은 OK).
+
+<span class="gs">**Validator guidance for AI agents:**</span>
+<span class="k">-</span><span class="w"> </span>engineering-design.md 의 <span class="sb">`schema_codegen`</span> 가 openapi-generator(C) 같은 build-time JVM tool 을 가리키면 — <span class="ge">*정상*</span>. 거부하지 않음.
+<span class="k">-</span><span class="w"> </span>engineering-design.md 의 <span class="sb">`sbi_server_stack`</span>·<span class="sb">`sbi_client_stack`</span>·<span class="sb">`persistence`</span> 등 <span class="ge">*runtime-linked*</span> slot 이 JVM 의존 라이브러리 가리키면 — <span class="ge">*FAIL 로 보고*</span>.
+<span class="k">-</span><span class="w"> </span>WI-codegen-bootstrap 등 build step 이 JRE install 을 요구하면 — <span class="ge">*정상*</span>. CI workflow 에 <span class="sb">`apt-get install default-jre`</span> 추가 OK.
+
+<span class="gs">**Override 시 — 본 메모리 즉시 갱신.**</span> 사용자가 &quot;build 머신에서도 JVM 금지&quot; 로 강화 시 반대 방향 update.
+</code></pre></div>
+
+<h3 id="16-memorymd">1.6 <code>MEMORY.md</code> (인덱스)<a class="headerlink" href="#16-memorymd" title="Link to this section">&para;</a></h3>
+<div class="codehilite"><pre><span></span><code><span class="k">-</span><span class="w"> </span>[<span class="nt">작업 리스트 의무화</span>](<span class="na">feedback_task_list.md</span>) — non-trivial 작업은 TaskCreate 로 시각화 후 in_progress / completed 갱신
+<span class="k">-</span><span class="w"> </span>[<span class="nt">선택지 라벨 그리스 문자 금지</span>](<span class="na">feedback_option_labels.md</span>) — 옵션 라벨은 키보드 입력 가능한 (1)/(a) 등만, α·β·γ·① 등 금지
+<span class="k">-</span><span class="w"> </span>[<span class="nt">본 repo 는 design + dev 통합 monorepo</span>](<span class="na">project_framing.md</span>) — 정체성·범위·사람 역할·결정 배치 (design vs dev) 합의
+<span class="k">-</span><span class="w"> </span>[<span class="nt">Gate 이름 정정 — implementation/production 금지</span>](<span class="na">project_gate_naming.md</span>) — 신규 gate <span class="sb">`draft/review_ready/handoff_ready/canonical`</span>
+<span class="k">-</span><span class="w"> </span>[<span class="nt">JVM/Java runtime 금지 (build-time tool 은 허용)</span>](<span class="na">project_no_jvm.md</span>) — NF runtime binary + 생성 C 코드 + linked libs 에 JVM 금지. build-time codegen/lint tool 의 host 언어는 자유.
+</code></pre></div>
+
+<hr />
+<h2 id="2-pc-memory">2. 새 PC 에서 memory 디렉터리 재생성 — 한 줄 가이드<a class="headerlink" href="#2-pc-memory" title="Link to this section">&para;</a></h2>
+<div class="codehilite"><pre><span></span><code><span class="c1"># repo 가 /home/&lt;user&gt;/AI/5gc-impl-kb 에 clone 되었다고 가정</span>
+<span class="nv">DIR</span><span class="o">=</span>~/.claude/projects/-home-<span class="nv">$USER</span>-AI-5gc-impl-kb/memory
+mkdir<span class="w"> </span>-p<span class="w"> </span><span class="s2">&quot;</span><span class="nv">$DIR</span><span class="s2">&quot;</span>
+<span class="c1"># 본 파일 (docs/handover.md) 의 § 1 의 6개 markdown 블록 (5 memory + MEMORY.md 인덱스) 을 각각 같은 이름 파일로 cp</span>
+<span class="c1"># (Claude 가 첫 세션에서 자동 처리해도 됨 — &quot;memory 재구성&quot; 요청)</span>
+</code></pre></div>
+
+<hr />
+<h2 id="3-wrapping">3. 본 wrapping 이 보존하지 않는 것<a class="headerlink" href="#3-wrapping" title="Link to this section">&para;</a></h2>
+<ul>
+<li>본 plan 파일 (<code>~/.claude/plans/glittery-beaming-sutherland.md</code>) — 이후 정리된 lifecycle 문서와 retrospective 에 흡수됨.</li>
+<li>mattpocock skill 13개 — <a href="./setup.md"><code>docs/setup.md</code></a> §1 의 한 줄 명령으로 재설치.</li>
+<li>statusline·settings.json 등 사용자 환경 — 본 repo 책임 밖. 사용자 자체 dotfiles 로 관리.</li>
+</ul>
+<footer class="render-footer">
+Generated from <code>/home/jjinri/AI/5gc-impl-kb/docs/handover.md</code> by <code>design/scripts/render-doc.py</code>. Source MD 가 진실 출처 — 본 HTML 은 build artifact, 직접 편집 금지.
+</footer>
+</main>
+</div>
+</body>
+</html>
