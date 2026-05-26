@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>5gc-impl-kb — Lifecycle Artifact Guide</title>
+<style>
+  :root {
+    --fg: #1f2328;
+    --muted: #57606a;
+    --bg: #ffffff;
+    --bg-alt: #f6f8fa;
+    --border: #d0d7de;
+    --accent: #0969da;
+    --code-bg: #f6f8fa;
+    --code-fg: #1f2328;
+    --tracked: #1a7f37;
+    --untracked: #cf222e;
+    --table-row-even: #f6f8fa;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR", "Apple SD Gothic Neo", sans-serif;
+    font-size: 14px;
+    line-height: 1.6;
+    color: var(--fg);
+    background: var(--bg);
+  }
+  .wrap {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 2rem 1.5rem 4rem;
+  }
+  header h1 {
+    margin: 0 0 .25rem;
+    font-size: 1.75rem;
+    font-weight: 700;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: .5rem;
+  }
+  header p.lead {
+    color: var(--muted);
+    margin: .5rem 0 1.5rem;
+  }
+  nav.toc {
+    background: var(--bg-alt);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: .75rem 1.25rem;
+    margin-bottom: 2rem;
+  }
+  nav.toc h2 {
+    margin: 0 0 .5rem;
+    font-size: .85rem;
+    text-transform: uppercase;
+    letter-spacing: .05em;
+    color: var(--muted);
+  }
+  nav.toc ol { margin: 0; padding-left: 1.25rem; }
+  nav.toc a { color: var(--accent); text-decoration: none; }
+  nav.toc a:hover { text-decoration: underline; }
+  h2 {
+    margin: 2.25rem 0 .5rem;
+    font-size: 1.35rem;
+    font-weight: 700;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: .3rem;
+  }
+  h3 {
+    margin: 1.5rem 0 .35rem;
+    font-size: 1.1rem;
+    font-weight: 600;
+  }
+  h4 {
+    margin: 1rem 0 .35rem;
+    font-size: .95rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  p { margin: .5rem 0; }
+  ul, ol { margin: .5rem 0; padding-left: 1.5rem; }
+  li { margin: .15rem 0; }
+  code {
+    font-family: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono", monospace;
+    font-size: .85em;
+    background: var(--code-bg);
+    padding: .12rem .35rem;
+    border-radius: 3px;
+    color: var(--code-fg);
+  }
+  pre {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: .85rem 1rem;
+    overflow-x: auto;
+    margin: .65rem 0;
+  }
+  pre code {
+    background: none;
+    padding: 0;
+    font-size: .82em;
+  }
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: .75rem 0 1.25rem;
+    font-size: .85rem;
+  }
+  thead th {
+    background: var(--bg-alt);
+    text-align: left;
+    border-bottom: 2px solid var(--border);
+    padding: .5rem .65rem;
+    font-weight: 600;
+    color: var(--muted);
+    text-transform: uppercase;
+    font-size: .72rem;
+    letter-spacing: .04em;
+  }
+  tbody td {
+    padding: .45rem .65rem;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  tbody tr:nth-child(even) td { background: var(--table-row-even); }
+  tbody tr:hover td { background: #fff8c5; }
+  td code { font-size: .8em; }
+  .tracked { color: var(--tracked); font-weight: 600; }
+  .untracked { color: var(--untracked); }
+  .badge {
+    display: inline-block;
+    padding: .1rem .45rem;
+    border-radius: 999px;
+    font-size: .72rem;
+    font-weight: 600;
+    border: 1px solid var(--border);
+    background: var(--bg-alt);
+    color: var(--muted);
+  }
+  .badge.blocking { background: #ffebe9; border-color: #ff8182; color: #82071e; }
+  .stage-anchor { display: block; height: 0; overflow: hidden; margin-top: -1rem; padding-top: 1rem; }
+  hr { border: none; border-top: 1px solid var(--border); margin: 2rem 0; }
+  blockquote {
+    margin: .75rem 0;
+    padding: .5rem 1rem;
+    border-left: 3px solid var(--border);
+    background: var(--bg-alt);
+    color: var(--muted);
+  }
+  .meta-row { margin: .25rem 0; }
+  .meta-key { color: var(--muted); font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; }
+  a { color: var(--accent); }
+  @media (max-width: 720px) {
+    .wrap { padding: 1rem .75rem; }
+    table { font-size: .8rem; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>5gc-impl-kb — Lifecycle Artifact Guide</h1>
+  <p class="lead">NF lifecycle 의 각 단계에서 <em>무엇이 만들어지고 누가 읽는지</em> 한눈에 보는 catalog. <code>docs/lifecycle-artifacts.md</code> 의 HTML mirror.</p>
+</header>
+
+<nav class="toc" aria-label="목차">
+  <h2>목차</h2>
+  <ol>
+    <li><a href="#sec-1">1. Single-glance summary</a></li>
+    <li><a href="#sec-2">2. Per-stage detail</a>
+      <ol>
+        <li><a href="#stage-0">Stage 0 — Registry resolve</a></li>
+        <li><a href="#stage-1">Stage 1 — Spec discovery</a></li>
+        <li><a href="#stage-2">Stage 2 — Contract build</a></li>
+        <li><a href="#stage-3">Stage 3 — Contract check</a></li>
+        <li><a href="#stage-4">Stage 4 — Architecture design</a></li>
+        <li><a href="#stage-5">Stage 5 — Architecture check</a></li>
+        <li><a href="#stage-6">Stage 6 — Implementation plan</a></li>
+        <li><a href="#stage-7">Stage 7 — Implementation check</a></li>
+        <li><a href="#stage-8">Stage 8 — Engineering design</a></li>
+        <li><a href="#stage-9">Stage 9 — Engineering check</a></li>
+        <li><a href="#stage-10">Stage 10 — Readiness aggregate</a></li>
+        <li><a href="#stage-11">Stage 11 — Implementation</a></li>
+      </ol>
+    </li>
+    <li><a href="#sec-3">3. File index (alphabetical)</a></li>
+    <li><a href="#sec-4">4. Reader perspective</a></li>
+    <li><a href="#sec-5">5. Tracking policy quick reference</a></li>
+    <li><a href="#sec-6">6. Failure → next action</a></li>
+  </ol>
+</nav>
+
+<p>관련 문서 — git 추적 정책은 <a href="./artifact-management.md"><code>artifact-management.md</code></a>, KB 독해 가이드는 <a href="./kb/README.md"><code>kb/README.md</code></a>, lifecycle 어휘는 <a href="./adr/ADR-0001-nf-lifecycle-and-vocabulary.md"><code>adr/ADR-0001-nf-lifecycle-and-vocabulary.md</code></a> 가 진실 출처.</p>
+
+<h2 id="sec-1">1. Single-glance summary</h2>
+
+<table>
+<thead>
+<tr><th>#</th><th>Stage</th><th>Skill / Script</th><th>Output class</th><th>Gate produced</th><th>Primary readers</th></tr>
+</thead>
+<tbody>
+<tr><td>0</td><td>Registry resolve</td><td><code>/nf-readiness</code> Phase 0 (<code>nf-readiness-resolve.py</code>)</td><td>route resolution</td><td>confidence policy</td><td>wrapper</td></tr>
+<tr><td>1</td><td>Spec discovery</td><td><code>/nf-spec-discover</code></td><td>local cache (yaml)</td><td>manifest ready</td><td>wrapper, contract build</td></tr>
+<tr><td>2</td><td>Contract build</td><td><code>/nf-contract-build</code></td><td>local cache (md + yaml)</td><td>extraction basic</td><td>downstream skills</td></tr>
+<tr><td>3</td><td>Contract check</td><td><code>/nf-contract-check</code></td><td>validation state (yaml)</td><td><span class="badge blocking">handoff_ready</span> <span class="badge blocking">contract_implementable</span></td><td>wrapper</td></tr>
+<tr><td>4</td><td>Architecture design</td><td><code>/nf-arch-design</code></td><td>reviewed KB (md)</td><td>—</td><td>agent, human</td></tr>
+<tr><td>5</td><td>Architecture check</td><td><code>/nf-arch-status</code></td><td>validation state (yaml)</td><td><span class="badge blocking">arch_consistent</span></td><td>wrapper</td></tr>
+<tr><td>6</td><td>Implementation plan</td><td><code>/nf-impl-plan</code></td><td>reviewed KB (md + yaml)</td><td>—</td><td>agent, human</td></tr>
+<tr><td>7</td><td>Implementation check</td><td><code>/nf-impl-status</code></td><td>validation state (yaml)</td><td><span class="badge blocking">impl_ready_for_codegen</span></td><td>wrapper</td></tr>
+<tr><td>8</td><td>Engineering design</td><td><code>/nf-eng-design</code></td><td>reviewed KB (md, human ratify)</td><td>—</td><td>agent, human</td></tr>
+<tr><td>9</td><td>Engineering check</td><td><code>/nf-eng-status</code></td><td>validation state (yaml)</td><td><span class="badge blocking">eng_frozen</span></td><td>wrapper</td></tr>
+<tr><td>10</td><td>Readiness aggregate</td><td><code>nf-readiness-status.py</code></td><td>validation state (yaml)</td><td><span class="badge blocking">readiness_pack_ready</span></td><td>wrapper, human</td></tr>
+<tr><td>11</td><td>Implementation</td><td><code>/nf-implement &lt;nf&gt;</code></td><td>source/test/CI</td><td><code>tracer_bullet_passed</code> → <code>full_nf_done</code></td><td>runtime</td></tr>
+</tbody>
+</table>
+
+<p><strong>Output class</strong> — 본 repo 의 <a href="./artifact-management.md"><code>artifact-management.md</code></a> §1 분류. <em>Local cache</em> = 비추적 / 도구 재생성. <em>Reviewed KB</em> = 추적 / PR review. <em>Validation state</em> = 비추적 gate evidence.</p>
+
+<hr>
+
+<h2 id="sec-2">2. Per-stage detail</h2>
+
+<h3 id="stage-0">Stage 0 — Registry resolve</h3>
+<pre><code>/nf-readiness &lt;nf&gt;   # wrapper 의 Phase 0 자동 실행</code></pre>
+<p>NF 이름을 primary spec 으로 해석. registry 가 stale 이면 bootstrap 자동 실행.</p>
+<table>
+<thead><tr><th>Input</th><th>Output</th><th>추적</th></tr></thead>
+<tbody>
+<tr><td><code>design/nf-registry.yaml</code> (catalog)</td><td>resolved effective spec (stdout YAML)</td><td>—</td></tr>
+<tr><td><code>specs/&lt;spec&gt;/</code> 디렉터리 존재 여부</td><td>bootstrap 갱신 시 <code>design/nf-registry.yaml.generated.nfs.&lt;nf&gt;</code></td><td><span class="tracked">✓</span></td></tr>
+</tbody>
+</table>
+<ul>
+  <li><strong>Confidence policy</strong> — <code>generated.high</code> 또는 <code>manual_override.high|medium</code> 이면 proceed. 그 외 blocker.</li>
+  <li><strong>사람 편집 영역</strong> — <code>design/nf-registry.yaml.manual_overrides.nfs.&lt;nf&gt;</code> (bootstrap 가 덮어쓰지 않음).</li>
+</ul>
+
+<h3 id="stage-1">Stage 1 — Spec discovery</h3>
+<pre><code>/nf-spec-discover &lt;nf&gt; --primary &lt;spec&gt; [--reset]</code></pre>
+<p>NF 매니페스트 + handoff seed 자동 생성.</p>
+<table>
+<thead><tr><th>Output</th><th>형식</th><th>추적</th><th>목적</th></tr></thead>
+<tbody>
+<tr><td><code>design/&lt;nf&gt;/_manifest.yaml</code></td><td>yaml</td><td><span class="untracked">×</span></td><td>spec dependency 그래프 + ready_for_build status</td></tr>
+<tr><td><code>design/&lt;nf&gt;/_contract_seed.yaml</code></td><td>yaml</td><td><span class="untracked">×</span></td><td>categories / topics / tasks 정의 (contract build 의 단일 입력)</td></tr>
+</tbody>
+</table>
+<ul>
+  <li><strong>Trigger 조건</strong> — fresh NF, 새 ref spec cp 후 갱신, <code>--reset</code> 후 재시작.</li>
+  <li><strong>--reset 효과</strong> — <code>design/&lt;nf&gt;/contract/</code> + <code>_contract_status.yaml</code> + <code>handoff/&lt;nf&gt;/contract.yaml</code> 만 <code>_archive/&lt;ts&gt;/</code> 로 mv. manifest/seed/architecture/dev 는 보존.</li>
+</ul>
+
+<h3 id="stage-2">Stage 2 — Contract build</h3>
+<pre><code>/nf-contract-build &lt;nf&gt; [--&lt;category&gt;] [--topic &lt;id&gt;]</code></pre>
+<p>OpenAPI yaml + docx 를 토픽 단위 markdown + machine-readable yaml 로 추출. 내부적으로 <code>materialize-contract.py</code> → <code>build-handoff.py</code> → <code>validate-extraction.py --level basic</code> 호출.</p>
+<table>
+<thead><tr><th>Output</th><th>형식</th><th>추적</th><th>목적</th><th>Reader</th></tr></thead>
+<tbody>
+<tr><td><code>design/&lt;nf&gt;/contract/interface.md</code></td><td>md + AUTO/USER markers</td><td><span class="untracked">×</span></td><td>auth / transport block + 사람 implementation notes</td><td>agent, human</td></tr>
+<tr><td><code>design/&lt;nf&gt;/contract/error-handling.md</code></td><td>md + markers</td><td><span class="untracked">×</span></td><td>operations × causes 매트릭스</td><td>agent, human</td></tr>
+<tr><td><code>design/&lt;nf&gt;/contract/api/&lt;Op&gt;.md</code></td><td>md per operation</td><td><span class="untracked">×</span></td><td>method / path / params / request·response schema / security / source-line trace</td><td>agent, human</td></tr>
+<tr><td><code>design/&lt;nf&gt;/contract/data-model/&lt;Schema&gt;.md</code></td><td>md per schema</td><td><span class="untracked">×</span></td><td>field table / $ref chain trace / C type hint</td><td>agent, human</td></tr>
+<tr><td><code>design/&lt;nf&gt;/contract/data-model/&lt;Schema&gt;.json</code></td><td>json per schema</td><td><span class="untracked">×</span></td><td>resolved schema + complexity flags</td><td>codegen agent</td></tr>
+<tr><td><code>handoff/&lt;nf&gt;/contract.yaml</code></td><td>yaml (handoff-v2)</td><td><span class="untracked">×</span></td><td>self-contained NF contract — 다음 단계의 단일 진실 출처</td><td>downstream skills, codegen</td></tr>
+</tbody>
+</table>
+<ul>
+  <li><strong>AUTO marker</strong> — 도구가 매 빌드 <em>덮어쓰기</em>. 사람 편집 무의미.</li>
+  <li><strong>USER marker</strong> — 도구가 <em>위치만 보존</em>, 내용 보존. 사람 prose 영역.</li>
+  <li><strong>Implementability mandate</strong> — codegen agent 가 원본 spec 을 <em>의미 재발견</em> 용도로 다시 읽지 않아도 충분해야 한다.</li>
+</ul>
+
+<h3 id="stage-3">Stage 3 — Contract check</h3>
+<pre><code>/nf-contract-check &lt;nf&gt;   # = nf-status.py</code></pre>
+<p>Contract md + handoff yaml 의 정합성 + 구현 가능성 검사.</p>
+<table>
+<thead><tr><th>Output</th><th>형식</th><th>추적</th><th>목적</th></tr></thead>
+<tbody>
+<tr><td><code>design/&lt;nf&gt;/_contract_status.yaml</code></td><td>yaml</td><td><span class="untracked">×</span></td><td>gate 결과 + 각 check 의 <code>current</code> / <code>to_pass</code></td></tr>
+</tbody>
+</table>
+<h4>Gates</h4>
+<ul>
+  <li><code>draft</code> — frontmatter valid (minimal viability).</li>
+  <li><code>review_ready</code> — <code>draft</code> + sections complete + manifest ready.</li>
+  <li><span class="badge blocking">handoff_ready</span> — <code>review_ready</code> + data-model chain complete + api coverage + service flow coverage + handoff yaml valid + self-contained.</li>
+  <li><span class="badge blocking">contract_implementable</span> — <code>handoff_ready</code> + schema implementable + api operation 6 키 mandate + problem details matrix complete + no spec re-read.</li>
+  <li><code>canonical</code> — Tier 3 + Tier 4 (sub-agent judge) 통과.</li>
+</ul>
+
+<h3 id="stage-4">Stage 4 — Architecture design</h3>
+<pre><code>/nf-arch-design &lt;nf&gt;</code></pre>
+<p>검증된 contract 를 9-area architecture + module decomposition md 로 변환.</p>
+<table>
+<thead><tr><th>Output</th><th>형식</th><th>추적</th><th>목적</th></tr></thead>
+<tbody>
+<tr><td><code>design/&lt;nf&gt;/architecture/overview.md</code></td><td>md (canonical sections)</td><td><span class="tracked">✓</span></td><td>NF 전체 모델</td></tr>
+<tr><td><code>design/&lt;nf&gt;/architecture/module-boundaries.md</code></td><td>md</td><td><span class="tracked">✓</span></td><td>모듈 경계 정의</td></tr>
+<tr><td><code>design/&lt;nf&gt;/architecture/request-flow.md</code></td><td>md</td><td><span class="tracked">✓</span></td><td>inbound / outbound 호출 흐름</td></tr>
+<tr><td><code>design/&lt;nf&gt;/architecture/runtime-model.md</code></td><td>md</td><td><span class="tracked">✓</span></td><td>thread / task model</td></tr>
+<tr><td><code>design/&lt;nf&gt;/architecture/state-persistence.md</code></td><td>md</td><td><span class="tracked">✓</span></td><td>영속 / non-영속 상태</td></tr>
+<tr><td><code>design/&lt;nf&gt;/architecture/configuration-strategy.md</code></td><td>md</td><td><span class="tracked">✓</span></td><td>config 분류 + 운영자 입력</td></tr>
+<tr><td><code>design/&lt;nf&gt;/architecture/error-propagation.md</code></td><td>md</td><td><span class="tracked">✓</span></td><td>error class · 전파 경로</td></tr>
+<tr><td><code>design/&lt;nf&gt;/architecture/observability.md</code></td><td>md</td><td><span class="tracked">✓</span></td><td>metric / log / trace</td></tr>
+<tr><td><code>design/&lt;nf&gt;/architecture/test-strategy.md</code></td><td>md</td><td><span class="tracked">✓</span></td><td>test 계층 전략</td></tr>
+<tr><td><code>design/&lt;nf&gt;/architecture/decisions/ADR-0001-architecture-baseline.md</code></td><td>md per-NF ADR</td><td><span class="tracked">✓</span></td><td>NF-specific decisions + <code>## Open choices</code> (eng_frozen 의 per-NF 연기 레지스터)</td></tr>
+<tr><td><code>design/&lt;nf&gt;/module-decomposition/&lt;Module&gt;.md</code></td><td>md per module</td><td><span class="tracked">✓</span></td><td>모듈별 responsibility / interface</td></tr>
+</tbody>
+</table>
+<ul>
+  <li><strong>Canonical section 계약</strong> — 모든 architecture md 는 <code>## Purpose</code> · <code>## Inputs (contract)</code> · <code>## Boundaries</code> · <code>## Decisions</code> · <code>## Open Questions</code> · <code>## References</code> 6 섹션 정확히 보유.</li>
+</ul>
+
+<h3 id="stage-5">Stage 5 — Architecture check</h3>
+<pre><code>/nf-arch-status &lt;nf&gt;</code></pre>
+<table>
+<thead><tr><th>Output</th><th>형식</th><th>추적</th><th>목적</th></tr></thead>
+<tbody>
+<tr><td><code>design/&lt;nf&gt;/_arch_status.yaml</code></td><td>yaml</td><td><span class="untracked">×</span></td><td>gate <code>arch_consistent</code> 결과</td></tr>
+</tbody>
+</table>
+<p><span class="badge blocking">arch_consistent</span> — files present + canonical sections exact + module decomposition present + frontmatter valid + module section exact.</p>
+
+<h3 id="stage-6">Stage 6 — Implementation plan</h3>
+<pre><code>/nf-impl-plan &lt;nf&gt;</code></pre>
+<p>Architecture + handoff yaml → 9-file readiness pack (<code>dev/&lt;nf&gt;/</code>).</p>
+<table>
+<thead><tr><th>File</th><th>형식</th><th>추적</th><th>분류</th><th>주 reader</th></tr></thead>
+<tbody>
+<tr><td><code>dev/&lt;nf&gt;/implementation-plan.md</code></td><td>md</td><td><span class="tracked">✓</span></td><td>overview</td><td>agent</td></tr>
+<tr><td><code>dev/&lt;nf&gt;/tasks.yaml</code></td><td>yaml</td><td><span class="tracked">✓</span></td><td>task graph (<code>impl-plan-v1</code>)</td><td>agent</td></tr>
+<tr><td><code>dev/&lt;nf&gt;/test-matrix.md</code></td><td>md</td><td><span class="tracked">✓</span></td><td>test inventory</td><td>tester, reviewer</td></tr>
+<tr><td><code>dev/&lt;nf&gt;/traceability.md</code></td><td>md</td><td><span class="tracked">✓</span></td><td>spec → contract → module → test 추적</td><td>reviewer</td></tr>
+<tr><td><code>dev/&lt;nf&gt;/api-implementation-matrix.md</code></td><td>md</td><td><span class="tracked">✓</span></td><td><strong>Agent Execution Pack</strong> — operation 단위 mapping</td><td>agent</td></tr>
+<tr><td><code>dev/&lt;nf&gt;/data-model-implementation-map.md</code></td><td>md</td><td><span class="tracked">✓</span></td><td><strong>Agent Execution Pack</strong> — generated/wrapper/handwritten 분류</td><td>agent</td></tr>
+<tr><td><code>dev/&lt;nf&gt;/codegen-work-items.yaml</code></td><td>yaml</td><td><span class="tracked">✓</span></td><td><strong>Agent Execution Pack</strong> — work queue, files, tests, verification</td><td>orchestrator</td></tr>
+<tr><td><code>dev/&lt;nf&gt;/team-execution-plan.md</code></td><td>md</td><td><span class="tracked">✓</span></td><td><strong>Agent Execution Pack</strong> — lane 계약</td><td>orchestrator</td></tr>
+<tr><td><code>dev/&lt;nf&gt;/verification-plan.md</code></td><td>md</td><td><span class="tracked">✓</span></td><td><strong>Agent Execution Pack</strong> — unit/integration/contract/security/e2e/observability gate</td><td>tester</td></tr>
+<tr><td><code>dev/&lt;nf&gt;/implementation-readiness-review.md</code></td><td>md</td><td><span class="tracked">✓</span></td><td><strong>Human Review Pack</strong> — GO/NO-GO summary</td><td>human reviewer</td></tr>
+<tr><td><code>dev/&lt;nf&gt;/design-adequacy-checklist.md</code></td><td>md</td><td><span class="tracked">✓</span></td><td><strong>Human Review Pack</strong> — reviewer checklist</td><td>human reviewer</td></tr>
+<tr><td><code>dev/&lt;nf&gt;/spec-to-design-coverage.md</code></td><td>md</td><td><span class="tracked">✓</span></td><td><strong>Human Review Pack</strong> — spec re-read 금지 audit</td><td>human reviewer</td></tr>
+<tr><td><code>dev/&lt;nf&gt;/open-gaps-and-assumptions.md</code></td><td>md</td><td><span class="tracked">✓</span></td><td><strong>Human Review Pack</strong> — blocker / deferred / operator / library / test / assumption 분류</td><td>all lanes</td></tr>
+</tbody>
+</table>
+
+<h3 id="stage-7">Stage 7 — Implementation check</h3>
+<pre><code>/nf-impl-status &lt;nf&gt;</code></pre>
+<table>
+<thead><tr><th>Output</th><th>형식</th><th>추적</th><th>목적</th></tr></thead>
+<tbody>
+<tr><td><code>dev/&lt;nf&gt;/_impl_status.yaml</code></td><td>yaml</td><td><span class="untracked">×</span></td><td>gate 결과</td></tr>
+</tbody>
+</table>
+<h4>Gates</h4>
+<ul>
+  <li><span class="badge blocking">impl_consistent</span> — files present + sections exact + tasks schema valid + frontmatter valid + traceability xref.</li>
+  <li><span class="badge blocking">impl_ready_for_codegen</span> — <code>impl_consistent</code> + api matrix coverage + data-model coverage + work items have files/tests/verification + verification-plan AUTO 6 sub-section non-empty + security-gate-matrix row 수 정합 + no spec re-read (14 checks).</li>
+</ul>
+
+<h3 id="stage-8">Stage 8 — Engineering design</h3>
+<pre><code>/nf-eng-design &lt;nf&gt;   # AI 가 초안, 사람 ratify 필수</code></pre>
+<table>
+<thead><tr><th>Output</th><th>형식</th><th>추적</th><th>목적</th></tr></thead>
+<tbody>
+<tr><td><code>engineering/&lt;nf&gt;/engineering-design.md</code></td><td>md (사람 소유, frozen 결정 ratify)</td><td><span class="tracked">✓</span></td><td>library / DB / runtime / tool / operator-policy 결정 — <code>design/schemas/engineering-core-slots.yaml</code> v2 의 13 core slot 충족</td></tr>
+</tbody>
+</table>
+<ul>
+  <li><strong>자동 생성과 ratify 분리</strong> — AI 가 architecture + contract 근거로 <em>초안</em>, 사람이 <code>ratified_by</code> + <code>date</code> 필드 채워 freeze.</li>
+  <li><strong>Inventory</strong> = <code>engineering-core-slots.yaml</code> core slot ∪ per-NF 연기 레지스터 (<code>design/&lt;nf&gt;/architecture/decisions/ADR-0001-architecture-baseline.md</code> <code>## Open choices</code>).</li>
+</ul>
+
+<h3 id="stage-9">Stage 9 — Engineering check</h3>
+<pre><code>/nf-eng-status &lt;nf&gt;</code></pre>
+<table>
+<thead><tr><th>Output</th><th>형식</th><th>추적</th><th>목적</th></tr></thead>
+<tbody>
+<tr><td><code>engineering/&lt;nf&gt;/_engineering_status.yaml</code></td><td>yaml</td><td><span class="untracked">×</span></td><td><code>gates.eng_frozen</code> + 비차단 <code>advisory.impl_plan_alignment</code></td></tr>
+</tbody>
+</table>
+<p><span class="badge blocking">eng_frozen</span> — typed schema 검사 (slot 별 dependency_shape / required_shape / common_row_fields). LLM judge 없음, deterministic.</p>
+
+<h3 id="stage-10">Stage 10 — Readiness aggregate</h3>
+<pre><code>nf-readiness-status.py &lt;nf&gt;</code></pre>
+<table>
+<thead><tr><th>Output</th><th>형식</th><th>추적</th><th>목적</th></tr></thead>
+<tbody>
+<tr><td><code>dev/&lt;nf&gt;/_readiness_status.yaml</code></td><td>yaml</td><td><span class="untracked">×</span></td><td>aggregate gate 결과</td></tr>
+</tbody>
+</table>
+<p><span class="badge blocking">readiness_pack_ready</span> —</p>
+<pre><code>handoff_ready ∧ contract_implementable ∧ arch_consistent
+              ∧ impl_ready_for_codegen ∧ eng_frozen</code></pre>
+<p><code>/nf-implement &lt;nf&gt;</code> 의 <em>유일한 GO 신호</em>.</p>
+
+<h3 id="stage-11">Stage 11 — Implementation (post-readiness)</h3>
+<pre><code>/nf-implement &lt;nf&gt;</code></pre>
+<p><code>readiness_pack_ready PASS</code> 확인 후 Phase 1 tracer-bullet → Phase 5 hardening.</p>
+<table>
+<thead><tr><th>Output</th><th>형식</th><th>추적</th><th>목적</th></tr></thead>
+<tbody>
+<tr><td><code>src/&lt;nf&gt;/*</code></td><td>source code</td><td><span class="tracked">✓</span></td><td>NF 구현 본체</td></tr>
+<tr><td><code>src/&lt;nf&gt;/generated/*</code></td><td>generated stubs</td><td><span class="tracked">✓</span></td><td>OpenAPI generator 산출</td></tr>
+<tr><td><code>tests/&lt;nf&gt;/*</code></td><td>test code</td><td><span class="tracked">✓</span></td><td>unit / integration / contract / e2e / observability</td></tr>
+<tr><td><code>.github/workflows/*</code></td><td>CI updates</td><td><span class="tracked">✓</span></td><td>NF-specific build/test</td></tr>
+<tr><td><code>dev/&lt;nf&gt;/_implementation_run_state.yaml</code></td><td>yaml</td><td><span class="untracked">×</span></td><td>resume/checkpoint state</td></tr>
+</tbody>
+</table>
+
+<hr>
+
+<h2 id="sec-3">3. File index — alphabetical</h2>
+<table>
+<thead><tr><th>File path</th><th>Stage</th><th>Type</th><th>Tracked</th><th>Primary reader</th></tr></thead>
+<tbody>
+<tr><td><code>design/&lt;nf&gt;/_arch_status.yaml</code></td><td>5</td><td>validation</td><td><span class="untracked">×</span></td><td>wrapper</td></tr>
+<tr><td><code>design/&lt;nf&gt;/_contract_seed.yaml</code></td><td>1</td><td>local cache</td><td><span class="untracked">×</span></td><td>contract build</td></tr>
+<tr><td><code>design/&lt;nf&gt;/_contract_status.yaml</code></td><td>3</td><td>validation</td><td><span class="untracked">×</span></td><td>wrapper</td></tr>
+<tr><td><code>design/&lt;nf&gt;/_manifest.yaml</code></td><td>1</td><td>local cache</td><td><span class="untracked">×</span></td><td>wrapper, contract build</td></tr>
+<tr><td><code>design/&lt;nf&gt;/architecture/configuration-strategy.md</code></td><td>4</td><td>reviewed KB</td><td><span class="tracked">✓</span></td><td>agent, human</td></tr>
+<tr><td><code>design/&lt;nf&gt;/architecture/decisions/ADR-0001-architecture-baseline.md</code></td><td>4</td><td>reviewed KB</td><td><span class="tracked">✓</span></td><td>agent, human, eng-design</td></tr>
+<tr><td><code>design/&lt;nf&gt;/architecture/error-propagation.md</code></td><td>4</td><td>reviewed KB</td><td><span class="tracked">✓</span></td><td>agent, human</td></tr>
+<tr><td><code>design/&lt;nf&gt;/architecture/module-boundaries.md</code></td><td>4</td><td>reviewed KB</td><td><span class="tracked">✓</span></td><td>agent, human</td></tr>
+<tr><td><code>design/&lt;nf&gt;/architecture/observability.md</code></td><td>4</td><td>reviewed KB</td><td><span class="tracked">✓</span></td><td>agent, human</td></tr>
+<tr><td><code>design/&lt;nf&gt;/architecture/overview.md</code></td><td>4</td><td>reviewed KB</td><td><span class="tracked">✓</span></td><td>agent, human</td></tr>
+<tr><td><code>design/&lt;nf&gt;/architecture/request-flow.md</code></td><td>4</td><td>reviewed KB</td><td><span class="tracked">✓</span></td><td>agent, human</td></tr>
+<tr><td><code>design/&lt;nf&gt;/architecture/runtime-model.md</code></td><td>4</td><td>reviewed KB</td><td><span class="tracked">✓</span></td><td>agent, human</td></tr>
+<tr><td><code>design/&lt;nf&gt;/architecture/state-persistence.md</code></td><td>4</td><td>reviewed KB</td><td><span class="tracked">✓</span></td><td>agent, human</td></tr>
+<tr><td><code>design/&lt;nf&gt;/architecture/test-strategy.md</code></td><td>4</td><td>reviewed KB</td><td><span class="tracked">✓</span></td><td>agent, human</td></tr>
+<tr><td><code>design/&lt;nf&gt;/contract/api/&lt;Op&gt;.md</code></td><td>2</td><td>local cache</td><td><span class="untracked">×</span></td><td>agent, human</td></tr>
+<tr><td><code>design/&lt;nf&gt;/contract/data-model/&lt;Schema&gt;.json</code></td><td>2</td><td>local cache</td><td><span class="untracked">×</span></td><td>codegen</td></tr>
+<tr><td><code>design/&lt;nf&gt;/contract/data-model/&lt;Schema&gt;.md</code></td><td>2</td><td>local cache</td><td><span class="untracked">×</span></td><td>agent, human</td></tr>
+<tr><td><code>design/&lt;nf&gt;/contract/error-handling.md</code></td><td>2</td><td>local cache</td><td><span class="untracked">×</span></td><td>agent, human</td></tr>
+<tr><td><code>design/&lt;nf&gt;/contract/interface.md</code></td><td>2</td><td>local cache</td><td><span class="untracked">×</span></td><td>agent, human</td></tr>
+<tr><td><code>design/&lt;nf&gt;/module-decomposition/&lt;Module&gt;.md</code></td><td>4</td><td>reviewed KB</td><td><span class="tracked">✓</span></td><td>agent</td></tr>
+<tr><td><code>design/nf-registry.yaml</code></td><td>0</td><td>registry</td><td><span class="tracked">✓</span></td><td>wrapper, bootstrap</td></tr>
+<tr><td><code>dev/&lt;nf&gt;/_impl_status.yaml</code></td><td>7</td><td>validation</td><td><span class="untracked">×</span></td><td>wrapper</td></tr>
+<tr><td><code>dev/&lt;nf&gt;/_implementation_run_state.yaml</code></td><td>11</td><td>runtime state</td><td><span class="untracked">×</span></td><td><code>/nf-implement</code></td></tr>
+<tr><td><code>dev/&lt;nf&gt;/_readiness_status.yaml</code></td><td>10</td><td>validation</td><td><span class="untracked">×</span></td><td>wrapper, human</td></tr>
+<tr><td><code>dev/&lt;nf&gt;/api-implementation-matrix.md</code></td><td>6</td><td>reviewed KB</td><td><span class="tracked">✓</span></td><td>agent (Agent Execution Pack)</td></tr>
+<tr><td><code>dev/&lt;nf&gt;/codegen-work-items.yaml</code></td><td>6</td><td>reviewed KB</td><td><span class="tracked">✓</span></td><td>orchestrator (Agent Execution Pack)</td></tr>
+<tr><td><code>dev/&lt;nf&gt;/data-model-implementation-map.md</code></td><td>6</td><td>reviewed KB</td><td><span class="tracked">✓</span></td><td>agent (Agent Execution Pack)</td></tr>
+<tr><td><code>dev/&lt;nf&gt;/design-adequacy-checklist.md</code></td><td>6</td><td>reviewed KB</td><td><span class="tracked">✓</span></td><td>human reviewer (Human Review Pack)</td></tr>
+<tr><td><code>dev/&lt;nf&gt;/implementation-plan.md</code></td><td>6</td><td>reviewed KB</td><td><span class="tracked">✓</span></td><td>agent</td></tr>
+<tr><td><code>dev/&lt;nf&gt;/implementation-readiness-review.md</code></td><td>6</td><td>reviewed KB</td><td><span class="tracked">✓</span></td><td>human reviewer (Human Review Pack)</td></tr>
+<tr><td><code>dev/&lt;nf&gt;/open-gaps-and-assumptions.md</code></td><td>6</td><td>reviewed KB</td><td><span class="tracked">✓</span></td><td>all lanes (Human Review Pack)</td></tr>
+<tr><td><code>dev/&lt;nf&gt;/spec-to-design-coverage.md</code></td><td>6</td><td>reviewed KB</td><td><span class="tracked">✓</span></td><td>reviewer, verifier (Human Review Pack)</td></tr>
+<tr><td><code>dev/&lt;nf&gt;/tasks.yaml</code></td><td>6</td><td>reviewed KB</td><td><span class="tracked">✓</span></td><td>agent</td></tr>
+<tr><td><code>dev/&lt;nf&gt;/team-execution-plan.md</code></td><td>6</td><td>reviewed KB</td><td><span class="tracked">✓</span></td><td>orchestrator (Agent Execution Pack)</td></tr>
+<tr><td><code>dev/&lt;nf&gt;/test-matrix.md</code></td><td>6</td><td>reviewed KB</td><td><span class="tracked">✓</span></td><td>tester, reviewer</td></tr>
+<tr><td><code>dev/&lt;nf&gt;/traceability.md</code></td><td>6</td><td>reviewed KB</td><td><span class="tracked">✓</span></td><td>reviewer</td></tr>
+<tr><td><code>dev/&lt;nf&gt;/verification-plan.md</code></td><td>6</td><td>reviewed KB</td><td><span class="tracked">✓</span></td><td>tester, verifier (Agent Execution Pack)</td></tr>
+<tr><td><code>engineering/&lt;nf&gt;/_engineering_status.yaml</code></td><td>9</td><td>validation</td><td><span class="untracked">×</span></td><td>wrapper</td></tr>
+<tr><td><code>engineering/&lt;nf&gt;/engineering-design.md</code></td><td>8</td><td>reviewed KB</td><td><span class="tracked">✓</span></td><td>agent, human (사람 ratify 필수)</td></tr>
+<tr><td><code>handoff/&lt;nf&gt;/contract.yaml</code></td><td>2</td><td>local cache</td><td><span class="untracked">×</span></td><td>downstream skills, codegen</td></tr>
+<tr><td><code>specs/&lt;spec&gt;/*.docx</code></td><td>input</td><td>source input</td><td><span class="tracked">✓</span></td><td>spec discovery, contract build</td></tr>
+<tr><td><code>specs/&lt;spec&gt;/*.yaml</code></td><td>input</td><td>source input</td><td><span class="tracked">✓</span></td><td>spec discovery, contract build</td></tr>
+</tbody>
+</table>
+
+<hr>
+
+<h2 id="sec-4">4. Reader perspective</h2>
+
+<h3>4.1 AI implementation agent (<code>/nf-implement</code> Phase 1~5)</h3>
+<pre><code>1. dev/&lt;nf&gt;/codegen-work-items.yaml        # phase / wave / work item queue
+2. dev/&lt;nf&gt;/api-implementation-matrix.md   # operation → handler / model / security / test
+3. dev/&lt;nf&gt;/data-model-implementation-map.md  # generated / wrapper / handwritten 분류
+4. engineering/&lt;nf&gt;/engineering-design.md  # library / DB / runtime / operator boundary
+5. design/&lt;nf&gt;/architecture/**             # flow / state / error / observability
+6. design/&lt;nf&gt;/module-decomposition/**     # 모듈별 responsibility
+7. dev/&lt;nf&gt;/verification-plan.md           # gate 별 evidence 요구사항
+8. handoff/&lt;nf&gt;/contract.yaml              # canonical API/data-model schema (drift trace 용)
+9. dev/&lt;nf&gt;/open-gaps-and-assumptions.md   # blocker 0 확인, non-blocker 조건</code></pre>
+<h4>금지</h4>
+<ul>
+  <li>원본 OpenAPI/spec 을 <em>의미 재발견</em> 용도로 다시 읽기.</li>
+  <li>readiness pack 의 <code>category: blocker</code> gap 무시.</li>
+  <li>TLS / X.509 / JWT primitive 직접 구현 (ADR-0004 mandate M6).</li>
+  <li><code>_*_status.yaml</code> 을 source of truth 로 편집.</li>
+</ul>
+<h4>Stop 조건</h4>
+<ul>
+  <li><code>category: blocker</code> 발견.</li>
+  <li>"spec reread needed = yes" 표시.</li>
+  <li>work item 의 input 누락.</li>
+</ul>
+
+<h3>4.2 Human reviewer (PR review / pre-implementation audit)</h3>
+<pre><code>1. dev/&lt;nf&gt;/implementation-readiness-review.md  # GO / NO-GO + risk
+2. dev/&lt;nf&gt;/design-adequacy-checklist.md        # 설계 적정성 체크리스트
+3. dev/&lt;nf&gt;/spec-to-design-coverage.md          # spec 재독 금지 audit
+4. dev/&lt;nf&gt;/open-gaps-and-assumptions.md        # blocker / non-blocker 분류
+5. engineering/&lt;nf&gt;/engineering-design.md       # library/DB/security 결정
+6. design/&lt;nf&gt;/architecture/decisions/ADR-0001-architecture-baseline.md
+7. design/&lt;nf&gt;/architecture/**                  # 9-area 의사결정 검토
+8. docs/adr/ADR-0004-project-security-baseline.md  # security 의무 검증</code></pre>
+<p><strong>Gate evidence 확인</strong> — <code>_*_status.yaml</code> 은 <em>참고용</em>. 본 review 의 GO/NO-GO 판단은 사람 책임.</p>
+
+<h3>4.3 Lifecycle orchestrator (<code>/nf-readiness</code> wrapper)</h3>
+<p>읽기만 함, <em>모든 KB 산출을 수정 안 함</em>.</p>
+<pre><code>1. design/nf-registry.yaml                 # Phase 0 — NF route
+2. design/&lt;nf&gt;/_manifest.yaml              # Step 1 후 ready_for_build 확인
+3. design/&lt;nf&gt;/_contract_status.yaml       # Step 3 gate
+4. design/&lt;nf&gt;/_arch_status.yaml           # Step 5 gate
+5. dev/&lt;nf&gt;/_impl_status.yaml              # Step 7 gate
+6. engineering/&lt;nf&gt;/_engineering_status.yaml  # Step 9 gate
+7. dev/&lt;nf&gt;/_readiness_status.yaml         # Step 10 aggregate gate</code></pre>
+<p>각 step 의 <code>blocked_by[]</code> 첫 check 의 <code>to_pass</code> 가 사용자에게 보고되는 <em>다음 행동</em>.</p>
+
+<hr>
+
+<h2 id="sec-5">5. Tracking policy quick reference</h2>
+<p>본 가이드의 추적/비추적 분류 요약. 상세 정책은 <a href="./artifact-management.md"><code>artifact-management.md</code></a> 참조.</p>
+<table>
+<thead><tr><th>추적 (git tracked)</th><th>비추적 (local regen)</th></tr></thead>
+<tbody>
+<tr><td><code>specs/&lt;spec&gt;/*</code> — 원본 입력</td><td><code>design/&lt;nf&gt;/_manifest.yaml</code></td></tr>
+<tr><td><code>design/nf-registry.yaml</code></td><td><code>design/&lt;nf&gt;/_contract_seed.yaml</code></td></tr>
+<tr><td><code>design/&lt;nf&gt;/architecture/**</code></td><td><code>design/&lt;nf&gt;/_contract_status.yaml</code></td></tr>
+<tr><td><code>design/&lt;nf&gt;/module-decomposition/**</code></td><td><code>design/&lt;nf&gt;/_arch_status.yaml</code></td></tr>
+<tr><td><code>engineering/&lt;nf&gt;/engineering-design.md</code></td><td><code>design/&lt;nf&gt;/contract/**</code></td></tr>
+<tr><td><code>dev/&lt;nf&gt;/&lt;readiness pack md/yaml&gt;</code></td><td><code>handoff/&lt;nf&gt;/contract.yaml</code></td></tr>
+<tr><td>—</td><td><code>dev/&lt;nf&gt;/_impl_status.yaml</code></td></tr>
+<tr><td>—</td><td><code>dev/&lt;nf&gt;/_readiness_status.yaml</code></td></tr>
+<tr><td>—</td><td><code>dev/&lt;nf&gt;/_implementation_run_state.yaml</code></td></tr>
+<tr><td>—</td><td><code>engineering/&lt;nf&gt;/_engineering_status.yaml</code></td></tr>
+</tbody>
+</table>
+
+<hr>
+
+<h2 id="sec-6">6. Failure → next action</h2>
+<p>각 stage 의 status yaml 은 <em>FAIL 시 정확히 다음 행동</em> 을 <code>to_pass</code> 필드로 제시한다. 일반 패턴.</p>
+<table>
+<thead><tr><th>Stage / gate FAIL</th><th>일반 to_pass</th></tr></thead>
+<tbody>
+<tr><td>Stage 1 manifest_ready=false</td><td><code>specs/&lt;spec&gt;/</code> 에 누락 ref spec cp 후 <code>/nf-spec-discover</code> 재호출</td></tr>
+<tr><td>Stage 3 <code>handoff_ready</code> blocked</td><td><code>(참조 규격 미등록)</code> leaf 해소 (manual_overrides 추가 또는 spec cp), <code>/nf-contract-build</code> 재실행</td></tr>
+<tr><td>Stage 5 <code>arch_consistent</code> blocked</td><td>canonical section 누락·module decomposition missing 보강 후 <code>/nf-arch-status</code> 재실행</td></tr>
+<tr><td>Stage 7 <code>impl_ready_for_codegen</code> blocked</td><td>readiness pack 의 누락 work item / verification-plan AUTO non-empty 보강</td></tr>
+<tr><td>Stage 9 <code>eng_frozen</code> blocked</td><td>engineering-design.md 의 미결정 slot ratify (사람 <code>ratified_by</code> / <code>date</code> 추가)</td></tr>
+<tr><td>Stage 10 <code>readiness_pack_ready</code> blocked</td><td>위 sub-gate 중 FAIL 항목의 to_pass 따라가기</td></tr>
+</tbody>
+</table>
+
+</div>
+</body>
+</html>
