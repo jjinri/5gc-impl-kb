@@ -60,7 +60,7 @@ type: project
 **How to apply:**
 - `design/` 안에 코드 컴파일러, 빌드 시스템 (CMake), 시뮬레이터 코드, 테스트 코드 추가 금지. 그건 dev/ 책임.
 - `yaml-to-c.py` 는 *schema 가 어떤 언어로든 구현 가능한지 증명하는 sanity probe* 로만 잔존 (gate 이름 `schema_implementable`). 본격 codegen 아님.
-- 사람 역할은 (1) target NF 이름 결정 (2) 3GPP docx/yaml 을 `specs/<spec>/` 에 cp (3) `/nf-init`·`/nf-build`·`/nf-status` 명령 트리거 — 이 3가지로 한정. markdown·yaml 본문은 사람이 손대지 않음 (손대면 다음 `/nf-build` 에 덮어씌워질 수 있음).
+- 사람 역할은 (1) target NF 이름 결정 (2) 3GPP docx/yaml 을 `specs/<spec>/` 에 cp (3) `/nf-readiness <nf>` 트리거와 결과 리뷰 — 이 3가지로 한정. 내부 spec discovery/contract build/check 단계는 wrapper 가 순서대로 수행하며, markdown·yaml 본문은 사람이 손대지 않음 (손대면 다음 contract build 에 덮어씌워질 수 있음).
 - 결정 배치 — *spec 이 글자로 박혀있으면 design, 사용자가 고르면 dev* 가 한 줄 원칙. OS / 언어 / DBMS / 배포 (bare/docker/VM) / HTTP 라이브러리 / threading model = 모두 dev. OpenAPI path·schema, error matrix, service scenario sequence, cross-NF spec, configuration key·default = design.
 - 본 repo 가 제공하는 *내부 contract* 는 `handoff/<nf>/contract.yaml` (markdown 의 7 카테고리를 1:1 미러한 self-contained yaml). dev/ 가 markdown 재파싱 없이 이 yaml 만 보면 됨.
 ```

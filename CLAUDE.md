@@ -21,9 +21,10 @@
 
 NF 개발 단계 이름은 [`docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`](./docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md) 를 따른다.
 
-- `/nf-init` 은 현재 spec discovery + seed auto-gen 호환 skill 이며 canonical wrapper 는 `/nf-spec-discover` 다. 핵심 목적은 사람이 legacy handoff yaml 을 수동 작성하지 않도록 `_contract_seed.yaml` 을 자동 생성하는 것이다. reset 은 별도 skill 이 아니라 `--reset` 옵션이고 contract 산출물만 archive 한다.
-- `/nf-build` 는 code build 가 아니라 contract extraction/generation 단계다. canonical wrapper 는 `/nf-contract-build` 다.
-- `/nf-status` 는 contract validation 호환 skill 이며 canonical wrapper 는 `/nf-contract-check` 다. 상세 아키텍처나 구현 검증 status 와 혼동하지 않는다.
+- `/nf-readiness <nf>` 는 fresh-cache 상태에서 spec discovery → contract build/check → architecture/dev/engineering status 를 순서대로 수행하는 public wrapper 다. 사람이 준비할 것은 target NF 와 `specs/<spec>/` 원본뿐이다.
+- `/nf-spec-discover` 는 manifest/seed auto-gen 내부 단계다. reset 은 별도 skill 이 아니라 `--reset` 옵션이고 contract 산출물만 archive 한다.
+- `/nf-contract-build` 는 code build 가 아니라 contract extraction/generation 단계다.
+- `/nf-contract-check` 는 contract validation 단계다. 상세 아키텍처나 구현 검증 status 와 혼동하지 않는다.
 - `/nf-arch-design` 은 handoff-ready contract 를 상세 아키텍처 문서로 변환하는 canonical skill 이다. implementation planning 을 자동 호출하지 않는다.
 - `/nf-impl-plan` 은 architecture 문서를 구현 작업·테스트·traceability 계획으로 변환하는 canonical skill 이다. 소스 코드나 build system 을 만들지 않는다.
 - user-facing lifecycle skill 이 다음 user-facing lifecycle skill 을 자동 호출하지 않는다. 같은 단계의 필수 script/check 만 내부 실행하고, 다음 단계는 추천으로 보고한다.
@@ -32,8 +33,8 @@ NF 개발 단계 이름은 [`docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`](
 ## Source-of-truth policy
 
 - Spec 원문은 `specs/` 가 보존한다. `specs/<spec>/` 안에는 3GPP 원본 (`.docx`/`.yaml`/`.pdf`) 만 두며, 그 외 캐시·split·추출 산출 (`_extracted/` 등) 은 git 에서 추적하지 않는다.
-- Spec-derived contract 는 `design/<nf>/contract/` 와 `handoff/<nf>/contract.yaml` 에 *로컬 재생성* 한다. git 추적 대상이 아니다 — 도구 (`design/scripts/build-handoff.py` + `/nf-build` SKILL) 가 진실 출처이며, fresh checkout 후엔 `/nf-init` → `/nf-build` 로 재생성한다. Legacy `handoff/<nf>/_handoff.yaml` 는 폐기됐고 새 workflow 의 입력이 아니다.
-- `/nf-init` 산출 `design/<nf>/_contract_seed.yaml` 과 `/nf-status` 산출 `_contract_status.yaml`, `_manifest.yaml` 도 같은 정책 — 로컬 재생성, 도구가 진실 출처.
+- Spec-derived contract 는 `design/<nf>/contract/` 와 `handoff/<nf>/contract.yaml` 에 *로컬 재생성* 한다. git 추적 대상이 아니다 — 도구 (`design/scripts/build-handoff.py` + `/nf-contract-build` SKILL) 가 진실 출처이며, fresh checkout 후엔 `/nf-readiness <nf>` 또는 내부 단계 `/nf-spec-discover` → `/nf-contract-build` 로 재생성한다. Legacy `handoff/<nf>/_handoff.yaml` 는 폐기됐고 새 workflow 의 입력이 아니다.
+- `/nf-readiness`/`/nf-spec-discover` 산출 `design/<nf>/_contract_seed.yaml` 과 `/nf-contract-check` 산출 `_contract_status.yaml`, `_manifest.yaml` 도 같은 정책 — 로컬 재생성, 도구가 진실 출처.
 - Architecture design 은 목표 구조상 `design/<nf>/architecture/` 에 둔다.
 - Implementation planning 은 `dev/<nf>/` 에 둔다. 이 영역은 계획 산출물 위치이며 소스 코드 작성 시작 신호가 아니다.
 - `.omx/` 는 runtime/state 영역이며 cleanup·구조 변경 대상이 아니다.

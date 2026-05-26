@@ -8,7 +8,7 @@ __pycache__/
 design/*/_manifest.yaml
 design/*/_contract_status.yaml
 
-# /nf-init seed (재생성 가능 — design/scripts/nf-seed-gen.py)
+# /nf-spec-discover seed (재생성 가능 — design/scripts/nf-seed-gen.py)
 design/*/_contract_seed.yaml
 
 # arch/impl status (재생성 가능 — design/scripts/nf-arch-status.py, design/scripts/nf-impl-status.py)
@@ -21,7 +21,7 @@ dev/*/_readiness_status.yaml
 # /nf-implement run state (실행 중간 상태 — gitignored, PR E3 schema)
 dev/*/_implementation_run_state.yaml
 
-# /nf-build 산출 (재생성 가능 — design/scripts/build-handoff.py + nf-build SKILL)
+# /nf-contract-build 산출 (재생성 가능 — design/scripts/build-handoff.py + nf-contract-build SKILL)
 design/*/contract/
 handoff/*/contract.yaml
 

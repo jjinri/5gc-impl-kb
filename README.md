@@ -84,9 +84,9 @@ handoff_ready
 | 내부 단계 | skill | 역할 | 산출 class |
 |---|---|---|---|
 | NF routing | `/nf-readiness` Phase 0 + `nf-registry-bootstrap.py` | `specs/` 에서 NF primary spec 후보 resolve | `design/nf-registry.yaml` tracked, manifest cache |
-| Spec discovery | `/nf-spec-discover` (`/nf-init`) | manifest/seed 생성 | local reproducible cache |
-| Contract build | `/nf-contract-build` (`/nf-build`) | contract topic + handoff 생성 | local reproducible cache |
-| Contract check | `/nf-contract-check` (`/nf-status`) | `handoff_ready`, `contract_implementable` 측정 | local status cache |
+| Spec discovery | `/nf-spec-discover` | manifest/seed 생성 | local reproducible cache |
+| Contract build | `/nf-contract-build` | contract topic + handoff 생성 | local reproducible cache |
+| Contract check | `/nf-contract-check` | `handoff_ready`, `contract_implementable` 측정 | local status cache |
 | Architecture | `/nf-arch-design` / `/nf-arch-status` | architecture KB 생성·검증 | tracked architecture + local status |
 | Implementation planning | `/nf-impl-plan` / `/nf-impl-status` | readiness pack 생성·검증 | tracked `dev/<nf>/` KB + local status |
 | Engineering freeze | `/nf-eng-design` / `/nf-eng-status` | library/DB/runtime/tool 결정 freeze | tracked engineering design + local status |

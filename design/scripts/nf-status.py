@@ -32,7 +32,7 @@ Tier 3 (Implementability sanity)
 
 Tier 4 (Subjective)
   - implementation_guidance_quality (manifest.manual_overrides.judge_result.score >= 4 면 PASS,
-    부재면 NOT_RUN — /nf-status SKILL 의 judge 단계가 sub-agent 위임 후 manifest 에 등록)
+    부재면 NOT_RUN — /nf-contract-check SKILL 의 judge 단계가 sub-agent 위임 후 manifest 에 등록)
 """
 
 from __future__ import annotations
@@ -93,7 +93,7 @@ def check_frontmatter_valid(page: pathlib.Path | None, profile: str) -> dict:
     }
     if page is None:
         base.update(status="FAIL", current="페이지 없음",
-                    to_pass=["/nf-build <nf> 으로 페이지 골격 생성"])
+                    to_pass=["/nf-contract-build <nf> 으로 페이지 골격 생성"])
         return base
     fm, _ = parse_frontmatter(page.read_text(encoding="utf-8"))
     missing = REQUIRED_FRONTMATTER_KEYS - set(fm.keys())
@@ -128,7 +128,7 @@ def check_sections_complete(page: pathlib.Path | None, profile: str) -> dict:
         return base
     if page is None:
         base.update(status="FAIL", current="페이지 없음",
-                    to_pass=["/nf-build <nf> 으로 페이지 생성"])
+                    to_pass=["/nf-contract-build <nf> 으로 페이지 생성"])
         return base
     body = page.read_text(encoding="utf-8")
     found_h2 = [m.group(1).strip() for m in re.finditer(r"^## ([^\n]+)$", body, re.M)]
@@ -264,7 +264,7 @@ def check_data_model_chain(page: pathlib.Path | None, profile: str) -> dict:
         base.update(status="NOT_APPLICABLE", current=f"profile={profile}", to_pass=[])
         return base
     if page is None:
-        base.update(status="FAIL", current="페이지 없음", to_pass=["/nf-build 으로 페이지 생성"])
+        base.update(status="FAIL", current="페이지 없음", to_pass=["/nf-contract-build 으로 페이지 생성"])
         return base
     text = page.read_text(encoding="utf-8")
     # ## Data Model H2 섹션의 ```text 코드블록 안에서만 leaf 매칭 — 본문 산문의 백틱 인용은 제외
@@ -277,7 +277,7 @@ def check_data_model_chain(page: pathlib.Path | None, profile: str) -> dict:
         base.update(status="FAIL",
                     current=f"{len(leaves)}건 leaf — TS {leaf_specs}",
                     to_pass=[
-                        f"specs/<spec>/ 에 cp 후 /nf-build <nf> --data-model 으로 chain 재추출 — {leaf_specs}",
+                        f"specs/<spec>/ 에 cp 후 /nf-contract-build <nf> --data-model 으로 chain 재추출 — {leaf_specs}",
                         "또는 _manifest.yaml manual_overrides.exclude 에 해당 spec 등록 (구현 범위 외)",
                     ])
     else:
@@ -321,7 +321,7 @@ def check_api_coverage(page: pathlib.Path | None, manifest: dict, profile: str) 
                     op_count += 1
     if page is None:
         base.update(status="FAIL", current=f"yaml ops={op_count} / page 0 (페이지 없음)",
-                    to_pass=["/nf-build <nf> 으로 페이지 생성"])
+                    to_pass=["/nf-contract-build <nf> 으로 페이지 생성"])
         return base
     body = page.read_text(encoding="utf-8")
     # API 섹션 안의 markdown table row 수 추정 — H2 ## API 다음 다음 H2 전까지의 표 row
@@ -515,7 +515,7 @@ def check_subjective_review(manifest: dict) -> dict:
         "name": "구현자 가이던스 품질 (LLM-as-judge ≥ 4/5)",
         "criterion": (
             "manifest.manual_overrides.judge_result.score >= 4 면 PASS. "
-            "judge_result 부재면 NOT_RUN — /nf-status SKILL 의 judge 단계가 "
+            "judge_result 부재면 NOT_RUN — /nf-contract-check SKILL 의 judge 단계가 "
             "sub-agent 위임 후 manifest 에 등록한다."
         ),
         "applies_to": ["stage_3_only", "stage_2_only", "mixed"],
@@ -526,7 +526,7 @@ def check_subjective_review(manifest: dict) -> dict:
         base.update(status="NOT_RUN",
                     current="judge_result 미등록",
                     to_pass=[
-                        "/nf-status <nf> --judge 로 sub-agent 채점 (또는 사람 리뷰)",
+                        "/nf-contract-check <nf> --judge 로 sub-agent 채점 (또는 사람 리뷰)",
                         "결과를 _manifest.yaml 의 manual_overrides.judge_result 에 등록",
                     ])
         return base
@@ -1142,7 +1142,7 @@ def main() -> None:
     nf = args.nf.lower()
     nf_dir = REPO / "design" / nf
     if not nf_dir.is_dir():
-        sys.exit(f"[nf-status] design/{nf}/ 부재. /nf-init 먼저 실행하세요.")
+        sys.exit(f"[nf-contract-check] design/{nf}/ 부재. /nf-spec-discover 먼저 실행하세요.")
 
     manifest_path = nf_dir / "_manifest.yaml"
     manifest: dict = {}
@@ -1150,11 +1150,11 @@ def main() -> None:
         try:
             manifest = yaml.safe_load(manifest_path.read_text(encoding="utf-8")) or {}
         except yaml.YAMLError as e:
-            print(f"[nf-status] _manifest.yaml 파싱 실패: {e}", file=sys.stderr)
+            print(f"[nf-contract-check] _manifest.yaml 파싱 실패: {e}", file=sys.stderr)
 
     profile = manifest.get("profile", DEFAULT_PROFILE)
     if profile not in PROFILES:
-        print(f"[nf-status] unknown profile {profile!r}, fallback to {DEFAULT_PROFILE}", file=sys.stderr)
+        print(f"[nf-contract-check] unknown profile {profile!r}, fallback to {DEFAULT_PROFILE}", file=sys.stderr)
         profile = DEFAULT_PROFILE
 
     page = next(nf_dir.glob("3gpp-*.md"), None)
@@ -1211,13 +1211,13 @@ def main() -> None:
     if not args.no_write:
         out_path = nf_dir / "_contract_status.yaml"
         out_path.write_text(yaml_text, encoding="utf-8")
-        print(f"[nf-status] wrote {out_path.relative_to(REPO)}", file=sys.stderr)
+        print(f"[nf-contract-check] wrote {out_path.relative_to(REPO)}", file=sys.stderr)
 
     print(yaml_text)
 
     pass_count = sum(1 for c in checks if c["status"] == "PASS")
     fail_count = sum(1 for c in checks if c["status"] == "FAIL")
-    print(f"\n[nf-status] {nf}: PASS {pass_count}, FAIL {fail_count}, "
+    print(f"\n[nf-contract-check] {nf}: PASS {pass_count}, FAIL {fail_count}, "
           f"NOT_APPLICABLE/NOT_RUN {len(checks)-pass_count-fail_count}", file=sys.stderr)
     for g in gates:
         if g["status"] == "FAIL":

@@ -164,8 +164,8 @@ user_sections:
 ## Open Gaps
 
 <!-- USER:open-gaps:start -->
-- `handoff/nssf/contract.yaml` 과 `design/nssf/contract/**` 는 *workflow-generated, normally untracked* 산출이다 — `.gitignore` 로 제외되며 fresh checkout 후엔 `/nf-init` + `/nf-build` 사이클로 로컬 재생성된다 (`CLAUDE.md` Source-of-truth policy 참고). 본 traceability 의 `handoff/nssf/contract.yaml` 참조는 *현재 워크플로우 산출 경로* 를 의미.
-- contract markdown body 부재 — 본 사이클은 `/nf-build` 의 *handoff yaml 까지만* 결정. `design/nssf/contract/**/*.md` 의 본문 (AUTO/USER section) 은 별도 nf-build 사이클에서 채운다. 본 traceability 는 *handoff yaml topic ID* 기준이라 동작은 함.
+- `handoff/nssf/contract.yaml` 과 `design/nssf/contract/**` 는 *workflow-generated, normally untracked* 산출이다 — `.gitignore` 로 제외되며 fresh checkout 후엔 `/nf-spec-discover` + `/nf-contract-build` 사이클로 로컬 재생성된다 (`CLAUDE.md` Source-of-truth policy 참고). 본 traceability 의 `handoff/nssf/contract.yaml` 참조는 *현재 워크플로우 산출 경로* 를 의미.
+- contract markdown body 부재 — 본 사이클은 `/nf-contract-build` 의 *handoff yaml 까지만* 결정. `design/nssf/contract/**/*.md` 의 본문 (AUTO/USER section) 은 별도 nf-contract-build 사이클에서 채운다. 본 traceability 는 *handoff yaml topic ID* 기준이라 동작은 함.
 - `data-model/<HTTP code>` 등 18 개 노이즈 — PR #15 머지로 fix 됐고 본 seed 는 깨끗. 잔여 없음.
 - 33.501 — `docs/adr/ADR-0004-project-security-baseline.md` (project security baseline) 으로 흡수, lifecycle extraction dependency 아님. `nssf-transport-server` 와 `nssf-notify-dispatcher` 가 TLS / mTLS / OAuth2 production-capable code path 의무 적용. 33.310 / 33.210 세부는 operator-provided cert/config + library compliance 외부 처리.
 - 38.413 운영 결정 보류 — NGAP 절차 깊이는 운영 결정. 본 traceability 미반영.

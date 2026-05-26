@@ -12,14 +12,14 @@ rationale_source:
   - docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md
   - docs/adr/ADR-0002-engineering-design-freeze.md
 
-# Lifecycle stages — user-triggered surface. canonical / compat skill pair 는
-# ADR-0001 결정. 매 stage 는 직전 stage 의 산출을 입력으로 받는다.
+# Lifecycle stages — user-triggered surface. canonical_skill 이 활성 진실 출처다.
+# Legacy alias 는 history 문서에만 남긴다. 매 stage 는 직전 stage 의 산출을 입력으로 받는다.
 stages:
 
   spec_discovery:
     order: 1
     canonical_skill: /nf-spec-discover
-    compatibility_skill: /nf-init
+    compatibility_skill: null
     meaning: >-
       Identify primary/ref specs, create or refresh the manifest, and
       auto-generate the handoff seed when ready.
@@ -30,7 +30,7 @@ stages:
   spec_discovery_reset:
     order: 1
     canonical_skill: /nf-spec-discover
-    compatibility_skill: /nf-init
+    compatibility_skill: null
     invocation_suffix: --reset
     meaning: >-
       Archive existing contract artifacts only, then refresh the manifest
@@ -42,7 +42,7 @@ stages:
   contract_extraction:
     order: 2
     canonical_skill: /nf-contract-build
-    compatibility_skill: /nf-build
+    compatibility_skill: null
     meaning: >-
       Generate spec-derived contract artifacts and `handoff` contract.
     primary_outputs:
@@ -52,7 +52,7 @@ stages:
   contract_validation:
     order: 3
     canonical_skill: /nf-contract-check
-    compatibility_skill: /nf-status
+    compatibility_skill: null
     meaning: >-
       Check whether the contract is ready for architecture design.
     primary_outputs:

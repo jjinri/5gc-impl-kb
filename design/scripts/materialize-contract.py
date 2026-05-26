@@ -7,7 +7,7 @@ Usage:
 옵션:
     --force   기존 topic 파일이 있어도 AUTO 영역 재생성 (USER 영역은 항상 보존)
 
-동작 (nf-build SKILL.md §"Fresh full materialization" 의 구현).
+동작 (nf-contract-build SKILL.md §"Fresh full materialization" 의 구현).
   1. seed.topics *존재* entry 만 순회 — seed 에 없는 topic/category invent 금지.
   2. 카테고리별 AUTO 섹션 생성 (data-model=resolve-yaml-refs, api/interface/error=OpenAPI yaml),
      USER 섹션은 기존 보존 또는 TODO placeholder.
@@ -40,7 +40,7 @@ SPEC_DERIVED = {"api", "data-model", "interface", "error-handling"}
 # yaml.components.schemas 에 없어서 SystemExit 발생 → 본 패턴 매칭 시 placeholder 사용.
 STATUS_CODE_RE = re.compile(r"^(default|[1-5][0-9][0-9])$")
 
-# 카테고리 → (AUTO id 목록, USER id 목록). nf-build SKILL.md marker schema 와 1:1.
+# 카테고리 → (AUTO id 목록, USER id 목록). nf-contract-build SKILL.md marker schema 와 1:1.
 SCHEMA = {
     "interface": (["auth-block", "transport-block"], ["implementation-notes"]),
     "api": (["api-matrix", "request-schema", "response-schema"], ["implementation-notes"]),

@@ -1,13 +1,13 @@
 ---
 name: nf-impl-status
-description: 본 5gc-impl-kb 의 implementation-planning 산출 (dev/<nf>/) 이 canonical 섹션 계약·tasks schema·자기 일관성을 만족하는지 검사해 `_impl_status.yaml` 산출하는 워크플로우. 사용자가 "/nf-impl-status nssf", "NSSF dev 검증", "implementation plan 일관성 검사", "impl status", "tasks traceable 확인" 등을 말하거나 NF 이름 + dev 검사를 지정하면 이 skill 을 사용한다. 동작 — `design/scripts/nf-impl-status.py <nf>` 호출 → `dev/<nf>/_impl_status.yaml` 갱신 + 콘솔에 acceptance gate (`impl_consistent`) 보고. contract 단계는 `/nf-status`(=`/nf-contract-check`), architecture 단계는 `/nf-arch-status` 의 책임이며 본 skill 은 implementation-planning 단계 *측정* 에 집중한다.
+description: 본 5gc-impl-kb 의 implementation-planning 산출 (dev/<nf>/) 이 canonical 섹션 계약·tasks schema·자기 일관성을 만족하는지 검사해 `_impl_status.yaml` 산출하는 워크플로우. 사용자가 "/nf-impl-status nssf", "NSSF dev 검증", "implementation plan 일관성 검사", "impl status", "tasks traceable 확인" 등을 말하거나 NF 이름 + dev 검사를 지정하면 이 skill 을 사용한다. 동작 — `design/scripts/nf-impl-status.py <nf>` 호출 → `dev/<nf>/_impl_status.yaml` 갱신 + 콘솔에 acceptance gate (`impl_consistent`) 보고. contract 단계는 `/nf-contract-check`, architecture 단계는 `/nf-arch-status` 의 책임이며 본 skill 은 implementation-planning 단계 *측정* 에 집중한다.
 argument-hint: "<nf> [--no-write]"
 allowed-tools: Bash(.venv/bin/python3 design/scripts/nf-impl-status.py *) Bash(cat *) Bash(ls *)
 ---
 
 # nf-impl-status — implementation-planning 자기 일관성 검사
 
-implementation-planning 단계 status 검사다. ADR-0001 L54 가 예고한 "separate future skill" — contract 단계 `/nf-status`, architecture 단계 `/nf-arch-status` 와 책임이 분리된다.
+implementation-planning 단계 status 검사다. ADR-0001 L54 가 예고한 "separate future skill" — contract 단계 `/nf-contract-check`, architecture 단계 `/nf-arch-status` 와 책임이 분리된다.
 
 ## 입력
 - `<nf>` — NF 이름.
@@ -19,7 +19,7 @@ implementation-planning 단계 status 검사다. ADR-0001 L54 가 예고한 "sep
 
 | 시나리오 | 사용 skill |
 | --- | --- |
-| contract 완성도 검사 | `/nf-status` (= `/nf-contract-check`) |
+| contract 완성도 검사 | `/nf-contract-check` |
 | architecture 자기 일관성 검사 | `/nf-arch-status` |
 | implementation-planning 자기 일관성 검사 | `/nf-impl-status` (본 skill) |
 | implementation-planning 산출 생성·갱신 | `/nf-impl-plan` |
