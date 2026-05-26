@@ -117,16 +117,19 @@ Scope: 본 audit 은 `5gc-impl-kb` 의 lifecycle 산출물을 *config 변경에 
 
 ## 3. Classification 요약
 
-| 카테고리 | 파일 수 | 비고 |
-|---|---|---|
-| `durable-source` | 2 (`design/nf-registry.yaml`, `design/schemas/engineering-core-slots.yaml`) | + 신설 예정 `design/policies/*.yaml`, `design/<nf>/readiness-config.yaml` |
-| `tracked-generated-drift-target` | 18 (arch 10 — `decisions/ADR-0001` 제외, module 4, dev 10) | PR-4+ generator 의 render 대상 |
-| `generated-report` | 2 (`design-adequacy-checklist`, `implementation-readiness-review`) | render-on-demand, drift check 비대상 |
-| `remove-or-merge` | 0 | 본 audit 에서는 *제거 권고 없음* — 모든 파일 audit 가치 ≥1 |
-| `split-required` | 5 (ADR 0001/0002/0003/0004, `decisions/ADR-0001-architecture-baseline.md`, `engineering-design.md`, `open-gaps-and-assumptions.md`) | PR-2/3 진입 전 내부 block 매핑 필요 |
-| `generated-cache` | 9 | 현 상태 유지 |
+집계 범위: *tracked 파일만*. `generated-cache` 9 종은 gitignored 라 tracked 합계 외 별도 행. 같은 파일이 `split-required` 면 *primary 카테고리* (split 후 dominant block 의 카테고리) 가 아니라 `split-required` 로만 집계 (중복 없음).
 
-(Total tracked NSSF artifact: 32; project-level: 6 (4 ADR + nf-registry + engineering-core-slots).)
+| 카테고리 | tracked 파일 수 | 구성 |
+|---|---|---|
+| `durable-source` | 2 (project) | `design/nf-registry.yaml`, `design/schemas/engineering-core-slots.yaml` (+ 신설 예정 `design/policies/*.yaml`, `design/<nf>/readiness-config.yaml`) |
+| `tracked-generated-drift-target` | 23 (NSSF) | arch 9 (`configuration-strategy`, `error-propagation`, `module-boundaries`, `observability`, `overview`, `request-flow`, `runtime-model`, `state-persistence`, `test-strategy` — `decisions/ADR-0001` 제외) + module 4 + dev 10 (`api-implementation-matrix`, `codegen-work-items.yaml`, `data-model-implementation-map`, `implementation-plan`, `spec-to-design-coverage`, `tasks.yaml`, `team-execution-plan`, `test-matrix`, `traceability`, `verification-plan`) |
+| `generated-report` | 2 (NSSF) | `dev/nssf/design-adequacy-checklist.md`, `dev/nssf/implementation-readiness-review.md` |
+| `remove-or-merge` | 0 | 본 audit 에서 *제거 권고 없음* — 모든 파일 audit 가치 ≥1 |
+| `split-required` | 7 (project 4 + NSSF 3) | project: ADR-0001/0002/0003/0004; NSSF: `design/nssf/architecture/decisions/ADR-0001-architecture-baseline.md`, `engineering/nssf/engineering-design.md`, `dev/nssf/open-gaps-and-assumptions.md` |
+
+**Tracked 합계** — project: 6 (durable-source 2 + split-required 4), NSSF: 28 (drift-target 23 + generated-report 2 + split-required 3). 합계 34.
+
+**별도 — `generated-cache`** (gitignored, tracked 집계 외): 9 (`_manifest.yaml`, `_contract_seed.yaml`, `_contract_status.yaml`, `_arch_status.yaml`, `_engineering_status.yaml`, `_impl_status.yaml`, `_readiness_status.yaml`, `design/<nf>/contract/**`, `handoff/<nf>/contract.yaml`).
 
 ## 4. Promotion plan (PR-2/3 입력)
 
@@ -179,7 +182,6 @@ Scope: 본 audit 은 `5gc-impl-kb` 의 lifecycle 산출물을 *config 변경에 
 
 ## 8. Acceptance
 
-- 32 NSSF artifact + 6 project artifact 가 5 카테고리 중 하나 (또는 `split-required`) 로 분류됨.
-- `split-required` 5 파일의 내부 block 별 promote target 명시.
-- `_status.yaml` 9 종은 현 `generated-cache` 정책 유지.
+- 28 NSSF tracked artifact + 6 project tracked artifact = **34 tracked 파일** 이 5 카테고리 (또는 `split-required`) 중 하나로 분류됨. 별도 `generated-cache` 9 종 (gitignored) 은 현 정책 유지.
+- `split-required` 7 파일 (project 4 ADR + NSSF 3: arch-decisions ADR + engineering-design + open-gaps) 의 내부 block 별 promote target 이 §4 promotion plan 에 명시됨.
 - 잔존 OD 5 개는 PR-2/3/4/D 단계로 명시 위임.

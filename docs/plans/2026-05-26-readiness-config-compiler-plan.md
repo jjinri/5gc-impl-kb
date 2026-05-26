@@ -215,7 +215,7 @@ ADR text must not be the primary input for agent inference after this transition
 - 4 카테고리 (`durable-source` / `tracked-generated-drift-target` / `generated-report` / `remove-or-merge`) + `split-required` 분류.
 - 산출: [`2026-05-26-artifact-audit.md`](./2026-05-26-artifact-audit.md).
 
-Exit condition: 32 NSSF + 6 project artifact 분류 완료, `split-required` 의 block 별 promote target 명시.
+Exit condition: 28 NSSF tracked + 6 project tracked artifact (= 34 파일) 분류 완료, `split-required` 7 파일의 block 별 promote target 명시. `generated-cache` 9 종 (gitignored) 은 현 정책 유지.
 
 ### Phase A — decision → config key inventory (PR-2 입력)
 
