@@ -102,6 +102,7 @@ handoff_ready
 
 - [`ONBOARDING.md`](./ONBOARDING.md) — 사람/agent 사용 가이드.
 - [`CONTEXT.md`](./CONTEXT.md) — canonical 용어집.
+- [`docs/lifecycle-artifacts.md`](./docs/lifecycle-artifacts.md) — 단계별 산출물 single-glance catalog (HTML mirror: [`lifecycle-artifacts.html`](./docs/lifecycle-artifacts.html)).
 - [`docs/kb/README.md`](./docs/kb/README.md) — KB 독해 순서와 agent/human review 관점.
 - [`docs/artifact-management.md`](./docs/artifact-management.md) — 파일 class, git 정책, 재생성 순서.
 - [`docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`](./docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md) — lifecycle vocabulary.
