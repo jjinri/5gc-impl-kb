@@ -1,20 +1,19 @@
-# readiness-check — generator drift + md_table parser guard.
+# readiness-check — generator drift + impl-status + md_table parser guard.
 #
 # PR-15 (D5 in Pane 2 final-goal sequence, 2026-05-26). Plan §7 Phase C
 # drift guard 설치.
 #
-# Triggers — readiness-relevant tree 변경 시. tests 변경도 포함 (lib
-# regression 방지).
+# PR-16 — CI-safe contract materialization chain 추가 + nf-impl-status
+# --no-write step 복원 (Pane 2 #65 follow-up).
 #
-# Scope: 가볍게 유지 — 6 generator target --check + md_table unit test 만.
-# 전체 pytest tests/scripts/ 는 ~2 분이라 본 workflow 에서는 제외, 별도 CI
-# workflow 가 필요할 때 추가.
+# Triggers — readiness-relevant tree 변경 시.
 #
-# nf-impl-status --no-write 도 본 workflow 에서 제외 (PR-15 review fix, Pane
-# 2 finding [High]) — validator 가 handoff/<nf>/contract.yaml 의존, 해당
-# 파일은 .gitignore (workflow-generated 만, fresh checkout 부재). CI-safe
-# 재료화 (specs/ 에서 materialize-contract + build-handoff) 단계를 별 PR
-# 로 추가한 후 본 workflow 에 nf-impl-status step 추가 (backlog).
+# Scope:
+# - md_table unit test (lib regression).
+# - contract materialization (specs/ + tracked scripts → handoff/contract.yaml).
+# - generator --check (6 target drift).
+# - nf-impl-status --no-write (validator gate).
+# 전체 pytest tests/scripts/ 는 ~2 분이라 본 workflow 에서는 제외.
 
 name: readiness-check
 
@@ -25,6 +24,7 @@ on:
       - 'dev/**'
       - 'engineering/**'
       - 'tests/scripts/test_md_table.py'
+      - 'tests/scripts/test_nf_manifest_overrides.py'
       - '.github/workflows/readiness-check.yml'
   push:
     branches:
@@ -34,6 +34,7 @@ on:
       - 'dev/**'
       - 'engineering/**'
       - 'tests/scripts/test_md_table.py'
+      - 'tests/scripts/test_nf_manifest_overrides.py'
       - '.github/workflows/readiness-check.yml'
 
 jobs:
@@ -53,12 +54,27 @@ jobs:
           python3 -m pip install --upgrade pip
           pip install pyyaml pytest
 
-      - name: md_table parser unit tests
-        run: python3 -m pytest tests/scripts/test_md_table.py -q
+      - name: md_table + nf-manifest overrides unit tests
+        run: |
+          python3 -m pytest tests/scripts/test_md_table.py \
+            tests/scripts/test_nf_manifest_overrides.py -q
+
+      # CI-safe contract materialization chain — tracked specs/ + policy-
+      # derived manual_overrides (PR-16) → ready_for_build=true 자동 진입.
+      - name: nf-manifest (refresh from tracked specs)
+        run: python3 design/scripts/nf-manifest.py nssf --primary 29.531 --write
+
+      - name: nf-seed-gen (handoff seed)
+        run: python3 design/scripts/nf-seed-gen.py nssf
+
+      - name: materialize-contract (topics)
+        run: python3 design/scripts/materialize-contract.py nssf --force
+
+      - name: build-handoff (contract.yaml)
+        run: python3 design/scripts/build-handoff.py nssf
 
       - name: nf-readiness-pack-generate --check (drift guard)
         run: python3 design/scripts/nf-readiness-pack-generate.py nssf --check
 
-      # nf-impl-status step intentionally absent — handoff/<nf>/contract.yaml
-      # 의존 (gitignored). CI-safe contract materialization 단계 추가 후
-      # 본 workflow 에 step 복원 (backlog).
+      - name: nf-impl-status --no-write (validator gate)
+        run: python3 design/scripts/nf-impl-status.py nssf --no-write
