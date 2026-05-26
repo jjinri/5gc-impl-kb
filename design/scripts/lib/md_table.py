@@ -94,6 +94,36 @@ def split_row(line: str) -> list[str]:
     return cells
 
 
+def count_data_rows(text: str) -> int:
+    """Return data-row count of the first markdown table inside `text`.
+
+    Header row + separator row excluded. 사용처 — generated AUTO 블록의
+    table 가 ≥1 data row 보유 검증 (placeholder render 차단).
+    Returns 0 if no table found.
+    """
+    rows = 0
+    seen_header = False
+    seen_sep = False
+    for ln in text.splitlines():
+        s = ln.strip()
+        if not s.startswith("|") or not s.endswith("|"):
+            continue
+        cells = split_row(s)
+        if not seen_header:
+            seen_header = True
+            continue
+        if not seen_sep:
+            if all(set(c) <= set("-: ") for c in cells):
+                seen_sep = True
+                continue
+            # No separator row — count as data already.
+            seen_sep = True
+            rows += 1
+            continue
+        rows += 1
+    return rows
+
+
 def parse_section(text: str, header: str) -> list[list[str]]:
     """Return data rows of the first markdown table inside `## {header}` H2.
 

@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import argparse
 import pathlib
+import re
 import sys
 
 import yaml
@@ -128,6 +129,7 @@ GATE_DEFS = [
         "phase_wi_coverage",
         "wi_depends_on_valid",
         "wi_phase_order_valid",
+        "verification_plan_auto_complete",
         "human_review_pack_traceable",
         "gaps_classified",
         "blocker_gaps_zero",
@@ -967,6 +969,109 @@ def check_blocker_gaps_zero(dev_dir: pathlib.Path) -> dict:
     return base
 
 
+def _extract_auto_block(text: str, aid: str) -> str | None:
+    pattern = (
+        rf"<!-- AUTO:{re.escape(aid)}:start -->\n(.*?)\n"
+        rf"<!-- AUTO:{re.escape(aid)}:end -->"
+    )
+    m = re.search(pattern, text, flags=re.DOTALL)
+    return m.group(1) if m else None
+
+
+def _load_security_baseline_mandate_count(
+    path: pathlib.Path | None = None,
+) -> tuple[int | None, str | None]:
+    # baseline_mandates dict 항목 수 반환. (count, error). 둘 중 하나만 non-None.
+    p = path if path is not None else (
+        REPO / "design" / "policies" / "security-baseline.yaml"
+    )
+    if not p.is_file():
+        return None, f"{p.name} 파일 부재"
+    try:
+        d = yaml.safe_load(p.read_text(encoding="utf-8"))
+    except yaml.YAMLError as e:
+        return None, f"{p.name} YAML parse 오류: {e}"
+    if not isinstance(d, dict):
+        return None, f"{p.name} 최상위가 mapping 아님"
+    mandates = d.get("baseline_mandates")
+    if mandates is None:
+        return None, f"{p.name} `baseline_mandates` 키 부재"
+    if not isinstance(mandates, list):
+        return None, f"{p.name} `baseline_mandates` 가 list 아님"
+    return sum(1 for m in mandates if isinstance(m, dict)), None
+
+
+def check_verification_plan_auto_complete(dev_dir: pathlib.Path) -> dict:
+    """verification-plan.md 의 6 AUTO sub-section 모두 non-empty + placeholder
+    부재 + security-gate-matrix 의 row 가 security-baseline.yaml mandate 수
+    와 일치 (PR-17b).
+    """
+    import re as _re  # local alias — module-level re 가 이미 import 됨
+    base = {
+        "id": "verification_plan_auto_complete", "tier": 1,
+        "name": "verification-plan AUTO 6 sub-section 모두 non-empty",
+        "criterion": (
+            "dev/<nf>/verification-plan.md 의 6 AUTO sub-section "
+            "(unit-tests-table / integration-tests-table / contract-tests-"
+            "table / security-gate-matrix / end-to-end-tests-table / "
+            "observability-tests-table) 모두 ≥1 data row. security-gate-"
+            "matrix 는 design/policies/security-baseline.yaml `baseline_"
+            "mandates` 수와 일치. placeholder 산문 (`_..._부재._`) 금지."
+        ),
+    }
+    path = dev_dir / "verification-plan.md"
+    if not path.exists():
+        base.update(status="FAIL", current="verification-plan.md 없음",
+                    to_pass=["nf-readiness-pack-generate --write 로 생성"])
+        return base
+    txt = path.read_text(encoding="utf-8")
+
+    sys.path.insert(0, str(REPO / "design" / "scripts"))
+    from lib.md_table import count_data_rows  # noqa: E402
+
+    required = [
+        "unit-tests-table",
+        "integration-tests-table",
+        "contract-tests-table",
+        "security-gate-matrix",
+        "end-to-end-tests-table",
+        "observability-tests-table",
+    ]
+    fails: list[str] = []
+    for aid in required:
+        body = _extract_auto_block(txt, aid)
+        if body is None:
+            fails.append(f"{aid}: AUTO 블록 부재")
+            continue
+        if "부재._" in body or "TODO" in body:
+            fails.append(f"{aid}: placeholder/TODO 검출")
+            continue
+        cnt = count_data_rows(body)
+        if cnt == 0:
+            fails.append(f"{aid}: 0 row")
+    # security-gate-matrix 의 row 수 = mandates 수
+    mandate_count, baseline_err = _load_security_baseline_mandate_count()
+    if baseline_err is not None:
+        fails.append(f"security-baseline: {baseline_err}")
+    elif mandate_count is not None:
+        sgm = _extract_auto_block(txt, "security-gate-matrix")
+        if sgm is not None:
+            cnt = count_data_rows(sgm)
+            if cnt != mandate_count:
+                fails.append(f"security-gate-matrix row={cnt} != "
+                             f"baseline_mandates={mandate_count}")
+    if fails:
+        base.update(status="FAIL", current=f"불량 — {fails}",
+                    to_pass=["nf-readiness-pack-generate --write 후 AUTO 본문 확인"
+                             " + 빈 sub-section 은 policy/test-matrix/codegen-"
+                             "work-items 의 source 보강"])
+    else:
+        base.update(status="PASS",
+                    current="6 AUTO 모두 non-empty + security row count 정합",
+                    to_pass=[])
+    return base
+
+
 def check_no_spec_reread_required(dev_dir: pathlib.Path) -> dict:
     """Aggregate sentinel — autonomous codegen 이 원본 OpenAPI YAML 을 다시 읽지
     않아도 됨을 보장. 다음 조건 AND.
@@ -1139,6 +1244,7 @@ def main() -> None:
         check_phase_wi_coverage(dev_dir, nf),
         check_wi_depends_on_valid(dev_dir),
         check_wi_phase_order_valid(dev_dir, nf),
+        check_verification_plan_auto_complete(dev_dir),
         check_human_review_pack_traceable(dev_dir),
         check_gaps_classified(dev_dir),
         check_blocker_gaps_zero(dev_dir),
