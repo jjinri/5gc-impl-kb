@@ -105,8 +105,9 @@ def extract_schema_from_docx(spec_dir: pathlib.Path, schema_name: str) -> str | 
     if not docx:
         return None
     try:
+        # PR-16 — sys.executable 로 현재 interpreter 재사용 (CI .venv 부재 대응).
         out = subprocess.run(
-            [".venv/bin/python3", str(EXTRACT_PY), str(docx), "--max-chars", "200000"],
+            [sys.executable, str(EXTRACT_PY), str(docx), "--max-chars", "200000"],
             capture_output=True, text=True, timeout=120, cwd=REPO_ROOT,
         )
     except Exception:

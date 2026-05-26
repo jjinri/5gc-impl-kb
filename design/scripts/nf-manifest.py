@@ -123,8 +123,10 @@ def collect_yaml_refs(yamls: list[pathlib.Path]) -> set[str]:
 
 def extract_docx_refs(docx: pathlib.Path, max_chars: int) -> list[str]:
     """clause 2 References 섹션을 추출해 인용된 모든 3GPP TS/TR 번호 반환."""
+    # PR-16 — 기존 hardcoded `.venv/bin/python3` 는 CI/system python 환경에서
+    # 부재 → FileNotFoundError. sys.executable 로 현재 interpreter 재사용.
     out = subprocess.run(
-        [".venv/bin/python3", str(EXTRACT), str(docx), "--max-chars", str(max_chars)],
+        [sys.executable, str(EXTRACT), str(docx), "--max-chars", str(max_chars)],
         capture_output=True, text=True, timeout=180, cwd=REPO,
     )
     if out.returncode != 0:

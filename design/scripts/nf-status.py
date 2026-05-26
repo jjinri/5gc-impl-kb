@@ -558,8 +558,9 @@ def check_validate_extraction(nf: str, handoff_yaml: dict | None) -> dict:
                     to_pass=[])
         return base
     script = REPO / "design" / "scripts" / "validate-extraction.py"
+    # PR-16 — sys.executable 로 현재 interpreter 재사용 (CI .venv 부재 대응).
     proc = subprocess.run(
-        [".venv/bin/python3", str(script), nf, "--level", "basic"],
+        [sys.executable, str(script), nf, "--level", "basic"],
         capture_output=True, text=True, cwd=REPO, timeout=60,
     )
     if proc.returncode == 0:
