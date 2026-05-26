@@ -53,6 +53,10 @@ import sys
 
 import yaml
 
+# Markdown table contract — see lib/md_table.py module docstring (PR-13a).
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from lib.md_table import cell as _cell  # noqa: E402
+
 REPO = pathlib.Path(__file__).resolve().parent.parent.parent
 
 # Target schema — file path template → (auto ids, user ids).
@@ -191,25 +195,6 @@ LEGACY_FM_KEYS = {
 
 
 # ─── marker helpers ─────────────────────────────────────────────────
-
-def _cell(value) -> str:
-    """Markdown table cell normalizer (PR-12 — Pane 2 review #60 nit fix).
-    - stringify
-    - strip leading/trailing whitespace
-    - newline → single space (한 cell 한 line 유지)
-    - `|` → `\\|` (cell separator escape)
-
-    모든 table-cell 출력에서 본 helper 를 통과시킨다 — id/category 등 짧은
-    string 도 future input 의 unexpected `|`/newline 으로부터 hardening.
-    """
-    if value is None:
-        return ""
-    text = str(value).strip()
-    if not text:
-        return ""
-    text = " ".join(text.split())  # collapse all whitespace runs to one space
-    return text.replace("|", r"\|")
-
 
 def auto_block(aid: str, body: str) -> str:
     return f"<!-- AUTO:{aid}:start -->\n{body}\n<!-- AUTO:{aid}:end -->"

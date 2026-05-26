@@ -33,6 +33,11 @@ import sys
 
 import yaml
 
+# Markdown table parser — escape-aware contract (PR-13a). 본 모듈 의
+# parse_md_table_section 은 thin wrapper — semantic 은 lib/md_table.py.
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from lib.md_table import parse_section as _md_parse_section  # noqa: E402
+
 REPO = pathlib.Path(__file__).resolve().parent.parent.parent
 
 DEV_MD_CANON = {
@@ -296,27 +301,14 @@ def check_traceability_xref(dev_dir: pathlib.Path) -> dict:
 
 
 def parse_md_table_section(text: str, header: str) -> list[list[str]]:
-    """Return data rows (list of stripped cells) of the first markdown table
-    inside `## {header}` section. Header row + separator row are skipped.
-    Returns [] when section absent or table absent."""
-    needle = f"## {header}"
-    start = text.find(needle)
-    if start == -1:
-        return []
-    next_h = text.find("\n## ", start + len(needle))
-    section = text[start:next_h] if next_h != -1 else text[start:]
-    rows: list[list[str]] = []
-    for ln in section.splitlines():
-        s = ln.strip()
-        if not s.startswith("|") or not s.endswith("|"):
-            continue
-        cells = [c.strip() for c in s.strip("|").split("|")]
-        # separator row (---) — drop
-        if all(set(c) <= set("-: ") for c in cells):
-            continue
-        rows.append(cells)
-    # first remaining row = header; drop
-    return rows[1:] if rows else []
+    """Thin wrapper around `lib.md_table.parse_section` — escape-aware.
+
+    `\\|` 가 cell-internal pipe 로 처리되고 unescape 됨 (PR-13a).
+    이전 naive split('|') 은 `\\|` 를 cell separator 로 잘못 해석해 cell
+    index shift 위험이 있었음. 본 wrapper 는 의미적으로 동일하지만
+    escape contract 를 lib 으로 위임.
+    """
+    return _md_parse_section(text, header)
 
 
 def load_contract(nf: str) -> dict | None:
