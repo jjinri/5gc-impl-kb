@@ -63,6 +63,8 @@ specs/29.531/<29.531 docx>
 
 `readiness_pack_ready` 가 PASS 해야 `/nf-implement` 가 시작된다.
 
+각 단계의 *파일별 목적·reader·tracking* 상세는 [`docs/lifecycle-artifacts.md`](./docs/lifecycle-artifacts.md) catalog 를 참고한다 (HTML mirror: [`lifecycle-artifacts.html`](./docs/lifecycle-artifacts.html)).
+
 ## 4. KB 산출물 독해 순서
 
 ### 구현 agent
