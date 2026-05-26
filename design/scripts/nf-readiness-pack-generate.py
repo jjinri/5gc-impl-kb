@@ -37,6 +37,12 @@ PR-11 확장 — 5번째 target + config-driven gaps table:
     table 갱신. validator (_gaps_table_non_todo / gaps_classified /
     blocker_gaps_zero) 가 본 generated table 을 입력으로 사용.
 
+PR-13b1 확장 — 6번째 target + security gate matrix:
+  * dev/<nf>/verification-plan.md 신규 target.
+  * AUTO security-gate-matrix — design/policies/security-baseline.yaml
+    baseline_mandates (M1~M7) × verification kind × test ID prefix.
+    policy 변경 시 matrix 갱신.
+
 AUTO/USER marker 패턴 (materialize-contract.py reference 모범). USER 영역
 사람 산문 보존 — generator 가 만지지 않음.
 
@@ -128,6 +134,22 @@ TARGETS = {
             "references-body",
         ],
     },
+    "dev/<nf>/verification-plan.md": {
+        # PR-13b1 — security-baseline policy → verification-plan H3 matrix.
+        "auto_ids": [
+            "security-gate-matrix",
+        ],
+        "user_ids": [
+            "intro-note",
+            "unit-body",
+            "integration-body",
+            "contract-body",
+            "security-body",
+            "end-to-end-body",
+            "observability-body",
+            "references-body",
+        ],
+    },
 }
 
 # References — fixed per NF source-of-truth list. PR-5+ 가 readiness-config
@@ -173,6 +195,7 @@ TARGET_TITLES = {
     "dev/<nf>/test-matrix.md": "{nf_upper} Test Matrix",
     "dev/<nf>/team-execution-plan.md": "{nf_upper} Team Execution Plan",
     "dev/<nf>/open-gaps-and-assumptions.md": "{nf_upper} Open Gaps and Assumptions",
+    "dev/<nf>/verification-plan.md": "{nf_upper} Verification Plan",
 }
 
 # Frontmatter 의 stage 라벨.
@@ -182,6 +205,7 @@ TARGET_STAGES = {
     "dev/<nf>/test-matrix.md": "implementation-planning",
     "dev/<nf>/team-execution-plan.md": "implementation-planning",
     "dev/<nf>/open-gaps-and-assumptions.md": "implementation-planning",
+    "dev/<nf>/verification-plan.md": "implementation-planning",
 }
 
 # nf-impl-status.py DEV_FM_KEYS 와 정합 — generator 출력이 검사를 통과해야
@@ -359,6 +383,49 @@ def render_phase_integration_map(nf: str, config: dict) -> str:
         wis = body.get("work_items") or []
         wis_str = ", ".join(f"`{_cell(w)}`" for w in wis) if wis else "_none_"
         lines.append(f"| `{pid}` | {desc} | {wis_str} |")
+    return "\n".join(lines)
+
+
+# M{n} → verification kind / test ID prefix mapping. Hardcoded (현재 NSSF
+# scope 의 mandate 5/6/7 는 code-level verification 또는 외부 처리라 test
+# ID prefix 없음). policy schema 가 안정되면 security-baseline.yaml 의
+# 각 mandate 행에 `verification` block 으로 promote 후 generator 가 그를
+# 사용 (backlog).
+SECURITY_MANDATE_VERIFICATION = {
+    "M1": ("security", "t-tls-*"),
+    "M2": ("security", "t-mtls-*"),
+    "M3": ("security", "t-oauth2-inbound-*"),
+    "M4": ("security", "t-oauth2-outbound-*"),
+    "M5": ("security", "(test-matrix kind=security 종합)"),
+    "M6": ("code review", "—"),
+    "M7": ("operator/library 외부 처리", "—"),
+}
+
+
+def render_security_gate_matrix(nf: str) -> str:
+    """H3 render — `## Security` H2 아래 sub-section. security-baseline
+    policy 의 M1~M7 mandate 와 verification 매핑."""
+    baseline = load_security_baseline()
+    mandates = baseline.get("baseline_mandates") or []
+    if not mandates:
+        return ("### Security Gate Matrix\n\n"
+                "_design/policies/security-baseline.yaml `baseline_mandates`"
+                " 부재 — render skip._")
+    lines = ["### Security Gate Matrix", ""]
+    lines.append("`design/policies/security-baseline.yaml` `baseline_mandates`"
+                 " (ADR-0004) derive — verification 적용 매핑. policy 변경 시"
+                 " 본 matrix 갱신.")
+    lines.append("")
+    lines.append("| mandate | name | verification kind | test id prefix |")
+    lines.append("|---|---|---|---|")
+    for m in mandates:
+        if not isinstance(m, dict):
+            continue
+        mid = _cell(m.get("id", "?"))
+        name = _cell(m.get("name", "?"))
+        kind, prefix = SECURITY_MANDATE_VERIFICATION.get(
+            str(m.get("id", "")), ("(미매핑)", "—"))
+        lines.append(f"| `{mid}` | `{name}` | {_cell(kind)} | {_cell(prefix)} |")
     return "\n".join(lines)
 
 
@@ -825,6 +892,85 @@ def render_open_gaps_and_assumptions(nf: str, current_text: str, config: dict) -
     return "\n".join(parts).rstrip() + "\n"
 
 
+def render_verification_plan(nf: str, current_text: str, config: dict) -> str:
+    target = "dev/<nf>/verification-plan.md"
+    schema = TARGETS[target]
+    autos = {
+        "security-gate-matrix": render_security_gate_matrix(nf),
+    }
+    users_existing = extract_blocks(current_text, "USER") if current_text else {}
+
+    def user_body(uid: str) -> str:
+        body = users_existing.get(uid)
+        if body is None or not body.strip():
+            return f"TODO: {uid} — 사람이 보강 (fresh placeholder)."
+        return body
+
+    title = TARGET_TITLES[target].format(nf_upper=nf.upper())
+    stage = TARGET_STAGES[target]
+    ratified_date = str(config.get("ratified_date", ""))
+
+    fm_lines = [
+        "---",
+        f"nf: {nf}",
+        f"stage: {stage}",
+        "status: draft",
+        f"source_architecture: design/{nf}/architecture",
+        f"source_contract: handoff/{nf}/contract.yaml",
+        f"generated_date: '{ratified_date}'",
+        "generator: design/scripts/nf-readiness-pack-generate.py",
+        f"source_readiness_config: design/{nf}/readiness-config.yaml",
+        "generated_sections:",
+    ]
+    for aid in schema["auto_ids"]:
+        fm_lines.append(f"  - {aid}")
+    fm_lines.append("user_sections:")
+    for uid in schema["user_ids"]:
+        fm_lines.append(f"  - {uid}")
+    fm_lines.append("---")
+    fm = "\n".join(fm_lines)
+
+    parts = [
+        fm,
+        "",
+        f"# {title}",
+        "",
+        user_block("intro-note", user_body("intro-note")),
+        "",
+        "## Unit",
+        "",
+        user_block("unit-body", user_body("unit-body")),
+        "",
+        "## Integration",
+        "",
+        user_block("integration-body", user_body("integration-body")),
+        "",
+        "## Contract",
+        "",
+        user_block("contract-body", user_body("contract-body")),
+        "",
+        "## Security",
+        "",
+        user_block("security-body", user_body("security-body")),
+        "",
+        auto_block("security-gate-matrix", autos["security-gate-matrix"]),
+        "",
+        "## End-to-End",
+        "",
+        user_block("end-to-end-body", user_body("end-to-end-body")),
+        "",
+        "## Observability",
+        "",
+        user_block("observability-body", user_body("observability-body")),
+        "",
+        "## References",
+        "",
+        user_block("references-body", user_body("references-body")),
+        "",
+    ]
+    return "\n".join(parts).rstrip() + "\n"
+
+
 # Target dispatch — file template → renderer.
 RENDERERS = {
     "dev/<nf>/traceability.md": render_traceability,
@@ -832,6 +978,7 @@ RENDERERS = {
     "dev/<nf>/test-matrix.md": render_test_matrix,
     "dev/<nf>/team-execution-plan.md": render_team_execution_plan,
     "dev/<nf>/open-gaps-and-assumptions.md": render_open_gaps_and_assumptions,
+    "dev/<nf>/verification-plan.md": render_verification_plan,
 }
 
 
