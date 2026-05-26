@@ -123,8 +123,10 @@ def collect_yaml_refs(yamls: list[pathlib.Path]) -> set[str]:
 
 def extract_docx_refs(docx: pathlib.Path, max_chars: int) -> list[str]:
     """clause 2 References 섹션을 추출해 인용된 모든 3GPP TS/TR 번호 반환."""
+    # PR-16 — 기존 hardcoded `.venv/bin/python3` 는 CI/system python 환경에서
+    # 부재 → FileNotFoundError. sys.executable 로 현재 interpreter 재사용.
     out = subprocess.run(
-        [".venv/bin/python3", str(EXTRACT), str(docx), "--max-chars", str(max_chars)],
+        [sys.executable, str(EXTRACT), str(docx), "--max-chars", str(max_chars)],
         capture_output=True, text=True, timeout=180, cwd=REPO,
     )
     if out.returncode != 0:
@@ -154,6 +156,85 @@ def load_existing_overrides(manifest_path: pathlib.Path) -> dict:
     return {
         "exclude": ov.get("exclude") or [],
         "add": ov.get("add") or [],
+    }
+
+
+def load_policy_derived_excludes(nf: str) -> list[dict]:
+    """policy + readiness-config 에서 derive 되는 자동 exclude (PR-16 — CI-safe
+    materialization 의무 source).
+
+    Sources:
+    - design/policies/spec-dependencies.yaml `absorbed_security_profile_specs`
+      (ADR-0004 absorbed 보안 spec — 33.501 / 33.310 / 33.210).
+    - design/<nf>/readiness-config.yaml `specs.excluded_operational`
+      (NF 별 운영 결정 exclude — 예 38.413).
+
+    두 source 가 모두 부재하거나 NF readiness-config 가 없으면 빈 list.
+    사용자의 manifest manual_overrides 와 *additive merge* — 사용자 항목은
+    우선 보존, 같은 spec 이 정책 source 에도 있으면 정책 reason 으로 보강."""
+    out: list[dict] = []
+
+    # 1. policies/spec-dependencies.yaml
+    spec_dep_path = REPO / "design" / "policies" / "spec-dependencies.yaml"
+    if spec_dep_path.is_file():
+        try:
+            doc = yaml.safe_load(spec_dep_path.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError:
+            doc = {}
+        for entry in doc.get("absorbed_security_profile_specs") or []:
+            if not isinstance(entry, dict):
+                continue
+            spec = entry.get("spec")
+            if not spec:
+                continue
+            out.append({
+                "spec": str(spec),
+                "reason": (entry.get("nf_manifest_exclude_reason")
+                           or "absorbed by project security baseline ADR-0004"),
+                "source": "policies/spec-dependencies.yaml",
+            })
+
+    # 2. design/<nf>/readiness-config.yaml
+    rc_path = REPO / "design" / nf / "readiness-config.yaml"
+    if rc_path.is_file():
+        try:
+            doc = yaml.safe_load(rc_path.read_text(encoding="utf-8")) or {}
+        except yaml.YAMLError:
+            doc = {}
+        for entry in (doc.get("specs") or {}).get("excluded_operational") or []:
+            if not isinstance(entry, dict):
+                continue
+            spec = entry.get("spec")
+            if not spec:
+                continue
+            out.append({
+                "spec": str(spec),
+                "reason": (entry.get("reason")
+                           or "excluded_operational (readiness-config)"),
+                "source": f"design/{nf}/readiness-config.yaml",
+            })
+
+    return out
+
+
+def merge_overrides_with_policy(manual: dict, derived: list[dict]) -> dict:
+    """manual_overrides (사용자) 와 policy-derived (자동) 의 additive merge.
+
+    같은 spec 이 양쪽에 있으면 manual 우선 (사용자 reason 보존). 사용자 항목에
+    없는 정책 항목은 derived 로 추가."""
+    out_exclude = list(manual.get("exclude") or [])
+    manual_specs = {
+        e.get("spec") for e in out_exclude
+        if isinstance(e, dict) and e.get("spec")
+    }
+    for d in derived:
+        if d["spec"] in manual_specs:
+            continue
+        out_exclude.append({"spec": d["spec"], "reason": d["reason"]})
+        manual_specs.add(d["spec"])
+    return {
+        "exclude": out_exclude,
+        "add": manual.get("add") or [],
     }
 
 
@@ -252,10 +333,14 @@ def main() -> None:
     docx_refs = set(extract_docx_refs(docx, args.max_chars))
     all_refs = (yaml_refs | docx_refs) - {primary}
 
-    # 기존 manifest 의 manual_overrides 를 읽어 보존·적용
+    # 기존 manifest 의 manual_overrides 를 읽어 보존 + policy/readiness-config
+    # 에서 derive 되는 자동 exclude 를 additive merge (PR-16 — CI-safe
+    # materialization 의무 source).
     out_dir = REPO / "design" / nf
     manifest_path = out_dir / "_manifest.yaml"
-    overrides = load_existing_overrides(manifest_path)
+    overrides_manual = load_existing_overrides(manifest_path)
+    policy_derived = load_policy_derived_excludes(nf)
+    overrides = merge_overrides_with_policy(overrides_manual, policy_derived)
     exclude_map = {
         e.get("spec"): (e.get("reason") or "manual exclude")
         for e in overrides.get("exclude", [])
