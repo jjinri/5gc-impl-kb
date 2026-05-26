@@ -1,0 +1,67 @@
+# Normative source precedence for security baseline conflict resolution.
+#
+# Extracted from docs/adr/ADR-0004-project-security-baseline.md §Source
+# precedence (normative) without behavior change.
+#
+# 본 precedence 는 *충돌 시* enforcement order — 생성 시간 순서가 아니라
+# *강제 순서* 다. 본 정책은 ADR-0004 baseline 항목에 한정해 적용된다.
+
+schema_version: policies-v1
+policy_id: source-precedence
+rationale_source:
+  - docs/adr/ADR-0004-project-security-baseline.md
+
+# Precedence chain (higher overrides lower).
+precedence:
+  - rank: 1
+    source: docs/adr/ADR-0004-project-security-baseline.md
+    role: baseline_mandate
+    weaken: forbidden
+    strengthen: not_applicable
+  - rank: 2
+    source: engineering/<nf>/engineering-design.md
+    role: nf_engineering_decisions
+    weaken: forbidden_vs_higher
+    strengthen: allowed
+  - rank: 3
+    source: design/<nf>/architecture/
+    role: nf_architecture_flow
+    weaken: forbidden_vs_higher
+    strengthen: allowed
+  - rank: 4
+    source: dev/<nf>/
+    role: nf_task_test_plan
+    weaken: forbidden_vs_higher
+    strengthen: allowed
+
+# Enforcement rules (ADR-0004 §Source precedence).
+rules:
+  - id: SP-1
+    statement: >-
+      하위 산출이 시간상 *먼저 작성* 됐어도 ADR baseline 항목을
+      *override 못 한다*.
+  - id: SP-2
+    statement: >-
+      하위 산출은 baseline 항목을 *약화* 할 수 없다. 예 — production-capable
+      code path 누락 금지, third-party library 의무 회피 금지, dev disable 을
+      production 으로 확장 금지.
+  - id: SP-3
+    statement: >-
+      하위 산출은 baseline 을 *강화·세부화* 할 수 있다. 예 — NF 가 추가
+      cipher suite 제약, NF-specific OAuth2 scope, 더 엄격한 cert validation
+      요구.
+
+# codegen agent 가 따라야 할 source 합집합 (ADR-0004 §Source-of-truth).
+codegen_input_sources:
+  - rank: 1
+    source: docs/adr/ADR-0004-project-security-baseline.md
+    contributes: baseline_mandates
+  - rank: 2
+    source: engineering/<nf>/engineering-design.md
+    contributes: selected_libraries_and_structure
+  - rank: 3
+    source: design/<nf>/architecture/
+    contributes: enforced_flow
+  - rank: 4
+    source: dev/<nf>/
+    contributes: task_test_decomposition

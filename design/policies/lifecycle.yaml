@@ -1,0 +1,246 @@
+# NF lifecycle stage / gate vocabulary — project-wide normative.
+#
+# Extracted from docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md
+# and docs/adr/ADR-0002-engineering-design-freeze.md without behavior change.
+#
+# 본 파일은 *machine-readable policy* — validator/agent 가 직접 읽는 진실 출처.
+# ADR text 는 rationale/history 로 유지된다.
+
+schema_version: policies-v1
+policy_id: lifecycle
+rationale_source:
+  - docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md
+  - docs/adr/ADR-0002-engineering-design-freeze.md
+
+# Lifecycle stages — user-triggered surface. canonical / compat skill pair 는
+# ADR-0001 결정. 매 stage 는 직전 stage 의 산출을 입력으로 받는다.
+stages:
+
+  spec_discovery:
+    order: 1
+    canonical_skill: /nf-spec-discover
+    compatibility_skill: /nf-init
+    meaning: >-
+      Identify primary/ref specs, create or refresh the manifest, and
+      auto-generate the handoff seed when ready.
+    primary_outputs:
+      - design/<nf>/_manifest.yaml
+      - design/<nf>/_contract_seed.yaml
+
+  spec_discovery_reset:
+    order: 1
+    canonical_skill: /nf-spec-discover
+    compatibility_skill: /nf-init
+    invocation_suffix: --reset
+    meaning: >-
+      Archive existing contract artifacts only, then refresh the manifest
+      and auto-generate the seed when ready.
+    notes: >-
+      Reset 은 별도 lifecycle skill 이 아니라 spec_discovery 단계의
+      *destructive option* 이다. nf-reset 은 deprecated.
+
+  contract_extraction:
+    order: 2
+    canonical_skill: /nf-contract-build
+    compatibility_skill: /nf-build
+    meaning: >-
+      Generate spec-derived contract artifacts and `handoff` contract.
+    primary_outputs:
+      - design/<nf>/contract/
+      - handoff/<nf>/contract.yaml
+
+  contract_validation:
+    order: 3
+    canonical_skill: /nf-contract-check
+    compatibility_skill: /nf-status
+    meaning: >-
+      Check whether the contract is ready for architecture design.
+    primary_outputs:
+      - design/<nf>/_contract_status.yaml
+    gates_produced:
+      - draft
+      - review_ready
+      - handoff_ready
+      - contract_implementable
+      - canonical
+
+  architecture_design:
+    order: 4
+    canonical_skill: /nf-arch-design
+    compatibility_skill: null
+    meaning: >-
+      Convert contract into detailed module/runtime/state/test architecture.
+    primary_outputs:
+      - design/<nf>/architecture/
+      - design/<nf>/module-decomposition/
+
+  architecture_validation:
+    order: 4.5
+    canonical_skill: /nf-arch-status
+    compatibility_skill: null
+    meaning: >-
+      Measure architecture-stage consistency (canonical sections,
+      module decomposition, frontmatter).
+    primary_outputs:
+      - design/<nf>/_arch_status.yaml
+    gates_produced:
+      - arch_consistent
+
+  implementation_planning:
+    order: 5
+    canonical_skill: /nf-impl-plan
+    compatibility_skill: null
+    meaning: >-
+      Convert architecture into implementable tasks and test plan.
+    primary_outputs:
+      - dev/<nf>/
+
+  implementation_validation:
+    order: 5.5
+    canonical_skill: /nf-impl-status
+    compatibility_skill: null
+    meaning: >-
+      Measure implementation-planning stage consistency (canonical sections,
+      tasks schema, traceability, coverage).
+    primary_outputs:
+      - dev/<nf>/_impl_status.yaml
+    gates_produced:
+      - impl_consistent
+      - impl_ready_for_codegen
+
+  engineering_design_freeze:
+    order: 6
+    canonical_skill: /nf-eng-design
+    compatibility_skill: null
+    meaning: >-
+      Freeze human-owned engineering decisions (`engineering/<nf>/engineering-design.md`).
+      `eng_frozen` 게이트가 technology decision freeze 의 단일 게이트.
+    primary_outputs:
+      - engineering/<nf>/engineering-design.md
+
+  engineering_validation:
+    order: 6.5
+    canonical_skill: /nf-eng-status
+    compatibility_skill: null
+    meaning: >-
+      Validate engineering-design freeze against engineering-core-slots profile.
+    primary_outputs:
+      - engineering/<nf>/_engineering_status.yaml
+    gates_produced:
+      - eng_frozen
+
+  readiness_aggregate:
+    order: 7
+    canonical_skill: /nf-readiness
+    compatibility_skill: null
+    meaning: >-
+      Aggregate upstream lifecycle status to determine autonomous code
+      generation GO signal.
+    primary_outputs:
+      - dev/<nf>/_readiness_status.yaml
+    gates_produced:
+      - readiness_pack_ready
+
+# Gate vocabulary — 결정론적 acceptance signal.
+# 각 gate 의 required checks 는 validator script 의 GATE_DEFS 가 진실 출처.
+gates:
+
+  draft:
+    produced_by: /nf-contract-check
+    blocking: false
+    meaning: Frontmatter valid (minimal viability).
+
+  review_ready:
+    produced_by: /nf-contract-check
+    blocking: false
+    meaning: Frontmatter valid + sections complete + manifest ready.
+
+  handoff_ready:
+    produced_by: /nf-contract-check
+    blocking: true
+    meaning: >-
+      Contract 가 architecture design 입력으로 충분 — `design/<nf>/architecture/`
+      작업 시작 가능. *codegen 시작 신호 아님*.
+
+  contract_implementable:
+    produced_by: /nf-contract-check
+    blocking: true
+    meaning: >-
+      Contract 가 spec re-read 없이 구현 가능한 implementability checks 통과.
+
+  canonical:
+    produced_by: /nf-contract-check
+    blocking: false
+    meaning: Tier 1+2+3 통합 — handoff_ready + schema_implementable + guidance quality.
+
+  arch_consistent:
+    produced_by: /nf-arch-status
+    blocking: true
+    meaning: >-
+      Architecture canonical sections + module decomposition + frontmatter
+      자기 일관성. 의미 judge 비포함.
+
+  impl_consistent:
+    produced_by: /nf-impl-status
+    blocking: true
+    meaning: >-
+      Implementation-planning canonical sections + tasks schema + frontmatter
+      자기 일관성.
+
+  impl_ready_for_codegen:
+    produced_by: /nf-impl-status
+    blocking: true
+    meaning: >-
+      readiness pack 9 파일 + work item coverage + gap 분류 + blocker 0 +
+      no spec re-read.
+
+  eng_frozen:
+    produced_by: /nf-eng-status
+    blocking: true
+    meaning: >-
+      Technology decision freeze (library / DB / runtime / tool / operator-policy).
+      engineering-core-slots profile + per-NF deferral register 합집합 인벤토리.
+      *blocking 판정은 결정론적 typed schema 검사로 한정*. LLM/sub-agent judge 는
+      비차단 advisory.
+    notes: >-
+      `eng_frozen` 인벤토리 = `design/schemas/engineering-core-slots.yaml`
+      core slot ∪ `design/<nf>/architecture/decisions/ADR-0001-architecture-baseline.md`
+      `## Open choices` (per-NF 연기 레지스터). validator 는 상수 없이 read-only
+      로 profile 을 읽는다.
+
+  readiness_pack_ready:
+    produced_by: /nf-readiness
+    blocking: true
+    aggregate_of:
+      - handoff_ready
+      - contract_implementable
+      - arch_consistent
+      - impl_ready_for_codegen
+      - eng_frozen
+    meaning: >-
+      Autonomous implementation (`/nf-implement`) 의 *유일한 GO 신호*.
+      모든 upstream gate PASS 시에만 PASS.
+
+# User-triggered vs agent-internal work (ADR-0001).
+work_boundary:
+  user_triggered_skills: >-
+    공개 워크플로우 surface. 사용자가 lifecycle stage 를 선택한다.
+  agent_internal_work: >-
+    skill 안에서 수행되는 script/tool/check 시퀀스. 같은 stage 의 필수 tool
+    (예 contract build 단계의 build-handoff.py, validate-extraction.py) 은
+    내부 호출 가능.
+  prohibited:
+    - >-
+      user-facing lifecycle skill 이 *다음* user-facing lifecycle skill 을
+      *silently* 호출하면 안 된다. stage 결과를 보고하고 다음 사용자 행동을
+      추천만 한다.
+
+# handoff_ready 의미 (ADR-0001 §Consequences).
+semantics:
+  handoff_ready: >-
+    Contract 가 architecture design 입력으로 충분하다는 뜻. *codegen 가능*
+    이라는 뜻 아니다. architecture / impl-plan / engineering design freeze
+    는 별도 단계.
+  readiness_pack_ready: >-
+    autonomous code generation 의 *유일한* GO. 다른 gate 단독으로는
+    GO 신호 아니다.

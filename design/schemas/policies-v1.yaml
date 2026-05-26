@@ -1,0 +1,232 @@
+# Schema for design/policies/*.yaml — policies-v1.
+#
+# 본 schema 는 PR-2 단계의 *advisory shape spec* 이다. validator wiring 은
+# PR-4 generator 가 본 schema 를 흡수해 advisory WARN-only 로 시작하고,
+# Phase C exit 후 blocking 으로 승격한다.
+#
+# 본 파일은 데이터 schema 가 아니라 *shape document* — JSON-Schema 또는
+# 별도 validator 작성을 강제하지 않고, 사람 / generator 가 cross-check
+# 가능한 contract 다.
+
+version: 1
+
+# 공통 frontmatter (모든 policy file 공통).
+common_frontmatter:
+  required:
+    - schema_version
+    - policy_id
+    - rationale_source
+  schema_version_enum:
+    - policies-v1
+  policy_id_enum:
+    - lifecycle
+    - security-baseline
+    - source-precedence
+    - spec-dependencies
+    - gaps
+  rationale_source_shape:
+    type: non_empty_list
+    item_type: string
+    item_constraint: >-
+      docs/adr/ADR-*.md 또는 design/scripts/*.py 같은 *tracked file path*.
+
+# Per-policy required structure (presence checks only — content 깊이 검증은
+# PR-4 generator 책임).
+
+policies:
+
+  lifecycle:
+    required_top_level:
+      - schema_version
+      - policy_id
+      - rationale_source
+      - stages
+      - gates
+      - work_boundary
+      - semantics
+    stages_shape:
+      type: mapping
+      value_required:
+        - order
+        - canonical_skill
+        - meaning
+      value_optional:
+        - compatibility_skill
+        - invocation_suffix
+        - primary_outputs
+        - gates_produced
+        - notes
+    gates_shape:
+      type: mapping
+      value_required:
+        - produced_by
+        - blocking
+        - meaning
+      value_optional:
+        - aggregate_of
+        - notes
+    work_boundary_required:
+      - user_triggered_skills
+      - agent_internal_work
+      - prohibited
+    semantics_required:
+      - handoff_ready
+      - readiness_pack_ready
+
+  security-baseline:
+    required_top_level:
+      - schema_version
+      - policy_id
+      - rationale_source
+      - baseline_mandates
+      - nf_specific_role
+      - codegen_required_sources
+      - rejected_alternatives
+    baseline_mandates_shape:
+      type: non_empty_list
+      item_required:
+        - id
+        - name
+        - requirement
+        - applies_to
+    nf_specific_role_required:
+      - allowed
+      - weakening_prohibited
+      - examples
+      - registration_location
+    codegen_required_sources_shape:
+      type: non_empty_list
+      item_type: string
+    rejected_alternatives_shape:
+      type: list
+      item_required:
+        - id
+        - name
+        - statement
+
+  source-precedence:
+    required_top_level:
+      - schema_version
+      - policy_id
+      - rationale_source
+      - precedence
+      - rules
+      - codegen_input_sources
+    precedence_shape:
+      type: non_empty_list
+      item_required:
+        - rank
+        - source
+        - role
+        - weaken
+      item_optional:
+        - strengthen
+    rules_shape:
+      type: non_empty_list
+      item_required:
+        - id
+        - statement
+    codegen_input_sources_shape:
+      type: non_empty_list
+      item_required:
+        - rank
+        - source
+        - contributes
+
+  spec-dependencies:
+    required_top_level:
+      - schema_version
+      - policy_id
+      - rationale_source
+      - absorbed_security_profile_specs
+      - manifest_field_semantics
+      - auto_exclude_on_discovery
+      - amendment_rule
+    absorbed_security_profile_specs_shape:
+      type: non_empty_list
+      item_required:
+        - spec
+        - title
+        - absorbed_by
+        - nf_manifest_exclude_reason
+    manifest_field_semantics_required:
+      - present
+      - excluded
+      - orthogonality
+    manifest_field_required_subkeys:
+      - meaning
+      - type
+      - derivation
+    auto_exclude_required:
+      - applies_when
+      - action
+
+  gaps:
+    required_top_level:
+      - schema_version
+      - policy_id
+      - rationale_source
+      - categories
+      - enforced_by_current_validator
+      - recommended_row_fields
+      - recommended_non_blocker_description_fields
+      - gates_using_this_enum
+    categories_shape:
+      type: non_empty_list
+      item_required:
+        - id
+        - meaning
+        - resolution
+    categories_enum_min:
+      # 본 enum 은 *최소 집합*. validator (nf-impl-status.py) 와 일치해야 함.
+      - blocker
+      - deferred
+      - operator-provided
+      - library-assumed
+      - test-gap
+      - assumption
+    enforced_by_current_validator_shape:
+      type: non_empty_list
+      item_required:
+        - check
+        - rule
+    recommended_row_fields_required:
+      - enforcement
+      - enforcement_target_pr
+      - fields
+    recommended_row_fields_required_items:
+      - id
+      - category
+      - description
+      - owner
+      - target_resolution
+    recommended_non_blocker_description_fields_required:
+      - enforcement
+      - enforcement_target_pr
+      - fields
+    gates_using_this_enum_shape:
+      type: non_empty_list
+      item_required:
+        - gate
+        - rule
+
+# Cross-policy invariants.
+cross_policy_invariants:
+  - id: CP-1
+    statement: >-
+      `lifecycle.yaml` 의 `gates.eng_frozen.aggregate_of` 가 비어있어야 하고
+      (eng_frozen 자체는 aggregate 아님), `gates.readiness_pack_ready.aggregate_of`
+      는 정확히 5개 (handoff_ready, contract_implementable, arch_consistent,
+      impl_ready_for_codegen, eng_frozen).
+  - id: CP-2
+    statement: >-
+      `gaps.yaml.categories[].id` 는 `nf-impl-status.py:GAP_CATEGORIES` 와
+      동일 6 enum.
+  - id: CP-3
+    statement: >-
+      `spec-dependencies.yaml.absorbed_security_profile_specs[].absorbed_by`
+      는 `security-baseline.yaml.rationale_source` 중 하나.
+  - id: CP-4
+    statement: >-
+      `source-precedence.yaml.precedence[].source` 의 rank=1 항목은
+      `security-baseline.yaml.rationale_source` 중 하나.

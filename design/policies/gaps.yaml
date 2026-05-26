@@ -1,0 +1,98 @@
+# Gap classification enum — implementation planning stage normative.
+#
+# Extracted from design/scripts/nf-impl-status.py:103 (GAP_CATEGORIES)
+# without behavior change. validator 가 이미 6 enum 을 강제한다.
+#
+# 본 파일은 *normative source* 가 되고, nf-impl-status.py 의 GAP_CATEGORIES
+# 는 본 파일을 read-only 로 흡수하는 후속 PR (PR-D) 의 대상이다.
+
+schema_version: policies-v1
+policy_id: gaps
+rationale_source:
+  - design/scripts/nf-impl-status.py
+  - dev/<nf>/open-gaps-and-assumptions.md
+
+# 6 canonical gap categories.
+categories:
+  - id: blocker
+    meaning: >-
+      구현 사이클 진입 불가 — 본 gap 해소 전 codegen 시작 금지. impl_status
+      `blocker_gaps_zero` gate 가 0 인지 검사.
+    resolution: >-
+      해당 결정 (engineering-design / architecture / contract) 으로 닫은
+      후 재분류.
+
+  - id: deferred
+    meaning: >-
+      현 사이클 범위 외, 후속 milestone 로 미룸. trigger / mitigation /
+      target_resolution 명시 필수. readiness-followup 의미 항목은 본
+      카테고리 + description prefix `readiness-followup:`.
+    resolution: >-
+      별 사이클 (PR / milestone) 에서 처리.
+
+  - id: operator-provided
+    meaning: >-
+      NF 가 capability 는 보유, 실제 자료 (cert / DSN / URL / secret) 는
+      운영자 config 로 주입. baseline 의무 만족 + 운영 시점 결정.
+    resolution: >-
+      Phase 1 deploy 시 운영자가 config / sealed-secret / env 주입.
+
+  - id: library-assumed
+    meaning: >-
+      외부 library 의 정확성을 *가정* — 검증은 build / smoke test 가 담당.
+      예 openapi-generator 산출 schema, cJSON serializer, libjwt 동작.
+    resolution: >-
+      Phase 1 codegen build + smoke test 시 검증.
+
+  - id: test-gap
+    meaning: >-
+      verification-plan 의 cover 가 *원격 의존* (peer NF interop, e2e) 으로
+      mocked 만 사용. 실제 의존성은 별 milestone.
+    resolution: >-
+      후속 e2e milestone (별 사이클).
+
+  - id: assumption
+    meaning: >-
+      spec / business-rule / forward-compat 정책의 *명시 가정*. 위반 시
+      구현 동작이 달라지므로 unit test / generated default freeze 로 잠금.
+    resolution: >-
+      acceptance / business-rule unit test 로 잠금.
+
+# 현재 validator (nf-impl-status.py:672-724) 가 *실제* 강제하는 항목.
+enforced_by_current_validator:
+  - check: gaps_classified
+    rule: >-
+      `## Gaps` 표의 모든 행이 category 열 (열 2) 값이 `categories[].id`
+      enum 중 하나. TODO/빈 값 금지.
+  - check: blocker_gaps_zero
+    rule: category=blocker 인 행이 0.
+
+# *미강제* 추천 — 본 PR 시점 validator 가 검사하지 않음. 후속 PR (PR-4
+# generator + validator) 가 본 항목을 *blocking 으로 승격* 할 수 있다.
+# 본 PR 의 "without behavior change" 원칙상 여기서 강제하지 않는다.
+recommended_row_fields:
+  enforcement: not_enforced_current_validator
+  enforcement_target_pr: PR-4
+  fields:
+    - id
+    - category
+    - description
+    - owner
+    - target_resolution
+
+# Non-blocker rows description 의 권고 4 정보 — 마찬가지로 *미강제*.
+recommended_non_blocker_description_fields:
+  enforcement: not_enforced_current_validator
+  enforcement_target_pr: PR-4
+  fields:
+    - owner
+    - phase
+    - trigger
+    - mitigation
+
+# impl_ready_for_codegen 게이트에서 본 enum 이 영향.
+gates_using_this_enum:
+  - gate: gaps_classified
+    rule: 모든 gap 행이 본 categories 중 하나로 분류돼야 PASS.
+  - gate: blocker_gaps_zero
+    rule: category=blocker 인 행이 0 이어야 PASS.
