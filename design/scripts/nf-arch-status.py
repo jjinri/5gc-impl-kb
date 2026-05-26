@@ -7,7 +7,7 @@ Usage:
 옵션:
     --no-write   _arch_status.yaml 저장 없이 stdout 만 보고
 
-본 script 는 architecture 단계 status 검사다. contract 단계는 nf-status.py 의 책임이며
+본 script 는 architecture 단계 status 검사다. contract 단계는 nf-contract-check.py 의 책임이며
 본 script 는 그것과 분리된다 (ADR-0001 § Migration notes (2026-05-14) follow-up).
 
 설계 원칙 (plan docs/plans/2026-05-18-arch-impl-status-validator-plan.md).
@@ -19,7 +19,7 @@ Usage:
 canonical 섹션 상수는 PR #20 으로 머지된 nf-arch-design/SKILL.md mandate 와 *동일 source*.
 변경 시 SKILL.md mandate 와 1:1 로 함께 갱신해야 한다.
 
-평가 framework — nf-status.py 와 동형. 무가중치, check 별 criterion + to_pass 의무,
+평가 framework — nf-contract-check.py 와 동형. 무가중치, check 별 criterion + to_pass 의무,
 acceptance gate 는 binary check id 의 AND. WARN 은 advisory, gate 비포함.
 """
 

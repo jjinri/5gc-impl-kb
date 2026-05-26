@@ -2,7 +2,7 @@
 name: nf-impl-plan
 description: Canonical lifecycle skill for converting reviewed NF architecture documents into implementation planning artifacts in 5gc-impl-kb. Use when the user asks to create implementation tasks, test matrix, traceability, or a dev plan from `design/<nf>/architecture/`; examples include "/nf-impl-plan nssf", "NSSF 구현 계획 만들어줘", "architecture를 dev tasks로 쪼개줘", or "create implementation plan from NSSF architecture".
 argument-hint: "<nf>"
-allowed-tools: Bash(cat *) Bash(ls *) Bash(find design/*) Bash(find handoff/*) Bash(find dev/*) Bash(mkdir -p *) Bash(cp *) Bash(grep *) Bash(sed *) Bash(python3 *) Bash(.venv/bin/python3 design/scripts/nf-status.py *)
+allowed-tools: Bash(cat *) Bash(ls *) Bash(find design/*) Bash(find handoff/*) Bash(find dev/*) Bash(mkdir -p *) Bash(cp *) Bash(grep *) Bash(sed *) Bash(python3 *) Bash(.venv/bin/python3 design/scripts/nf-contract-check.py *)
 ---
 
 # nf-impl-plan
@@ -41,7 +41,7 @@ test-strategy.md
 decisions/ADR-0001-architecture-baseline.md
 ```
 
-4. Run `.venv/bin/python3 design/scripts/nf-status.py <nf> --no-write` and confirm `handoff_ready` is PASS.
+4. Run `.venv/bin/python3 design/scripts/nf-contract-check.py <nf> --no-write` and confirm `handoff_ready` is PASS.
 5. If architecture files are missing, stop and recommend `/nf-arch-design <nf>`.
 6. If `handoff_ready` is not PASS, stop and recommend `/nf-contract-check <nf>`.
 

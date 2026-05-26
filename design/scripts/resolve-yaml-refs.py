@@ -49,7 +49,7 @@ STATUS_CODE_RE = re.compile(r"^(default|[1-5][0-9][0-9])$")
 
 # PR F1.2 — classification 어휘. unresolved_refs[].classification 에 실제 emit 되는 값은
 # 아래 7 enum (UNRESOLVED_CLASSIFICATIONS). 'resolved' 는 schema 가 정상 resolve 된 경우의
-# 개념적 sentinel 이며 unresolved entry 에 emit 되지 않는다 — sibling code (nf-status.py
+# 개념적 sentinel 이며 unresolved entry 에 emit 되지 않는다 — sibling code (nf-contract-check.py
 # 의 _CLASSIFICATION_ENUM) 는 7 enum 만 검증한다 (PR #48 review Low finding 정정).
 UNRESOLVED_CLASSIFICATIONS = {
     "external_common_data",           # TS29571_CommonData 등 공용 데이터 spec 의 schema

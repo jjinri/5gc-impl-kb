@@ -94,7 +94,7 @@ OpenAPI yaml + docx 를 토픽 단위 markdown + machine-readable yaml 로 추�
 ### Stage 3 — Contract check
 
 ```
-/nf-contract-check <nf>   # = nf-status.py
+/nf-contract-check <nf>   # = nf-contract-check.py
 ```
 
 Contract md + handoff yaml 의 정합성 + 구현 가능성 검사.

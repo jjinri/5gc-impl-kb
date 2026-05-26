@@ -12,8 +12,8 @@ aggregate gate readiness_pack_ready 를 측정한다 (ADR-0002 normative,
 docs/plans/2026-05-21-nf-readiness-implementation-workflow-upgrade-plan.md §3).
 
     readiness_pack_ready =
-        handoff_ready             (contract — nf-status.py)
-      ∧ contract_implementable    (contract — nf-status.py, PR B)
+        handoff_ready             (contract — nf-contract-check.py)
+      ∧ contract_implementable    (contract — nf-contract-check.py, PR B)
       ∧ arch_consistent           (architecture — nf-arch-status.py)
       ∧ impl_ready_for_codegen    (implementation-planning — nf-impl-status.py, PR C)
       ∧ eng_frozen                (engineering — nf-eng-status.py)
