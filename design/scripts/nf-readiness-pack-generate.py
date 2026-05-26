@@ -8,6 +8,11 @@ PR-5 확장 — AUTO 추가:
   * test-inventory-index — dev/<nf>/test-matrix.md `## Test Inventory`
     표를 parse 해 kind 별 test ID 그룹 render. 두 파일 사이 drift 검출.
 
+PR-6 확장 — AUTO 추가:
+  * deferred-decisions-trace — readiness-config.deferred_decisions.rows
+    table render. config 가 source 라 readiness-config 변경 시 자동 갱신
+    (config-driven render 증명).
+
 AUTO/USER marker 패턴 (materialize-contract.py reference 모범). USER 영역
 사람 산문 보존 — generator 가 만지지 않음.
 
@@ -30,7 +35,11 @@ REPO = pathlib.Path(__file__).resolve().parent.parent.parent
 # 본 generator 가 render 하는 모든 산출의 *기계 계약*.
 TARGETS = {
     "dev/<nf>/traceability.md": {
-        "auto_ids": ["test-inventory-index", "references"],
+        "auto_ids": [
+            "test-inventory-index",
+            "deferred-decisions-trace",
+            "references",
+        ],
         "user_ids": [
             "intro-note",
             "contract-module-table",
@@ -213,6 +222,37 @@ def render_test_inventory_index(nf: str) -> str:
     return "\n".join(lines).rstrip()
 
 
+def render_deferred_decisions_trace(nf: str, config: dict) -> str:
+    """H3-only render — `## Open Gaps` H2 아래 sub-section. config 의
+    deferred_decisions.rows 를 table 로 render. status=decided 행은
+    references_slot 으로 흡수 추적, explicitly_out_of_scope 행은 out-of-scope.
+    """
+    rows = (config.get("deferred_decisions") or {}).get("rows") or []
+    if not rows:
+        return ("### Deferred Decisions Trace\n\n"
+                "_readiness-config.deferred_decisions 부재 — render skip._")
+    lines = ["### Deferred Decisions Trace", ""]
+    lines.append(f"`design/{nf}/readiness-config.yaml` `deferred_decisions.rows`"
+                 f" derive — 총 {len(rows)} row. config 변경 시 본 trace 가"
+                 " 같이 갱신된다.")
+    lines.append("")
+    lines.append("| id | status | resolved by | ratified_by | date |")
+    lines.append("|---|---|---|---|---|")
+    for r in rows:
+        rid = str(r.get("id", "?"))
+        status = str(r.get("status", "?"))
+        if status == "decided":
+            resolved = f"slot `{r.get('references_slot', '?')}`"
+        elif status == "explicitly_out_of_scope":
+            resolved = "_out of scope_"
+        else:
+            resolved = f"_{status}_"
+        rb = str(r.get("ratified_by", "?"))
+        date = str(r.get("date", "?"))
+        lines.append(f"| `{rid}` | {status} | {resolved} | {rb} | {date} |")
+    return "\n".join(lines)
+
+
 def render_references(nf: str) -> str:
     items = REFERENCES_BY_NF.get(nf)
     if not items:
@@ -235,6 +275,7 @@ def render_traceability(nf: str, current_text: str, config: dict) -> str:
     schema = TARGETS[target]
     autos = {
         "test-inventory-index": render_test_inventory_index(nf),
+        "deferred-decisions-trace": render_deferred_decisions_trace(nf, config),
         "references": render_references(nf),
     }
     users_existing = extract_blocks(current_text, "USER") if current_text else {}
@@ -296,6 +337,8 @@ def render_traceability(nf: str, current_text: str, config: dict) -> str:
         "## Open Gaps",
         "",
         user_block("open-gaps", user_body("open-gaps")),
+        "",
+        auto_block("deferred-decisions-trace", autos["deferred-decisions-trace"]),
         "",
         auto_block("references", autos["references"]),
         "",

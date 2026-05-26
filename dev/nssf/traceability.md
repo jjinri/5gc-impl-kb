@@ -9,6 +9,7 @@ generator: design/scripts/nf-readiness-pack-generate.py
 source_readiness_config: design/nssf/readiness-config.yaml
 generated_sections:
   - test-inventory-index
+  - deferred-decisions-trace
   - references
 user_sections:
   - intro-note
@@ -170,6 +171,23 @@ user_sections:
 - 38.413 운영 결정 보류 — NGAP 절차 깊이는 운영 결정. 본 traceability 미반영.
 - subscription persistence backend — engineering-design 결정 = PostgreSQL/libpq 단일. test seam = `t-repo-contract` (production PostgreSQL 기준 contract test).
 <!-- USER:open-gaps:end -->
+
+<!-- AUTO:deferred-decisions-trace:start -->
+### Deferred Decisions Trace
+
+`design/nssf/readiness-config.yaml` `deferred_decisions.rows` derive — 총 8 row. config 변경 시 본 trace 가 같이 갱신된다.
+
+| id | status | resolved by | ratified_by | date |
+|---|---|---|---|---|
+| `language_runtime` | decided | slot `language` | jjinri | 2026-05-19 |
+| `persistence_backend_subscription_availability` | decided | slot `persistence` | jjinri | 2026-05-19 |
+| `http2_server_client_library` | decided | slot `sbi_server_stack` | jjinri | 2026-05-21 |
+| `tls_library` | decided | slot `tls_security` | jjinri | 2026-05-21 |
+| `oauth2_jwt_library` | decided | slot `oauth2_token_validation` | jjinri | 2026-05-21 |
+| `deployment_topology_service_mesh` | decided | slot `deployment_topology` | jjinri | 2026-05-21 |
+| `amf_reallocation_via_ran` | explicitly_out_of_scope | _out of scope_ | jjinri | 2026-05-19 |
+| `tls_version_cipher_detail` | explicitly_out_of_scope | _out of scope_ | jjinri | 2026-05-21 |
+<!-- AUTO:deferred-decisions-trace:end -->
 
 <!-- AUTO:references:start -->
 ## References
