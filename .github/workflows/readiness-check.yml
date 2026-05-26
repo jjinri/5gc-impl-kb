@@ -1,19 +1,17 @@
-# readiness-check — generator drift + impl-status + md_table parser guard.
+# readiness-check — generator drift + impl-status + pytest guard.
 #
-# PR-15 (D5 in Pane 2 final-goal sequence, 2026-05-26). Plan §7 Phase C
-# drift guard 설치.
-#
-# PR-16 — CI-safe contract materialization chain 추가 + nf-impl-status
-# --no-write step 복원 (Pane 2 #65 follow-up).
-#
-# Triggers — readiness-relevant tree 변경 시.
-#
-# Scope:
-# - md_table unit test (lib regression).
-# - contract materialization (specs/ + tracked scripts → handoff/contract.yaml).
-# - generator --check (6 target drift).
+# Triggers — readiness-relevant tree 변경 시. 본 workflow 의 scope:
+# - 전체 pytest tests/ (md_table·manifest-overrides·build-handoff·readiness
+#   resolve·registry bootstrap 등 92+건. local ~12s, CI < 1m 범위).
+# - contract materialization chain (specs/ + tracked scripts → handoff/
+#   contract.yaml).
+# - generator --check (drift guard).
 # - nf-impl-status --no-write (validator gate).
-# 전체 pytest tests/scripts/ 는 ~2 분이라 본 workflow 에서는 제외.
+#
+# paths 정책 — 본 workflow 의 step 이 실제 검증하는 경로만. design/dev/
+# engineering 산출 + tests/ 전체 + .claude/skills (lifecycle/script 정합
+# 입력) + 본 workflow 자체. docs/adr/**, README/CLAUDE/CONTEXT 등 prose 만
+# 의 변경은 CI 검증 대상 외 (의도적 제외).
 
 name: readiness-check
 
@@ -23,8 +21,8 @@ on:
       - 'design/**'
       - 'dev/**'
       - 'engineering/**'
-      - 'tests/scripts/test_md_table.py'
-      - 'tests/scripts/test_nf_manifest_overrides.py'
+      - 'tests/**'
+      - '.claude/skills/**'
       - '.github/workflows/readiness-check.yml'
   push:
     branches:
@@ -33,8 +31,8 @@ on:
       - 'design/**'
       - 'dev/**'
       - 'engineering/**'
-      - 'tests/scripts/test_md_table.py'
-      - 'tests/scripts/test_nf_manifest_overrides.py'
+      - 'tests/**'
+      - '.claude/skills/**'
       - '.github/workflows/readiness-check.yml'
 
 jobs:
@@ -54,10 +52,8 @@ jobs:
           python3 -m pip install --upgrade pip
           pip install pyyaml pytest
 
-      - name: md_table + nf-manifest overrides unit tests
-        run: |
-          python3 -m pytest tests/scripts/test_md_table.py \
-            tests/scripts/test_nf_manifest_overrides.py -q
+      - name: pytest tests/ (full unit + integration suite)
+        run: python3 -m pytest tests/ -q
 
       # CI-safe contract materialization chain — tracked specs/ + policy-
       # derived manual_overrides (PR-16) → ready_for_build=true 자동 진입.

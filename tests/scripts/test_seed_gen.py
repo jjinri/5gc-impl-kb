@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import pathlib
 import subprocess
+import sys
 
 import yaml
 
@@ -40,7 +41,7 @@ def _setup(tmp_path: pathlib.Path, openapi: dict) -> pathlib.Path:
 def _run(tmp_path: pathlib.Path) -> dict:
     env = {**os.environ, "FIVEGC_REPO_ROOT": str(tmp_path)}
     out = subprocess.run(
-        [str(REPO / ".venv" / "bin" / "python3"), str(SCRIPT), "demo"],
+        [sys.executable, str(SCRIPT), "demo"],
         capture_output=True, text=True, cwd=tmp_path, timeout=30, env=env,
     )
     assert out.returncode == 0, out.stderr

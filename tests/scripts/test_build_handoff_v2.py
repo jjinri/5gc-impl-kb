@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import pathlib
 import subprocess
+import sys
 
 import yaml
 
@@ -14,7 +15,7 @@ SCRIPT = REPO / "design" / "scripts" / "build-handoff.py"
 def _run_build(nf: str, cwd: pathlib.Path) -> pathlib.Path:
     env = {**os.environ, "FIVEGC_REPO_ROOT": str(cwd)}
     out = subprocess.run(
-        [str(REPO / ".venv" / "bin" / "python3"), str(SCRIPT), nf],
+        [sys.executable, str(SCRIPT), nf],
         capture_output=True, text=True, cwd=cwd, timeout=120, env=env,
     )
     assert out.returncode == 0, out.stderr
@@ -120,7 +121,7 @@ def test_build_handoff_v2_missing_seed_errors(tmp_path: pathlib.Path) -> None:
     nf.mkdir(parents=True)
     env = {**os.environ, "FIVEGC_REPO_ROOT": str(tmp_path)}
     out = subprocess.run(
-        [str(REPO / ".venv" / "bin" / "python3"), str(SCRIPT), "demo2"],
+        [sys.executable, str(SCRIPT), "demo2"],
         capture_output=True, text=True, cwd=tmp_path, timeout=30, env=env,
     )
     assert out.returncode != 0

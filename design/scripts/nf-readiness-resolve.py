@@ -58,7 +58,7 @@ def _generated_normalized(doc: dict) -> dict:
 
 
 def run_bootstrap(write: bool) -> str:
-    cmd = [str(REPO / ".venv" / "bin" / "python3"), str(BOOTSTRAP_SCRIPT)]
+    cmd = [sys.executable, str(BOOTSTRAP_SCRIPT)]
     if write:
         cmd.append("--write")
     r = subprocess.run(cmd, capture_output=True, text=True, check=False)

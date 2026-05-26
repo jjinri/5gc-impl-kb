@@ -3,13 +3,14 @@ from __future__ import annotations
 import os
 import pathlib
 import subprocess
+import sys
 
 import yaml
 
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
 SCRIPT = REPO / "design" / "scripts" / "nf-readiness-resolve.py"
-PY = REPO / ".venv" / "bin" / "python3"
+PY = sys.executable
 
 
 def _run(args: list[str]) -> subprocess.CompletedProcess:
