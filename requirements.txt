@@ -2,3 +2,5 @@ pypdf
 python-docx
 pyyaml
 pytest>=8.0
+markdown>=3.10
+pygments>=2.20
