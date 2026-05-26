@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ONBOARDING — 5gc-impl-kb</title>
+<style>
+:root {
+  --fg: #1f2328;
+  --fg-muted: #57606a;
+  --bg: #ffffff;
+  --bg-alt: #f6f8fa;
+  --border: #d8dee4;
+  --border-muted: #eaeef2;
+  --accent: #0969da;
+  --accent-emphasis: #0550ae;
+  --hover-bg: #ddf4ff;
+  --success: #1a7f37;
+  --danger: #cf222e;
+  --neutral: #59636e;
+  --shadow-sm: 0 1px 0 rgba(31,35,40,.04);
+  --radius: 6px;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR",
+    "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono",
+    "D2Coding", monospace;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 1rem; }
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--fg);
+  background: var(--bg);
+}
+
+.wrap {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 3rem;
+  padding: 2rem 1.5rem 4rem;
+}
+
+aside.toc {
+  position: sticky;
+  top: 1rem;
+  align-self: start;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  padding-right: 1.5rem;
+  border-right: 1px solid var(--border-muted);
+  font-size: .87rem;
+}
+aside.toc::before {
+  content: "Contents";
+  display: block;
+  font-size: .72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--fg-muted);
+  margin-bottom: .65rem;
+  padding-bottom: .5rem;
+  border-bottom: 1px solid var(--border-muted);
+}
+aside.toc ul { list-style: none; padding-left: 0; margin: 0; }
+aside.toc ul ul { padding-left: 1rem; margin-top: .15rem; }
+aside.toc li { margin: .1rem 0; }
+aside.toc a {
+  display: block;
+  padding: .18rem .4rem;
+  color: var(--fg-muted);
+  text-decoration: none;
+  border-radius: 4px;
+  transition: background .1s, color .1s;
+}
+aside.toc a:hover { background: var(--bg-alt); color: var(--fg); }
+
+main { max-width: 980px; min-width: 0; }
+
+h1, h2, h3, h4, h5, h6 {
+  position: relative;
+  margin: 2rem 0 .65rem;
+  font-weight: 700;
+  scroll-margin-top: 1rem;
+}
+h1 {
+  font-size: 2rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: .35rem;
+  margin-top: 0;
+}
+h2 {
+  font-size: 1.45rem;
+  border-bottom: 1px solid var(--border-muted);
+  padding-bottom: .3rem;
+  margin-top: 2.5rem;
+}
+h3 { font-size: 1.18rem; margin-top: 1.75rem; }
+h4 {
+  font-size: .94rem;
+  margin-top: 1.25rem;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+/* Anchor link on heading hover */
+h1 .headerlink, h2 .headerlink, h3 .headerlink, h4 .headerlink {
+  position: absolute;
+  left: -1.4em;
+  width: 1.25em;
+  text-align: center;
+  color: var(--accent);
+  opacity: 0;
+  text-decoration: none;
+  font-weight: 400;
+  transition: opacity .1s;
+}
+h1:hover .headerlink, h2:hover .headerlink, h3:hover .headerlink,
+h4:hover .headerlink { opacity: 1; }
+.headerlink::before { content: "#"; }
+
+p { margin: .65rem 0; }
+ul, ol { padding-left: 1.5rem; margin: .5rem 0; }
+li { margin: .2rem 0; }
+li > p { margin: .25rem 0; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+code {
+  font-family: var(--font-mono);
+  font-size: .87em;
+  background: var(--bg-alt);
+  padding: .12em .35em;
+  border-radius: 3px;
+}
+pre {
+  background: var(--bg-alt);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius);
+  padding: .95rem 1.1rem;
+  overflow-x: auto;
+  font-size: .86rem;
+  line-height: 1.5;
+  margin: .8rem 0;
+  box-shadow: var(--shadow-sm);
+}
+pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+  border-radius: 0;
+}
+.codehilite pre { margin: 0; border: none; box-shadow: none; }
+.codehilite {
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin: .8rem 0;
+  box-shadow: var(--shadow-sm);
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0 1.5rem;
+  font-size: .9rem;
+  background: var(--bg);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+thead { background: var(--bg-alt); }
+thead th {
+  text-align: left;
+  padding: .55rem .8rem;
+  border-bottom: 2px solid var(--border);
+  font-weight: 600;
+  font-size: .8rem;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  white-space: nowrap;
+}
+tbody td {
+  padding: .55rem .8rem;
+  border-bottom: 1px solid var(--border-muted);
+  vertical-align: top;
+}
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: var(--hover-bg); transition: background .1s; }
+td code { font-size: .82em; }
+
+blockquote {
+  border-left: 4px solid var(--accent);
+  margin: 1rem 0;
+  padding: .35rem 1rem;
+  background: var(--bg-alt);
+  color: var(--fg-muted);
+}
+blockquote p:first-child { margin-top: 0; }
+blockquote p:last-child { margin-bottom: 0; }
+
+hr {
+  border: none;
+  border-top: 1px solid var(--border-muted);
+  margin: 2.5rem 0;
+}
+
+strong { font-weight: 600; }
+em { font-style: italic; color: var(--fg-muted); }
+
+/* Generated by render-doc.py footer */
+.render-footer {
+  margin-top: 4rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-muted);
+  font-size: .78rem;
+  color: var(--fg-muted);
+  text-align: center;
+}
+.render-footer code { font-size: .85em; }
+
+@media (max-width: 920px) {
+  .wrap {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    padding: 1rem 1rem 2.5rem;
+  }
+  aside.toc {
+    position: static;
+    max-height: none;
+    border-right: none;
+    border-bottom: 1px solid var(--border-muted);
+    padding-right: 0;
+    padding-bottom: 1rem;
+  }
+  main { max-width: 100%; }
+  table { font-size: .82rem; }
+}
+
+@media print {
+  aside.toc { display: none; }
+  .wrap { display: block; max-width: 100%; padding: 0; }
+  main { max-width: 100%; }
+  pre, table, .codehilite { box-shadow: none; border-color: #ccc; }
+  a { color: var(--fg); text-decoration: none; }
+  h1, h2 { page-break-after: avoid; }
+  table, pre, blockquote { page-break-inside: avoid; }
+}
+
+.badge-blocking {
+  display: inline-block;
+  padding: .05em .5em;
+  font-size: .78em;
+  font-weight: 600;
+  color: var(--danger);
+  background: #ffebe9;
+  border: 1px solid #ffc1ba;
+  border-radius: 999px;
+  font-style: normal;
+  letter-spacing: .02em;
+}
+
+pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #ffffcc }
+.codehilite { background: #f8f8f8; }
+.codehilite .c { color: #3D7B7B; font-style: italic } /* Comment */
+.codehilite .err { border: 1px solid #F00 } /* Error */
+.codehilite .k { color: #008000; font-weight: bold } /* Keyword */
+.codehilite .o { color: #666 } /* Operator */
+.codehilite .ch { color: #3D7B7B; font-style: italic } /* Comment.Hashbang */
+.codehilite .cm { color: #3D7B7B; font-style: italic } /* Comment.Multiline */
+.codehilite .cp { color: #9C6500 } /* Comment.Preproc */
+.codehilite .cpf { color: #3D7B7B; font-style: italic } /* Comment.PreprocFile */
+.codehilite .c1 { color: #3D7B7B; font-style: italic } /* Comment.Single */
+.codehilite .cs { color: #3D7B7B; font-style: italic } /* Comment.Special */
+.codehilite .gd { color: #A00000 } /* Generic.Deleted */
+.codehilite .ge { font-style: italic } /* Generic.Emph */
+.codehilite .ges { font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #E40000 } /* Generic.Error */
+.codehilite .gh { color: #000080; font-weight: bold } /* Generic.Heading */
+.codehilite .gi { color: #008400 } /* Generic.Inserted */
+.codehilite .go { color: #717171 } /* Generic.Output */
+.codehilite .gp { color: #000080; font-weight: bold } /* Generic.Prompt */
+.codehilite .gs { font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #800080; font-weight: bold } /* Generic.Subheading */
+.codehilite .gt { color: #04D } /* Generic.Traceback */
+.codehilite .kc { color: #008000; font-weight: bold } /* Keyword.Constant */
+.codehilite .kd { color: #008000; font-weight: bold } /* Keyword.Declaration */
+.codehilite .kn { color: #008000; font-weight: bold } /* Keyword.Namespace */
+.codehilite .kp { color: #008000 } /* Keyword.Pseudo */
+.codehilite .kr { color: #008000; font-weight: bold } /* Keyword.Reserved */
+.codehilite .kt { color: #B00040 } /* Keyword.Type */
+.codehilite .m { color: #666 } /* Literal.Number */
+.codehilite .s { color: #BA2121 } /* Literal.String */
+.codehilite .na { color: #687822 } /* Name.Attribute */
+.codehilite .nb { color: #008000 } /* Name.Builtin */
+.codehilite .nc { color: #00F; font-weight: bold } /* Name.Class */
+.codehilite .no { color: #800 } /* Name.Constant */
+.codehilite .nd { color: #A2F } /* Name.Decorator */
+.codehilite .ni { color: #717171; font-weight: bold } /* Name.Entity */
+.codehilite .ne { color: #CB3F38; font-weight: bold } /* Name.Exception */
+.codehilite .nf { color: #00F } /* Name.Function */
+.codehilite .nl { color: #767600 } /* Name.Label */
+.codehilite .nn { color: #00F; font-weight: bold } /* Name.Namespace */
+.codehilite .nt { color: #008000; font-weight: bold } /* Name.Tag */
+.codehilite .nv { color: #19177C } /* Name.Variable */
+.codehilite .ow { color: #A2F; font-weight: bold } /* Operator.Word */
+.codehilite .w { color: #BBB } /* Text.Whitespace */
+.codehilite .mb { color: #666 } /* Literal.Number.Bin */
+.codehilite .mf { color: #666 } /* Literal.Number.Float */
+.codehilite .mh { color: #666 } /* Literal.Number.Hex */
+.codehilite .mi { color: #666 } /* Literal.Number.Integer */
+.codehilite .mo { color: #666 } /* Literal.Number.Oct */
+.codehilite .sa { color: #BA2121 } /* Literal.String.Affix */
+.codehilite .sb { color: #BA2121 } /* Literal.String.Backtick */
+.codehilite .sc { color: #BA2121 } /* Literal.String.Char */
+.codehilite .dl { color: #BA2121 } /* Literal.String.Delimiter */
+.codehilite .sd { color: #BA2121; font-style: italic } /* Literal.String.Doc */
+.codehilite .s2 { color: #BA2121 } /* Literal.String.Double */
+.codehilite .se { color: #AA5D1F; font-weight: bold } /* Literal.String.Escape */
+.codehilite .sh { color: #BA2121 } /* Literal.String.Heredoc */
+.codehilite .si { color: #A45A77; font-weight: bold } /* Literal.String.Interpol */
+.codehilite .sx { color: #008000 } /* Literal.String.Other */
+.codehilite .sr { color: #A45A77 } /* Literal.String.Regex */
+.codehilite .s1 { color: #BA2121 } /* Literal.String.Single */
+.codehilite .ss { color: #19177C } /* Literal.String.Symbol */
+.codehilite .bp { color: #008000 } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #00F } /* Name.Function.Magic */
+.codehilite .vc { color: #19177C } /* Name.Variable.Class */
+.codehilite .vg { color: #19177C } /* Name.Variable.Global */
+.codehilite .vi { color: #19177C } /* Name.Variable.Instance */
+.codehilite .vm { color: #19177C } /* Name.Variable.Magic */
+.codehilite .il { color: #666 } /* Literal.Number.Integer.Long */
+</style>
+</head>
+<body>
+<div class="wrap">
+<aside class="toc" aria-label="목차">
+<div class="toc">
+<ul>
+<li><a href="#5gc-impl-kb-onboarding">5gc-impl-kb onboarding</a><ul>
+<li><a href="#1-workflow">1. 사람 workflow</a></li>
+<li><a href="#2-fresh-clone">2. Fresh clone 에서 필요한 필수 입력</a></li>
+<li><a href="#3-nf-readiness">3. /nf-readiness 내부 흐름</a></li>
+<li><a href="#4-kb">4. KB 산출물 독해 순서</a><ul>
+<li><a href="#agent">구현 agent</a></li>
+<li><a href="#reviewer">사람 reviewer</a></li>
+</ul>
+</li>
+<li><a href="#5-nf-implement">5. /nf-implement 입력과 금지사항</a></li>
+<li><a href="#6">6. 파일 관리 핵심</a></li>
+</ul>
+</li>
+</ul>
+</div>
+
+</aside>
+<main>
+<h1 id="5gc-impl-kb-onboarding">5gc-impl-kb onboarding<a class="headerlink" href="#5gc-impl-kb-onboarding" title="Link to this section">&para;</a></h1>
+<p>이 repo 는 3GPP spec 을 NF 구현용 <strong>knowledge base</strong> 로 변환한다. 사람은 원본 spec 을 준비하고, <code>/nf-readiness &lt;nf&gt;</code> 로 KB 를 만들고, <code>/nf-implement &lt;nf&gt;</code> 로 구현을 시작한다.</p>
+<h2 id="1-workflow">1. 사람 workflow<a class="headerlink" href="#1-workflow" title="Link to this section">&para;</a></h2>
+<div class="codehilite"><pre><span></span><code>specs/ 준비
+  ↓
+/nf-readiness &lt;nf&gt;
+  ↓
+readiness_pack_ready PASS
+  ↓
+/nf-implement &lt;nf&gt;
+</code></pre></div>
+
+<p>사람이 평소 직접 호출하는 skill 은 두 개다.</p>
+<table>
+<thead>
+<tr>
+<th>skill</th>
+<th>언제 호출</th>
+<th>결과</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/nf-readiness &lt;nf&gt;</code></td>
+<td>새 NF 또는 spec/계약 변경 후 구현 준비성을 만들 때</td>
+<td>NF별 implementation KB/readiness pack + <code>readiness_pack_ready</code> 판정</td>
+</tr>
+<tr>
+<td><code>/nf-implement &lt;nf&gt;</code></td>
+<td><code>readiness_pack_ready PASS</code> 후 실제 구현을 시작할 때</td>
+<td>Phase 1 tracer-bullet 부터 Phase 5 hardening 까지 구현 진행</td>
+</tr>
+</tbody>
+</table>
+<p>세부 skill (<code>/nf-spec-discover</code>, <code>/nf-contract-build</code>, <code>/nf-arch-design</code>, <code>/nf-impl-plan</code>, <code>/nf-eng-design</code> 등) 은 내부 subroutine 이다. 직접 호출은 새 계약이 필요할 때만 허용한다.</p>
+<h2 id="2-fresh-clone">2. Fresh clone 에서 필요한 필수 입력<a class="headerlink" href="#2-fresh-clone" title="Link to this section">&para;</a></h2>
+<p>clean checkout 에서 사람이 준비해야 하는 것은 원본 spec 뿐이다.</p>
+<div class="codehilite"><pre><span></span><code>specs/&lt;spec-number&gt;/
+  *.docx    # 3GPP normative text
+  *.yaml    # OpenAPI YAML, 있으면 contract/data-model 추출 입력
+</code></pre></div>
+
+<p>NSSF 예시.</p>
+<div class="codehilite"><pre><span></span><code>specs/29.531/TS29531_Nnssf_NSSelection.yaml
+specs/29.531/TS29531_Nnssf_NSSAIAvailability.yaml
+specs/29.531/&lt;29.531 docx&gt;
+</code></pre></div>
+
+<p>필수 source file 과 generated/cache file 구분은 <a href="./docs/artifact-management.md"><code>docs/artifact-management.md</code></a> 를 따른다.</p>
+<h2 id="3-nf-readiness">3. <code>/nf-readiness</code> 내부 흐름<a class="headerlink" href="#3-nf-readiness" title="Link to this section">&para;</a></h2>
+<p><code>/nf-readiness &lt;nf&gt;</code> 는 아래 subroutine 을 순차 실행한다. 실패하면 첫 blocking gate 에서 멈추고 <code>to_pass</code> 를 보고한다.</p>
+<table>
+<thead>
+<tr>
+<th>순서</th>
+<th>내부 skill/script</th>
+<th>목적</th>
+<th>주요 산출</th>
+<th>gate</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td><code>nf-readiness-resolve.py</code>, <code>nf-registry-bootstrap.py</code></td>
+<td>NF → primary spec resolve</td>
+<td><code>design/nf-registry.yaml</code></td>
+<td>confidence high 또는 manual override</td>
+</tr>
+<tr>
+<td>1</td>
+<td><code>/nf-spec-discover</code></td>
+<td>manifest/seed 생성</td>
+<td><code>design/&lt;nf&gt;/_manifest.yaml</code>, <code>_contract_seed.yaml</code></td>
+<td>specs ready</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>/nf-contract-build</code></td>
+<td>contract topic + handoff 생성</td>
+<td><code>design/&lt;nf&gt;/contract/**</code>, <code>handoff/&lt;nf&gt;/contract.yaml</code></td>
+<td>basic extraction</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>/nf-contract-check</code></td>
+<td>contract 구현 가능성 검사</td>
+<td><code>design/&lt;nf&gt;/_contract_status.yaml</code></td>
+<td><code>handoff_ready</code>, <code>contract_implementable</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>/nf-arch-design</code></td>
+<td>architecture/module KB 생성</td>
+<td><code>design/&lt;nf&gt;/architecture/**</code>, <code>module-decomposition/**</code></td>
+<td>-</td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>/nf-arch-status</code></td>
+<td>architecture 정합성 검사</td>
+<td><code>design/&lt;nf&gt;/_arch_status.yaml</code></td>
+<td><code>arch_consistent</code></td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>/nf-impl-plan</code></td>
+<td>implementation readiness pack 생성</td>
+<td><code>dev/&lt;nf&gt;/</code> KB files</td>
+<td>-</td>
+</tr>
+<tr>
+<td>7</td>
+<td><code>/nf-impl-status</code></td>
+<td>codegen 준비성 검사</td>
+<td><code>dev/&lt;nf&gt;/_impl_status.yaml</code></td>
+<td><code>impl_ready_for_codegen</code></td>
+</tr>
+<tr>
+<td>8</td>
+<td><code>/nf-eng-design</code></td>
+<td>library/DB/runtime/tool 결정 freeze</td>
+<td><code>engineering/&lt;nf&gt;/engineering-design.md</code></td>
+<td>-</td>
+</tr>
+<tr>
+<td>9</td>
+<td><code>/nf-eng-status</code></td>
+<td>engineering freeze 검사</td>
+<td><code>engineering/&lt;nf&gt;/_engineering_status.yaml</code></td>
+<td><code>eng_frozen</code></td>
+</tr>
+<tr>
+<td>10</td>
+<td><code>nf-readiness-status.py</code></td>
+<td>aggregate readiness 계산</td>
+<td><code>dev/&lt;nf&gt;/_readiness_status.yaml</code></td>
+<td><code>readiness_pack_ready</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>readiness_pack_ready</code> 가 PASS 해야 <code>/nf-implement</code> 가 시작된다.</p>
+<p>각 단계의 <em>파일별 목적·reader·tracking</em> 상세는 <a href="./docs/lifecycle-artifacts.md"><code>docs/lifecycle-artifacts.md</code></a> catalog 를 참고한다 (HTML mirror: <a href="./docs/lifecycle-artifacts.html"><code>lifecycle-artifacts.html</code></a>).</p>
+<h2 id="4-kb">4. KB 산출물 독해 순서<a class="headerlink" href="#4-kb" title="Link to this section">&para;</a></h2>
+<h3 id="agent">구현 agent<a class="headerlink" href="#agent" title="Link to this section">&para;</a></h3>
+<ol>
+<li><code>dev/&lt;nf&gt;/codegen-work-items.yaml</code> — 작업 그래프와 파일 단위 구현 queue.</li>
+<li><code>dev/&lt;nf&gt;/api-implementation-matrix.md</code> — operation/handler/test/persistence mapping.</li>
+<li><code>dev/&lt;nf&gt;/data-model-implementation-map.md</code> — generated/wrapper/handwritten classification.</li>
+<li><code>engineering/&lt;nf&gt;/engineering-design.md</code> — library/DB/runtime/tool/operator boundary 결정.</li>
+<li><code>design/&lt;nf&gt;/architecture/**</code>, <code>module-decomposition/**</code> — flow/state/error/module 책임.</li>
+<li><code>dev/&lt;nf&gt;/verification-plan.md</code> — gate 별 verification evidence.</li>
+<li><code>dev/&lt;nf&gt;/open-gaps-and-assumptions.md</code> — blocker 0 확인, non-blocker 조건 확인.</li>
+</ol>
+<h3 id="reviewer">사람 reviewer<a class="headerlink" href="#reviewer" title="Link to this section">&para;</a></h3>
+<ol>
+<li><code>dev/&lt;nf&gt;/implementation-readiness-review.md</code> — executive GO/NO-GO summary.</li>
+<li><code>dev/&lt;nf&gt;/design-adequacy-checklist.md</code> — 사람이 확인할 설계 적정성 checklist.</li>
+<li><code>dev/&lt;nf&gt;/spec-to-design-coverage.md</code> — spec→contract→design→task trace, spec reread 금지 확인.</li>
+<li><code>dev/&lt;nf&gt;/open-gaps-and-assumptions.md</code> — 운영 입력/assumption/deferred/test-gap 분류.</li>
+<li>Status cache (<code>_*_status.yaml</code>) 는 참고용이며 source of truth 가 아니다.</li>
+</ol>
+<h2 id="5-nf-implement">5. <code>/nf-implement</code> 입력과 금지사항<a class="headerlink" href="#5-nf-implement" title="Link to this section">&para;</a></h2>
+<p><code>/nf-implement &lt;nf&gt;</code> 는 Phase 0 에서 <code>readiness_pack_ready PASS</code> 를 다시 확인한다. 이후 <code>dev/&lt;nf&gt;/codegen-work-items.yaml</code> 를 기준으로 Phase 1~5 를 진행한다.</p>
+<p>금지.</p>
+<ul>
+<li>원본 OpenAPI/spec 을 구현 의미 재발견 용도로 다시 읽기.</li>
+<li>readiness pack 의 blocker 를 무시하고 코드 생성 시작.</li>
+<li>TLS/X.509/JWT primitive 직접 구현.</li>
+<li>local cache/status 를 사람이 source of truth 로 편집.</li>
+</ul>
+<p>허용.</p>
+<ul>
+<li>OpenAPI YAML 을 generator input 으로 사용.</li>
+<li>원본 spec 을 source trace/drift 확인 용도로만 확인.</li>
+<li>operator-provided 값(cert, DSN, JWKS endpoint 등)을 runtime config gap 으로 두고 구현 capability 를 먼저 만들기.</li>
+</ul>
+<h2 id="6">6. 파일 관리 핵심<a class="headerlink" href="#6" title="Link to this section">&para;</a></h2>
+<ul>
+<li><code>specs/</code> 원본과 tracked KB 산출은 보존한다.</li>
+<li><code>design/&lt;nf&gt;/_*.yaml</code>, <code>design/&lt;nf&gt;/contract/**</code>, <code>handoff/&lt;nf&gt;/contract.yaml</code>, <code>_*_status.yaml</code> 는 재생성 가능한 local cache 다.</li>
+<li><code>dev/&lt;nf&gt;/</code> 의 readiness pack 은 NF 구현 KB 이며 git 추적 대상이다.</li>
+<li><code>docs/plans/**</code>, <code>docs/retros/**</code> 는 history 이며 현재 workflow source of truth 가 아니다.</li>
+</ul>
+<footer class="render-footer">
+Generated from <code>/home/jjinri/AI/5gc-impl-kb/ONBOARDING.md</code> by <code>design/scripts/render-doc.py</code>. Source MD 가 진실 출처 — 본 HTML 은 build artifact, 직접 편집 금지.
+</footer>
+</main>
+</div>
+</body>
+</html>
