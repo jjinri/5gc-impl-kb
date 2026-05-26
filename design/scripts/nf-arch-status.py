@@ -8,7 +8,7 @@ Usage:
     --no-write   _arch_status.yaml 저장 없이 stdout 만 보고
 
 본 script 는 architecture 단계 status 검사다. contract 단계는 nf-status.py 의 책임이며
-본 script 는 그것과 분리된다 (ADR-0001 L54 follow-up).
+본 script 는 그것과 분리된다 (ADR-0001 § Migration notes (2026-05-14) follow-up).
 
 설계 원칙 (plan docs/plans/2026-05-18-arch-impl-status-validator-plan.md).
   - read-only. 어떤 산출도 수정 안 함. _arch_status.yaml 만 기계가 매번 새로 씀.
