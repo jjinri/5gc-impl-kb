@@ -7,7 +7,7 @@ allowed-tools: Bash(.venv/bin/python3 design/scripts/nf-arch-status.py *) Bash(c
 
 # nf-arch-status — architecture 자기 일관성 검사
 
-architecture 단계 status 검사다. ADR-0001 L54 가 예고한 "separate future skill" — contract 단계 `/nf-contract-check` 와 책임이 분리된다.
+architecture 단계 status 검사다. ADR-0001 § Migration notes (2026-05-14) 가 예고한 "separate future skill" — contract 단계 `/nf-contract-check` 와 책임이 분리된다.
 
 ## 입력
 - `<nf>` — NF 이름.
