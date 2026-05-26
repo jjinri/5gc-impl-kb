@@ -192,6 +192,25 @@ LEGACY_FM_KEYS = {
 
 # ─── marker helpers ─────────────────────────────────────────────────
 
+def _cell(value) -> str:
+    """Markdown table cell normalizer (PR-12 — Pane 2 review #60 nit fix).
+    - stringify
+    - strip leading/trailing whitespace
+    - newline → single space (한 cell 한 line 유지)
+    - `|` → `\\|` (cell separator escape)
+
+    모든 table-cell 출력에서 본 helper 를 통과시킨다 — id/category 등 짧은
+    string 도 future input 의 unexpected `|`/newline 으로부터 hardening.
+    """
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if not text:
+        return ""
+    text = " ".join(text.split())  # collapse all whitespace runs to one space
+    return text.replace("|", r"\|")
+
+
 def auto_block(aid: str, body: str) -> str:
     return f"<!-- AUTO:{aid}:start -->\n{body}\n<!-- AUTO:{aid}:end -->"
 
@@ -321,12 +340,11 @@ def render_gaps_table(nf: str, config: dict) -> str:
     for r in rows:
         if not isinstance(r, dict):
             continue
-        rid = str(r.get("id", "?"))
-        cat = str(r.get("category", "?"))
-        desc = str(r.get("description", "?")).replace("\n", " ").strip()
-        desc = desc.replace("|", r"\|")
-        owner = str(r.get("owner", "?")).replace("|", r"\|")
-        target = str(r.get("target_resolution", "?")).replace("|", r"\|")
+        rid = _cell(r.get("id", "?"))
+        cat = _cell(r.get("category", "?"))
+        desc = _cell(r.get("description", "?"))
+        owner = _cell(r.get("owner", "?"))
+        target = _cell(r.get("target_resolution", "?"))
         lines.append(f"| {rid} | {cat} | {desc} | {owner} | {target} |")
     return "\n".join(lines)
 
@@ -351,10 +369,11 @@ def render_phase_integration_map(nf: str, config: dict) -> str:
     for phase_id, body in phases.items():
         if not isinstance(body, dict):
             continue
-        desc = str(body.get("description", "")).replace("|", r"\|")
+        pid = _cell(phase_id)
+        desc = _cell(body.get("description", ""))
         wis = body.get("work_items") or []
-        wis_str = ", ".join(f"`{w}`" for w in wis) if wis else "_none_"
-        lines.append(f"| `{phase_id}` | {desc} | {wis_str} |")
+        wis_str = ", ".join(f"`{_cell(w)}`" for w in wis) if wis else "_none_"
+        lines.append(f"| `{pid}` | {desc} | {wis_str} |")
     return "\n".join(lines)
 
 
@@ -422,16 +441,15 @@ def render_engineering_decisions_summary(nf: str, config: dict) -> str:
     for name, row in slots.items():
         if not isinstance(row, dict):
             continue
-        decision_raw = str(row.get("decision", "?"))
-        # 첫 줄만 + 80자 제한, 표 너비 보호.
-        decision = decision_raw.splitlines()[0].strip()
-        if len(decision) > 80:
-            decision = decision[:77] + "..."
-        # 표 cell 안 `|` escape.
-        decision = decision.replace("|", r"\|")
-        status = str(row.get("status", "?"))
-        date = str(row.get("date", "?"))
-        lines.append(f"| `{name}` | {decision} | {status} | {date} |")
+        # decision 은 첫 줄만 + 80자 제한 후 _cell 통과.
+        decision_first = str(row.get("decision", "?")).splitlines()[0].strip()
+        if len(decision_first) > 80:
+            decision_first = decision_first[:77] + "..."
+        slot_name = _cell(name)
+        decision = _cell(decision_first)
+        status = _cell(row.get("status", "?"))
+        date = _cell(row.get("date", "?"))
+        lines.append(f"| `{slot_name}` | {decision} | {status} | {date} |")
     return "\n".join(lines)
 
 
@@ -452,16 +470,17 @@ def render_deferred_decisions_trace(nf: str, config: dict) -> str:
     lines.append("| id | status | resolved by | ratified_by | date |")
     lines.append("|---|---|---|---|---|")
     for r in rows:
-        rid = str(r.get("id", "?"))
-        status = str(r.get("status", "?"))
-        if status == "decided":
-            resolved = f"slot `{r.get('references_slot', '?')}`"
-        elif status == "explicitly_out_of_scope":
+        rid = _cell(r.get("id", "?"))
+        status_raw = str(r.get("status", "?"))
+        status = _cell(status_raw)
+        if status_raw == "decided":
+            resolved = f"slot `{_cell(r.get('references_slot', '?'))}`"
+        elif status_raw == "explicitly_out_of_scope":
             resolved = "_out of scope_"
         else:
-            resolved = f"_{status}_"
-        rb = str(r.get("ratified_by", "?"))
-        date = str(r.get("date", "?"))
+            resolved = f"_{_cell(status_raw)}_"
+        rb = _cell(r.get("ratified_by", "?"))
+        date = _cell(r.get("date", "?"))
         lines.append(f"| `{rid}` | {status} | {resolved} | {rb} | {date} |")
     return "\n".join(lines)
 
