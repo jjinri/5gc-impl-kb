@@ -18,6 +18,9 @@ baseline_mandates:
       NF 바이너리는 TLS-capable HTTP/2 stack 을 *내부에* 보유한다.
       외부 sidecar 의존 단일값으로 close 금지.
     applies_to: all_nfs
+    verification:
+      kind: security
+      test_id_prefix: t-tls-*
 
   - id: M2
     name: mtls_code_path
@@ -25,12 +28,18 @@ baseline_mandates:
       server/client certificate, CA bundle, peer verification 을 NF 가
       *수행할 수 있는* code path 가 존재한다.
     applies_to: all_nfs
+    verification:
+      kind: security
+      test_id_prefix: t-mtls-*
 
   - id: M3
     name: inbound_oauth2_bearer_validation_code_path
     requirement: >-
       NF 가 inbound access token 을 *검증할 수 있는* code path 가 존재한다.
     applies_to: all_nfs
+    verification:
+      kind: security
+      test_id_prefix: t-oauth2-inbound-*
 
   - id: M4
     name: outbound_oauth2_token_attach_code_path
@@ -38,6 +47,9 @@ baseline_mandates:
       NF 가 outbound 호출에 access token 을 *부착할 수 있는* code path 가
       존재한다 (NRF token endpoint 호출 + peer NF 호출 양쪽).
     applies_to: all_nfs
+    verification:
+      kind: security
+      test_id_prefix: t-oauth2-outbound-*
 
   - id: M5
     name: dev_disable_with_production_path_present
@@ -46,6 +58,9 @@ baseline_mandates:
       *production-capable code path 자체는 항상 존재* 한다. dev profile 에서
       disable 했다는 이유로 production code path 를 누락 금지.
     applies_to: all_nfs
+    verification:
+      kind: security
+      test_id_prefix: "(test-matrix kind=security 종합)"
 
   - id: M6
     name: third_party_library_mandate
@@ -55,6 +70,9 @@ baseline_mandates:
       libjwt, jansson). 후보 비교는 NF 별 engineering-design.md 의
       `sbi_server_stack`/`sbi_client_stack`/관련 slot 에서 수행.
     applies_to: all_nfs
+    verification:
+      kind: code review
+      test_id_prefix: "—"
 
   - id: M7
     name: profile_spec_depth_externalized
@@ -66,6 +84,9 @@ baseline_mandates:
       않고, *operator/library default + config policy* 로 설정 가능하게
       둔다. compliance 는 library + operator-provided config 책임.
     applies_to: all_nfs
+    verification:
+      kind: operator/library 외부 처리
+      test_id_prefix: "—"
 
 # NF-specific security role (baseline 외 추가 가능).
 nf_specific_role:

@@ -89,6 +89,13 @@ policies:
         - name
         - requirement
         - applies_to
+        # PR-14 — generator render path 의무 입력.
+        - verification
+      verification_shape:
+        type: object
+        required:
+          - kind
+          - test_id_prefix
     nf_specific_role_required:
       - allowed
       - weakening_prohibited

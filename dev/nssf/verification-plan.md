@@ -76,7 +76,7 @@ user_sections:
 <!-- AUTO:security-gate-matrix:start -->
 ### Security Gate Matrix
 
-`design/policies/security-baseline.yaml` `baseline_mandates` (ADR-0004) derive — verification 적용 매핑. policy 변경 시 본 matrix 갱신.
+`design/policies/security-baseline.yaml` `baseline_mandates` (ADR-0004) derive — verification 적용 매핑. policy 변경 시 본 matrix 갱신. 각 mandate 행의 `verification.kind` / `verification.test_id_prefix` 가 source.
 
 | mandate | name | verification kind | test id prefix |
 |---|---|---|---|

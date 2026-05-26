@@ -386,25 +386,14 @@ def render_phase_integration_map(nf: str, config: dict) -> str:
     return "\n".join(lines)
 
 
-# M{n} → verification kind / test ID prefix mapping. Hardcoded (현재 NSSF
-# scope 의 mandate 5/6/7 는 code-level verification 또는 외부 처리라 test
-# ID prefix 없음). policy schema 가 안정되면 security-baseline.yaml 의
-# 각 mandate 행에 `verification` block 으로 promote 후 generator 가 그를
-# 사용 (backlog).
-SECURITY_MANDATE_VERIFICATION = {
-    "M1": ("security", "t-tls-*"),
-    "M2": ("security", "t-mtls-*"),
-    "M3": ("security", "t-oauth2-inbound-*"),
-    "M4": ("security", "t-oauth2-outbound-*"),
-    "M5": ("security", "(test-matrix kind=security 종합)"),
-    "M6": ("code review", "—"),
-    "M7": ("operator/library 외부 처리", "—"),
-}
-
-
 def render_security_gate_matrix(nf: str) -> str:
     """H3 render — `## Security` H2 아래 sub-section. security-baseline
-    policy 의 M1~M7 mandate 와 verification 매핑."""
+    policy 의 M1~M7 mandate 와 verification 매핑.
+
+    PR-14 (2026-05-26) — verification kind / test_id_prefix 는 policy
+    의 각 baseline_mandates[i].verification 에서 read. generator 의
+    hardcoded mapping 제거 (Pane 2 #63 final-goal item 1).
+    """
     baseline = load_security_baseline()
     mandates = baseline.get("baseline_mandates") or []
     if not mandates:
@@ -414,7 +403,8 @@ def render_security_gate_matrix(nf: str) -> str:
     lines = ["### Security Gate Matrix", ""]
     lines.append("`design/policies/security-baseline.yaml` `baseline_mandates`"
                  " (ADR-0004) derive — verification 적용 매핑. policy 변경 시"
-                 " 본 matrix 갱신.")
+                 " 본 matrix 갱신. 각 mandate 행의 `verification.kind` /"
+                 " `verification.test_id_prefix` 가 source.")
     lines.append("")
     lines.append("| mandate | name | verification kind | test id prefix |")
     lines.append("|---|---|---|---|")
@@ -423,9 +413,14 @@ def render_security_gate_matrix(nf: str) -> str:
             continue
         mid = _cell(m.get("id", "?"))
         name = _cell(m.get("name", "?"))
-        kind, prefix = SECURITY_MANDATE_VERIFICATION.get(
-            str(m.get("id", "")), ("(미매핑)", "—"))
-        lines.append(f"| `{mid}` | `{name}` | {_cell(kind)} | {_cell(prefix)} |")
+        ver = m.get("verification") or {}
+        if isinstance(ver, dict):
+            kind = _cell(ver.get("kind", "(미매핑)"))
+            prefix = _cell(ver.get("test_id_prefix", "—"))
+        else:
+            kind = _cell("(미매핑)")
+            prefix = _cell("—")
+        lines.append(f"| `{mid}` | `{name}` | {kind} | {prefix} |")
     return "\n".join(lines)
 
 
