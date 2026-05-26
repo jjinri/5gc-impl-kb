@@ -19,6 +19,12 @@ PR-7 확장 — multi-target:
     slots derive 의 13 slot 요약 table. config-driven render, 2번째
     파일 적용 — generator multi-target scaling 증명.
 
+PR-8 확장 — 3번째 target + policy-derived AUTO:
+  * dev/<nf>/test-matrix.md 신규 target.
+  * AUTO security-coverage-summary — design/policies/security-baseline.yaml
+    (M1~M7 mandate) + test-matrix.md `## Test Inventory` 의 kind=security
+    test count cross-source derive. policy 변경 시 render 갱신 증명.
+
 AUTO/USER marker 패턴 (materialize-contract.py reference 모범). USER 영역
 사람 산문 보존 — generator 가 만지지 않음.
 
@@ -65,6 +71,19 @@ TARGETS = {
             "references-body",
         ],
     },
+    "dev/<nf>/test-matrix.md": {
+        "auto_ids": [
+            "security-coverage-summary",
+        ],
+        "user_ids": [
+            "intro-note",
+            "purpose-body",
+            "test-inventory-body",
+            "coverage-rules-body",
+            "open-questions-body",
+            "references-body",
+        ],
+    },
 }
 
 # References — fixed per NF source-of-truth list. PR-5+ 가 readiness-config
@@ -107,12 +126,14 @@ REFERENCES_BY_NF = {
 TARGET_TITLES = {
     "dev/<nf>/traceability.md": "{nf_upper} Traceability",
     "dev/<nf>/implementation-plan.md": "{nf_upper} Implementation Plan",
+    "dev/<nf>/test-matrix.md": "{nf_upper} Test Matrix",
 }
 
 # Frontmatter 의 stage 라벨.
 TARGET_STAGES = {
     "dev/<nf>/traceability.md": "implementation-planning",
     "dev/<nf>/implementation-plan.md": "implementation-planning",
+    "dev/<nf>/test-matrix.md": "implementation-planning",
 }
 
 # nf-impl-status.py DEV_FM_KEYS 와 정합 — generator 출력이 검사를 통과해야
@@ -240,6 +261,50 @@ def render_test_inventory_index(nf: str) -> str:
             lines.append(f"- `{tid}`")
         lines.append("")
     return "\n".join(lines).rstrip()
+
+
+def load_security_baseline() -> dict:
+    path = REPO / "design" / "policies" / "security-baseline.yaml"
+    if not path.is_file():
+        return {}
+    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+
+
+def render_security_coverage_summary(nf: str) -> str:
+    """H3 render — `## Coverage Rules` H2 아래 sub-section. cross-source
+    derive: design/policies/security-baseline.yaml (M1~M7 mandate) +
+    dev/<nf>/test-matrix.md `## Test Inventory` 의 kind=security row count."""
+    baseline = load_security_baseline()
+    mandates = baseline.get("baseline_mandates") or []
+    rows = parse_test_inventory(nf)
+    sec_tests = [tid for tid, kind in rows if kind == "security"]
+
+    lines = ["### Security Coverage Summary", ""]
+    if not mandates:
+        lines.append("_design/policies/security-baseline.yaml `baseline_mandates`"
+                     " 부재 — render skip._")
+        return "\n".join(lines)
+    lines.append("`design/policies/security-baseline.yaml` (ADR-0004 baseline) "
+                 f"+ 본 파일 `## Test Inventory` cross-source derive — "
+                 f"총 {len(mandates)} mandate, kind=security test {len(sec_tests)}개. "
+                 "두 source 중 하나가 바뀌면 본 summary 가 갱신된다.")
+    lines.append("")
+    lines.append(f"**kind=security test count**: {len(sec_tests)}.")
+    lines.append("")
+    lines.append("**Project security mandates (ADR-0004)**:")
+    lines.append("")
+    for m in mandates:
+        if not isinstance(m, dict):
+            continue
+        mid = str(m.get("id", "?"))
+        name = str(m.get("name", "?"))
+        applies = str(m.get("applies_to", "?"))
+        lines.append(f"- `{mid}` `{name}` (applies_to={applies}).")
+    lines.append("")
+    lines.append("Per-mandate test 매핑은 `## Test Inventory` 의 `refs` 컬럼"
+                 " (예 `ADR-0004` cross-ref) 과 dev/<nf>/traceability.md 의"
+                 " `## Module → Test` 표를 참조.")
+    return "\n".join(lines)
 
 
 def render_engineering_decisions_summary(nf: str, config: dict) -> str:
@@ -470,10 +535,83 @@ def render_implementation_plan(nf: str, current_text: str, config: dict) -> str:
     return "\n".join(parts).rstrip() + "\n"
 
 
+def render_test_matrix(nf: str, current_text: str, config: dict) -> str:
+    target = "dev/<nf>/test-matrix.md"
+    schema = TARGETS[target]
+    autos = {
+        "security-coverage-summary": render_security_coverage_summary(nf),
+    }
+    users_existing = extract_blocks(current_text, "USER") if current_text else {}
+
+    def user_body(uid: str) -> str:
+        body = users_existing.get(uid)
+        if body is None or not body.strip():
+            return f"TODO: {uid} — 사람이 보강 (fresh placeholder)."
+        return body
+
+    title = TARGET_TITLES[target].format(nf_upper=nf.upper())
+    stage = TARGET_STAGES[target]
+    ratified_date = str(config.get("ratified_date", ""))
+
+    fm_lines = [
+        "---",
+        f"nf: {nf}",
+        f"stage: {stage}",
+        "status: draft",
+        f"source_architecture: design/{nf}/architecture",
+        f"source_contract: handoff/{nf}/contract.yaml",
+        f"generated_date: '{ratified_date}'",
+        "generator: design/scripts/nf-readiness-pack-generate.py",
+        f"source_readiness_config: design/{nf}/readiness-config.yaml",
+        "generated_sections:",
+    ]
+    for aid in schema["auto_ids"]:
+        fm_lines.append(f"  - {aid}")
+    fm_lines.append("user_sections:")
+    for uid in schema["user_ids"]:
+        fm_lines.append(f"  - {uid}")
+    fm_lines.append("---")
+    fm = "\n".join(fm_lines)
+
+    parts = [
+        fm,
+        "",
+        f"# {title}",
+        "",
+        user_block("intro-note", user_body("intro-note")),
+        "",
+        "## Purpose",
+        "",
+        user_block("purpose-body", user_body("purpose-body")),
+        "",
+        "## Test Inventory",
+        "",
+        user_block("test-inventory-body", user_body("test-inventory-body")),
+        "",
+        "## Coverage Rules",
+        "",
+        user_block("coverage-rules-body", user_body("coverage-rules-body")),
+        "",
+        auto_block("security-coverage-summary",
+                   autos["security-coverage-summary"]),
+        "",
+        "## Open Questions",
+        "",
+        user_block("open-questions-body", user_body("open-questions-body")),
+        "",
+        "## References",
+        "",
+        user_block("references-body", user_body("references-body")),
+        "",
+    ]
+    return "\n".join(parts).rstrip() + "\n"
+
+
 # Target dispatch — file template → renderer.
 RENDERERS = {
     "dev/<nf>/traceability.md": render_traceability,
     "dev/<nf>/implementation-plan.md": render_implementation_plan,
+    "dev/<nf>/test-matrix.md": render_test_matrix,
 }
 
 
