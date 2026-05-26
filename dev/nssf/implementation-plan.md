@@ -4,13 +4,24 @@ stage: implementation-planning
 status: draft
 source_architecture: design/nssf/architecture
 source_contract: handoff/nssf/contract.yaml
-generated_date: 2026-05-14
+generated_date: '2026-05-26'
+generator: design/scripts/nf-readiness-pack-generate.py
+source_readiness_config: design/nssf/readiness-config.yaml
+generated_sections:
+  - engineering-decisions-summary
+user_sections:
+  - scope-body
+  - phases-body
+  - test-plan-body
+  - open-risks-body
+  - references-body
 ---
 
 # NSSF Implementation Plan
 
 ## Scope
 
+<!-- USER:scope-body:start -->
 본 implementation plan 은 full NSSF (Nnssf_NSSelection 1 op + Nnssf_NSSAIAvailability 7 op = 8 operation) 와 outbound notification client (NSSF → AMF callback) 를 *구현 작업 단위* 로 변환한다.
 
 본 plan 은 `docs/adr/ADR-0004-project-security-baseline.md` (TLS/mTLS/OAuth2 capability 의무 source) + `engineering/nssf/engineering-design.md` (선택된 lib/구조) 두 source 를 따른다.
@@ -49,9 +60,33 @@ generated_date: 2026-05-14
 - TLS / X.509 / JWT / JWS primitive 직접 구현 (ADR-0004 의무 6 — maintained third-party library 만).
 - 38.413 — AMF reallocation via RAN (NGAP REROUTE NAS REQUEST) 미구현 결정 유지. 운영 결정 변경 시 별도 사이클.
 - contract markdown body (현재 handoff yaml 까지만 — `design/nssf/contract/**/*.md` 의 AUTO/USER 본문 작성은 별도 nf-build 사이클).
+<!-- USER:scope-body:end -->
+
+<!-- AUTO:engineering-decisions-summary:start -->
+### Engineering Decisions Summary
+
+`design/nssf/readiness-config.yaml` `implementation.slots` derive — 총 13 slot. config 변경 시 본 summary 가 같이 갱신된다.
+
+| slot | decision | status | ratified |
+|---|---|---|---|
+| `language` | 구현 언어 = C (C11) | decided | 2026-05-19 |
+| `runtime` | runtime = native POSIX 프로세스 (managed runtime/VM 없음) | decided | 2026-05-19 |
+| `deployment_topology` | 배포 = standalone container pod with NF internal TLS production-capable; mesh s... | decided | 2026-05-21 |
+| `module_source_layout` | 단일 CMake project, arch 4 모듈별 src/ 디렉터리 | decided | 2026-05-19 |
+| `sbi_server_stack` | SBI server = nghttp2 기반 h2 + h2c configurable, epoll 단일 프로세스. TLS 는 tls_secur... | decided | 2026-05-21 |
+| `sbi_client_stack` | outbound SBI client 필요 (NotificationDispatcher→AMF callback, NRF discovery + ... | decided | 2026-05-21 |
+| `schema_codegen` | OpenAPI codegen = openapi-generator(C), 생성물 repo commit + CI drift gate | decided | 2026-05-19 |
+| `tls_security` | TLS = NF internal (app_library backend OpenSSL). production-capable code path... | decided | 2026-05-21 |
+| `oauth2_token_validation` | inbound OAuth2 bearer token validation = NF internal production-capable (ADR-... | decided | 2026-05-21 |
+| `persistence` | persistence = PostgreSQL(RDBMS) 단일 backend, libpq 드라이버 | decided | 2026-05-19 |
+| `telemetry` | logging=stdlib structured, metrics=prometheus-client-c, tracing=W3C header 전파... | decided | 2026-05-19 |
+| `configuration_management` | config = inih(INI) 파서 + env override; secret 외부화(ref-only). security capabili... | decided | 2026-05-21 |
+| `test_build_tooling` | build=CMake, test=Unity, lint=clang-tidy, static-analysis=clang-analyzer; 의존 ... | decided | 2026-05-19 |
+<!-- AUTO:engineering-decisions-summary:end -->
 
 ## Phases
 
+<!-- USER:phases-body:start -->
 | Phase | 목표 | 핵심 모듈 | 핵심 task prefix |
 |---|---|---|---|
 | P1 | SBI inbound transport (HTTP/2 + TLS + mTLS + inbound OAuth2 production-capable) + 공통 utility 골격 | (공통) | `nssf-transport-*`, `nssf-request-validator`, `nssf-problem-details-mapper`, `nssf-observability` |
@@ -73,9 +108,11 @@ Phase 간 의존성.
 - P7 ↑ P2 ~ P5.
 
 병렬 가능 — P2 와 (P3 + P6) 는 별도 모듈이라 동시 진행 가능. P5 는 P3·P4 commit 후 시작.
+<!-- USER:phases-body:end -->
 
 ## Test Plan
 
+<!-- USER:test-plan-body:start -->
 본 plan 단계는 *test seam* 만 정의. 구체 test 케이스는 `test-matrix.md` 가 진실 출처.
 
 | 종류 | 범위 | seam |
@@ -98,9 +135,11 @@ Phase 간 의존성.
 - P5 — security 시나리오 (outbound TLS/mTLS, OAuth2 outbound token acquire/attach) contract test.
 - P6 — repository interface contract test (PostgreSQL backend 단일). test seam 의 in-memory mock 은 abstraction 검증, production 동작은 PostgreSQL 기준.
 - P7 — `subscription-create-and-notify`, `notification-retry-on-5xx`, `notification-dead-letter`, `correlation-end-to-end`, `graceful-shutdown-drain`, security 종합 (`tls-handshake`, `mtls-peer-reject`, `oauth2-inbound-*`, `oauth2-outbound-*`) 등 시나리오.
+<!-- USER:test-plan-body:end -->
 
 ## Open Risks
 
+<!-- USER:open-risks-body:start -->
 - **correlation-id 부재 시 정책** — observability.md open question. 무조건 생성으로 default 가정. 운영팀이 거부할 가능성 있음.
 - **callback 4xx 재발 시 자동 deactivate** — error-propagation.md open question. P5 task 가 *log 만, 자동 비활성화 안 함* 으로 default 가정.
 - **AMF reallocation via RAN 미구현** — 38.413 운영 결정 보류. 후속 사이클에서 hooking 자리 마련 필요 시 architecture 갱신부터.
@@ -109,9 +148,11 @@ Phase 간 의존성.
 - ~~subscription persistence backend default~~ — closed. engineering-design 결정 = PostgreSQL/libpq 단일.
 - ~~schema 생성 전략~~ — closed. engineering-design 결정 = openapi-generator(C) + cJSON pinned/vendored.
 - ~~SBI TLS / OAuth2 외부화 vs 내부 결정~~ — closed. ADR-0004 baseline = 내부 production-capable code path 의무.
+<!-- USER:open-risks-body:end -->
 
 ## References
 
+<!-- USER:references-body:start -->
 - `docs/adr/ADR-0004-project-security-baseline.md` — TLS / mTLS / OAuth2 production-capable code path 의무 source.
 - `engineering/nssf/engineering-design.md` — eng_frozen 결정 (language=C, http=nghttp2, persistence=PostgreSQL/libpq, codegen=openapi-generator+cJSON, TLS/OAuth2 lib).
 - `design/nssf/architecture/` — overview, module-boundaries, request-flow, runtime-model, state-persistence, configuration-strategy, error-propagation, observability, test-strategy.
@@ -120,3 +161,4 @@ Phase 간 의존성.
 - `handoff/nssf/contract.yaml` — 8 API topic + 핵심 data-model.
 - `dev/nssf/tasks.yaml`, `dev/nssf/test-matrix.md`, `dev/nssf/traceability.md`.
 - `docs/plans/2026-05-14-nssf-arch-dev-full-scope-rework-plan.md`.
+<!-- USER:references-body:end -->

@@ -13,6 +13,12 @@ PR-6 확장 — AUTO 추가:
     table render. config 가 source 라 readiness-config 변경 시 자동 갱신
     (config-driven render 증명).
 
+PR-7 확장 — multi-target:
+  * dev/<nf>/implementation-plan.md 신규 target.
+  * AUTO engineering-decisions-summary — readiness-config.implementation.
+    slots derive 의 13 slot 요약 table. config-driven render, 2번째
+    파일 적용 — generator multi-target scaling 증명.
+
 AUTO/USER marker 패턴 (materialize-contract.py reference 모범). USER 영역
 사람 산문 보존 — generator 가 만지지 않음.
 
@@ -45,6 +51,18 @@ TARGETS = {
             "contract-module-table",
             "module-test-table",
             "open-gaps",
+        ],
+    },
+    "dev/<nf>/implementation-plan.md": {
+        "auto_ids": [
+            "engineering-decisions-summary",
+        ],
+        "user_ids": [
+            "scope-body",
+            "phases-body",
+            "test-plan-body",
+            "open-risks-body",
+            "references-body",
         ],
     },
 }
@@ -88,11 +106,13 @@ REFERENCES_BY_NF = {
 # Title per target. NF 별 NF 라벨 + suffix.
 TARGET_TITLES = {
     "dev/<nf>/traceability.md": "{nf_upper} Traceability",
+    "dev/<nf>/implementation-plan.md": "{nf_upper} Implementation Plan",
 }
 
 # Frontmatter 의 stage 라벨.
 TARGET_STAGES = {
     "dev/<nf>/traceability.md": "implementation-planning",
+    "dev/<nf>/implementation-plan.md": "implementation-planning",
 }
 
 # nf-impl-status.py DEV_FM_KEYS 와 정합 — generator 출력이 검사를 통과해야
@@ -222,6 +242,39 @@ def render_test_inventory_index(nf: str) -> str:
     return "\n".join(lines).rstrip()
 
 
+def render_engineering_decisions_summary(nf: str, config: dict) -> str:
+    """H3 render — `## Scope` H2 아래 sub-section. readiness-config.
+    implementation.slots 의 13 slot 을 요약 table 로 render. config-driven."""
+    slots = (config.get("implementation") or {}).get("slots") or {}
+    if not slots:
+        return ("### Engineering Decisions Summary\n\n"
+                "_readiness-config.implementation.slots 부재 — render skip._")
+
+    lines = ["### Engineering Decisions Summary", ""]
+    lines.append(f"`design/{nf}/readiness-config.yaml` `implementation.slots`"
+                 f" derive — 총 {len(slots)} slot. config 변경 시 본 summary 가"
+                 " 같이 갱신된다.")
+    lines.append("")
+    lines.append("| slot | decision | status | ratified |")
+    lines.append("|---|---|---|---|")
+    # slot 순서는 config 의 insertion order 보존 (yaml.safe_load 결과는 dict
+    # 순서 = 파일 순서).
+    for name, row in slots.items():
+        if not isinstance(row, dict):
+            continue
+        decision_raw = str(row.get("decision", "?"))
+        # 첫 줄만 + 80자 제한, 표 너비 보호.
+        decision = decision_raw.splitlines()[0].strip()
+        if len(decision) > 80:
+            decision = decision[:77] + "..."
+        # 표 cell 안 `|` escape.
+        decision = decision.replace("|", r"\|")
+        status = str(row.get("status", "?"))
+        date = str(row.get("date", "?"))
+        lines.append(f"| `{name}` | {decision} | {status} | {date} |")
+    return "\n".join(lines)
+
+
 def render_deferred_decisions_trace(nf: str, config: dict) -> str:
     """H3-only render — `## Open Gaps` H2 아래 sub-section. config 의
     deferred_decisions.rows 를 table 로 render. status=decided 행은
@@ -346,9 +399,81 @@ def render_traceability(nf: str, current_text: str, config: dict) -> str:
     return "\n".join(parts).rstrip() + "\n"
 
 
+def render_implementation_plan(nf: str, current_text: str, config: dict) -> str:
+    target = "dev/<nf>/implementation-plan.md"
+    schema = TARGETS[target]
+    autos = {
+        "engineering-decisions-summary":
+            render_engineering_decisions_summary(nf, config),
+    }
+    users_existing = extract_blocks(current_text, "USER") if current_text else {}
+
+    def user_body(uid: str) -> str:
+        body = users_existing.get(uid)
+        if body is None or not body.strip():
+            return f"TODO: {uid} — 사람이 보강 (fresh placeholder)."
+        return body
+
+    title = TARGET_TITLES[target].format(nf_upper=nf.upper())
+    stage = TARGET_STAGES[target]
+    ratified_date = str(config.get("ratified_date", ""))
+
+    fm_lines = [
+        "---",
+        f"nf: {nf}",
+        f"stage: {stage}",
+        "status: draft",
+        f"source_architecture: design/{nf}/architecture",
+        f"source_contract: handoff/{nf}/contract.yaml",
+        f"generated_date: '{ratified_date}'",
+        "generator: design/scripts/nf-readiness-pack-generate.py",
+        f"source_readiness_config: design/{nf}/readiness-config.yaml",
+        "generated_sections:",
+    ]
+    for aid in schema["auto_ids"]:
+        fm_lines.append(f"  - {aid}")
+    fm_lines.append("user_sections:")
+    for uid in schema["user_ids"]:
+        fm_lines.append(f"  - {uid}")
+    fm_lines.append("---")
+    fm = "\n".join(fm_lines)
+
+    parts = [
+        fm,
+        "",
+        f"# {title}",
+        "",
+        "## Scope",
+        "",
+        user_block("scope-body", user_body("scope-body")),
+        "",
+        auto_block("engineering-decisions-summary",
+                   autos["engineering-decisions-summary"]),
+        "",
+        "## Phases",
+        "",
+        user_block("phases-body", user_body("phases-body")),
+        "",
+        "## Test Plan",
+        "",
+        user_block("test-plan-body", user_body("test-plan-body")),
+        "",
+        "## Open Risks",
+        "",
+        user_block("open-risks-body", user_body("open-risks-body")),
+        "",
+        "## References",
+        "",
+        user_block("references-body", user_body("references-body")),
+        "",
+    ]
+    return "\n".join(parts).rstrip() + "\n"
+
+
 # Target dispatch — file template → renderer.
 RENDERERS = {
     "dev/<nf>/traceability.md": render_traceability,
+    "dev/<nf>/implementation-plan.md": render_implementation_plan,
 }
 
 
