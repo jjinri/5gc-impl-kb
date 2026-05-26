@@ -2,7 +2,7 @@
 name: nf-arch-design
 description: Canonical lifecycle skill for converting a handoff-ready NF contract into detailed architecture design in 5gc-impl-kb. Use when the user asks to design NF architecture from a validated contract, create module/runtime/state/test architecture docs, or start the architecture phase after `/nf-contract-check`; examples include "/nf-arch-design nssf", "NSSF architecture 설계", "contract 기반 상세 아키텍처 만들어줘", or "turn this NF contract into architecture docs".
 argument-hint: "<nf>"
-allowed-tools: Bash(.venv/bin/python3 design/scripts/nf-status.py *) Bash(cat *) Bash(ls *) Bash(find design/*) Bash(find handoff/*) Bash(mkdir -p *) Bash(cp *) Bash(grep *) Bash(sed *) Bash(python3 *)
+allowed-tools: Bash(.venv/bin/python3 design/scripts/nf-contract-check.py *) Bash(cat *) Bash(ls *) Bash(find design/*) Bash(find handoff/*) Bash(mkdir -p *) Bash(cp *) Bash(grep *) Bash(sed *) Bash(python3 *)
 ---
 
 # nf-arch-design
@@ -24,7 +24,7 @@ Do not use `dev/<nf>/` as input.
 ## Preconditions
 
 1. Parse `<nf>` from the user request.
-2. Run `.venv/bin/python3 design/scripts/nf-status.py <nf> --no-write`.
+2. Run `.venv/bin/python3 design/scripts/nf-contract-check.py <nf> --no-write`.
 3. Continue only if the `handoff_ready` gate is PASS.
 4. If `handoff_ready` is not PASS, stop after reporting blockers and recommend `/nf-contract-build <nf>` or `/nf-contract-check <nf>` as appropriate.
 

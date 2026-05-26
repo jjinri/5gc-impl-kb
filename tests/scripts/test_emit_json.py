@@ -45,7 +45,7 @@ def test_emit_json_basic_shape() -> None:
 def test_emit_json_implementability_keys_present() -> None:
     """resolve-yaml-refs.py --emit-json 산출에 PR B + F1.2 메타 키 5종 emit 보장.
 
-    nf-status.py 의 schema_complexity_classified / generated_wrapper_boundary_declared check
+    nf-contract-check.py 의 schema_complexity_classified / generated_wrapper_boundary_declared check
     가 본 키들 직접 의존. 키 누락 시 contract_implementable gate 가 silent FAIL.
     """
     payload = _run(
@@ -89,7 +89,7 @@ def test_emit_json_status_code_topic_classified() -> None:
 
 def test_emit_json_unresolved_entry_classified_shape() -> None:
     """일반 (non-status-code) unresolved $ref 도 classification 기반 enriched entry shape
-    (ref/classification/rationale/implementation_action/phase) emit. nf-status.py 의
+    (ref/classification/rationale/implementation_action/phase) emit. nf-contract-check.py 의
     external_refs_resolved_or_classified check 가 본 키 의무 검증.
     """
     payload = _run(

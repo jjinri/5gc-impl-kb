@@ -2,7 +2,7 @@
 name: nf-contract-check
 description: Canonical lifecycle skill for checking whether a generated NF contract is ready for architecture design in 5gc-impl-kb. Use when the user asks to validate/check/score/status an NF contract, inspect handoff readiness, or list blocking extraction issues; examples include "/nf-contract-check nssf", "NSSF contract 검증", "handoff_ready 확인", or "is this NF contract ready for architecture design?".
 argument-hint: "<nf> [--no-write]"
-allowed-tools: Bash(.venv/bin/python3 design/scripts/nf-status.py *) Bash(cat *) Bash(ls *)
+allowed-tools: Bash(.venv/bin/python3 design/scripts/nf-contract-check.py *) Bash(cat *) Bash(ls *)
 ---
 
 # nf-contract-check — contract readiness 검사
@@ -28,7 +28,7 @@ allowed-tools: Bash(.venv/bin/python3 design/scripts/nf-status.py *) Bash(cat *)
 - **가중치·총점 산출 안 함, acceptance gate 는 check id 의 AND.** 이유 — 가중치는 사람마다 다르고 시간이 지나면 번복된다. *어떤 check 의 집합이 통과해야 어떤 단계인가* 만 설계하면 의견 다툼이 줄고 추적이 명확.
 - **NOT_APPLICABLE 은 PASS 와 동격으로 gate 계산.** 이유 — stage 2 NF 는 yaml 이 없어 `data_model_chain_complete` 자체가 부적용이다. NOT_APPLICABLE 을 FAIL 로 두면 영구 blocker 가 되어 framework 가 정확하지 않게 된다.
 - **본 skill 은 *측정만*, 페이지를 수정하지 않는다.** 이유 — 측정과 수정이 같은 skill 에 있으면 측정 결과가 수정에 의해 흔들린다. 다른 skill (`/nf-contract-build`) 의 책임 분리.
-- **handoff-v2 NF 의 진실 출처는 `validate_extraction_basic`.** v2 NF 는 단일 페이지 가정이 깨져 기존 단일 페이지 기반 Tier 2 check 들 (sections_complete / data_model_chain_complete / api_operation_coverage / service_flow_coverage / wikilinks_resolve) 이 false-FAIL 한다. nf-status.py 는 이를 자동 NOT_APPLICABLE 로 강등하고 `validate_extraction_basic` (basic 13 룰 AND) 을 그 자리의 gate 결정자로 삼는다. 사용자가 v2 NF 에서 진단할 때는 그 check 한 줄을 본다.
+- **handoff-v2 NF 의 진실 출처는 `validate_extraction_basic`.** v2 NF 는 단일 페이지 가정이 깨져 기존 단일 페이지 기반 Tier 2 check 들 (sections_complete / data_model_chain_complete / api_operation_coverage / service_flow_coverage / wikilinks_resolve) 이 false-FAIL 한다. nf-contract-check.py 는 이를 자동 NOT_APPLICABLE 로 강등하고 `validate_extraction_basic` (basic 13 룰 AND) 을 그 자리의 gate 결정자로 삼는다. 사용자가 v2 NF 에서 진단할 때는 그 check 한 줄을 본다.
 
 ## Workflow
 
@@ -38,7 +38,7 @@ allowed-tools: Bash(.venv/bin/python3 design/scripts/nf-status.py *) Bash(cat *)
 
 ### 2. 도구 실행
 ```bash
-.venv/bin/python3 design/scripts/nf-status.py <nf> [--no-write]
+.venv/bin/python3 design/scripts/nf-contract-check.py <nf> [--no-write]
 ```
 - 도구가 `design/<nf>/_contract_status.yaml` 갱신 + stdout/stderr 로 보고.
 - 검사 항목 (도구 docstring 진실 출처) — Tier 1·2 자동, Tier 3 (`schema_implementable`) 도 도구가 `design/scripts/yaml-to-c.py` 자동 호출, Tier 4 (`implementation_guidance_quality`) 는 본 SKILL 의 §2.5 가 처리.
@@ -50,7 +50,7 @@ allowed-tools: Bash(.venv/bin/python3 design/scripts/nf-status.py *) Bash(cat *)
 - 채점 기준 — implementation 가이던스 품질 (1-5 점). 5 = 본 페이지만으로 구현 시작 가능, 4 = 약간의 spec 참고로 구현 가능, 3 = 페이지 보강 필요, 2 이하 = 빌드 재진행 필요.
 - sub-agent 산출 — `score`, `judged_by` (예 "sub-agent"), `rationale` (한 문단).
 - main agent 가 결과를 `design/<nf>/_manifest.yaml` 의 `manual_overrides.judge_result` 에 등록.
-- `/nf-contract-check <nf>` 재실행 → `nf-status.py` 가 그 field 를 보고 PASS/FAIL 판정 (`score >= 4` PASS).
+- `/nf-contract-check <nf>` 재실행 → `nf-contract-check.py` 가 그 field 를 보고 PASS/FAIL 판정 (`score >= 4` PASS).
 
 **언제 호출하는가.** 본 단계는 *명시적*. 매 contract check 호출마다 자동 트리거하지 않는다 — sub-agent 채점은 비용·시간이 들고 페이지가 크게 변하지 않은 이상 결과가 안정적이기 때문. 사용자가 "canonical 까지 가자" 또는 페이지 큰 갱신 후일 때만 호출.
 
@@ -97,7 +97,7 @@ gate 상태에 따라.
 
 ```
 사용자: /nf-contract-check nssf
-도구:   design/scripts/nf-status.py nssf
+도구:   design/scripts/nf-contract-check.py nssf
 산출:   design/nssf/_contract_status.yaml
 보고:   "[nf-contract-check] nssf: PASS 4, FAIL 5, NOT_APPLICABLE/NOT_RUN 2
          gate draft: PASS
@@ -115,7 +115,7 @@ gate 상태에 따라.
 
 ## `contract_implementable` gate (PR B, 2026-05-21)
 
-Aggregate of seven implementability checks defined in `nf-status.py`:
+Aggregate of seven implementability checks defined in `nf-contract-check.py`:
 
 | Check | Criterion |
 |---|---|
@@ -136,13 +136,13 @@ This gate is *additive* to existing `handoff_ready` — both should PASS before 
 - 사용자가 `_contract_status.yaml` 을 직접 편집했는가 (그러면 안 됨 — 다음 호출에 덮어쓰여짐).
 - `manual_overrides.pass_anyway` 에 우회를 넣을 때 사유·confirmed_by 가 없는가 (있어야 함).
 - profile 이 NF 성격과 맞는가 (`stage_3_only` 가 기본, NWDAF 같은 mixed NF 는 매니페스트에서 명시 필요).
-- v2 NF 인데 Tier 2 의 단일 페이지 check 들 (sections_complete 등) 이 FAIL 로 표시되어 있는가 — nf-status.py 가 v2 자동 강등을 못 했다면 도구 회귀. nf-status.py 의 `maybe_load_v2_handoff` + `v2_demoted` 확인.
+- v2 NF 인데 Tier 2 의 단일 페이지 check 들 (sections_complete 등) 이 FAIL 로 표시되어 있는가 — nf-contract-check.py 가 v2 자동 강등을 못 했다면 도구 회귀. nf-contract-check.py 의 `maybe_load_v2_handoff` + `v2_demoted` 확인.
 
 ## 참고 — 본 skill 안에 다시 적지 말 것
 
-- 검사 항목·criterion·to_pass 형식: `design/scripts/nf-status.py` docstring + 같은 파일의 함수.
-- acceptance gate 정의: `design/scripts/nf-status.py` 의 `GATE_DEFS`.
-- NF profile 매트릭스: `design/scripts/nf-status.py` 의 `applies_to` + CLAUDE.md "NF Profile" 표.
+- 검사 항목·criterion·to_pass 형식: `design/scripts/nf-contract-check.py` docstring + 같은 파일의 함수.
+- acceptance gate 정의: `design/scripts/nf-contract-check.py` 의 `GATE_DEFS`.
+- NF profile 매트릭스: `design/scripts/nf-contract-check.py` 의 `applies_to` + CLAUDE.md "NF Profile" 표.
 
 ## Boundary
 

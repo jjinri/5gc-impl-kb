@@ -93,7 +93,7 @@ def _primary_yamls(nf: str) -> list[pathlib.Path]:
 def _enrich_api_topic(topic: dict, yamls: list[pathlib.Path]) -> None:
     """PR F1.2 — api topic 에 responses/security_requirements/error_responses/source_refs 추가.
 
-    nf-status.py 의 api_operation_complete check (6 키 mandate) 충족용. seed 는 method/path
+    nf-contract-check.py 의 api_operation_complete check (6 키 mandate) 충족용. seed 는 method/path
     만 보유 → build-handoff.py 가 yaml 분석해 4 키 채움. 본 enrichment 는 in-place — handoff
     yaml self-contained 정책 유지 (codegen 시 spec 재독해 불요).
     """
@@ -151,7 +151,7 @@ def _enrich_api_topic(topic: dict, yamls: list[pathlib.Path]) -> None:
 def _enrich_error_handling_topic(topic: dict, yamls: list[pathlib.Path]) -> None:
     """PR F1.2 — error-handling topic 의 operations × causes 매트릭스 emit.
 
-    nf-status.py 의 problem_details_matrix_complete check 충족용. yaml 모든 path × method 의
+    nf-contract-check.py 의 problem_details_matrix_complete check 충족용. yaml 모든 path × method 의
     4xx/5xx responses 를 모아 operation 별 causes list 생성. cause 는 spec response description
     (3GPP cause enum 텍스트) 사용.
     """

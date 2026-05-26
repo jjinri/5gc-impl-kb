@@ -193,7 +193,7 @@ def _seed_with_yaml(tmp_path: pathlib.Path) -> None:
 def test_build_handoff_v2_api_topic_enrichment_from_yaml(tmp_path: pathlib.Path) -> None:
     """api topic 이 seed 의 method + path 만으로 yaml 에서 responses /
     security_requirements / error_responses / source_refs 4 키를 채워야 함.
-    nf-status.py 의 api_operation_complete 6 키 mandate 의 직접 의존.
+    nf-contract-check.py 의 api_operation_complete 6 키 mandate 의 직접 의존.
     """
     _seed_with_yaml(tmp_path)
     out_path = _run_build("demo", tmp_path)
@@ -220,7 +220,7 @@ def test_build_handoff_v2_error_handling_operations_from_yaml(
     tmp_path: pathlib.Path,
 ) -> None:
     """error-handling topic 이 yaml 의 paths × methods 를 walk 해 operations ×
-    causes 매트릭스를 emit. nf-status.py problem_details_matrix_complete check 의
+    causes 매트릭스를 emit. nf-contract-check.py problem_details_matrix_complete check 의
     직접 의존.
     """
     _seed_with_yaml(tmp_path)

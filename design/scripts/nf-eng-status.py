@@ -8,7 +8,7 @@ Usage:
     --no-write   engineering/<nf>/_engineering_status.yaml 저장 없이 stdout 만 보고
 
 본 script 는 Engineering Design Freeze 단계 status 검사다 (ADR-0002).
-contract=nf-status.py, architecture=nf-arch-status.py, impl=nf-impl-status.py
+contract=nf-contract-check.py, architecture=nf-arch-status.py, impl=nf-impl-status.py
 와 분리된다. eng_frozen 은 *technology decision freeze* 단일 게이트이며,
 autonomous implementation (/nf-implement) 의 최종 GO 신호인 aggregate
 readiness_pack_ready 의 한 구성요소다 (= handoff_ready ∧ contract_implementable
