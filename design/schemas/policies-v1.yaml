@@ -167,8 +167,9 @@ policies:
       - policy_id
       - rationale_source
       - categories
-      - required_fields_per_row
-      - non_blocker_description_fields
+      - enforced_by_current_validator
+      - recommended_row_fields
+      - recommended_non_blocker_description_fields
       - gates_using_this_enum
     categories_shape:
       type: non_empty_list
@@ -184,12 +185,25 @@ policies:
       - library-assumed
       - test-gap
       - assumption
-    required_fields_per_row_required_items:
+    enforced_by_current_validator_shape:
+      type: non_empty_list
+      item_required:
+        - check
+        - rule
+    recommended_row_fields_required:
+      - enforcement
+      - enforcement_target_pr
+      - fields
+    recommended_row_fields_required_items:
       - id
       - category
       - description
       - owner
       - target_resolution
+    recommended_non_blocker_description_fields_required:
+      - enforcement
+      - enforcement_target_pr
+      - fields
     gates_using_this_enum_shape:
       type: non_empty_list
       item_required:
