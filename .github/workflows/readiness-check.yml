@@ -1,4 +1,4 @@
-# readiness-check — generator drift + validator + md_table parser guard.
+# readiness-check — generator drift + md_table parser guard.
 #
 # PR-15 (D5 in Pane 2 final-goal sequence, 2026-05-26). Plan §7 Phase C
 # drift guard 설치.
@@ -6,9 +6,15 @@
 # Triggers — readiness-relevant tree 변경 시. tests 변경도 포함 (lib
 # regression 방지).
 #
-# Scope: 가볍게 유지 — 6 generator target --check + impl-status + md_table
-# unit test 만. 전체 pytest tests/scripts/ 는 ~2 분이라 본 workflow 에서는
-# 제외, 별도 CI workflow 가 필요할 때 추가.
+# Scope: 가볍게 유지 — 6 generator target --check + md_table unit test 만.
+# 전체 pytest tests/scripts/ 는 ~2 분이라 본 workflow 에서는 제외, 별도 CI
+# workflow 가 필요할 때 추가.
+#
+# nf-impl-status --no-write 도 본 workflow 에서 제외 (PR-15 review fix, Pane
+# 2 finding [High]) — validator 가 handoff/<nf>/contract.yaml 의존, 해당
+# 파일은 .gitignore (workflow-generated 만, fresh checkout 부재). CI-safe
+# 재료화 (specs/ 에서 materialize-contract + build-handoff) 단계를 별 PR
+# 로 추가한 후 본 workflow 에 nf-impl-status step 추가 (backlog).
 
 name: readiness-check
 
@@ -53,5 +59,6 @@ jobs:
       - name: nf-readiness-pack-generate --check (drift guard)
         run: python3 design/scripts/nf-readiness-pack-generate.py nssf --check
 
-      - name: nf-impl-status --no-write (validator gate)
-        run: python3 design/scripts/nf-impl-status.py nssf --no-write
+      # nf-impl-status step intentionally absent — handoff/<nf>/contract.yaml
+      # 의존 (gitignored). CI-safe contract materialization 단계 추가 후
+      # 본 workflow 에 step 복원 (backlog).
