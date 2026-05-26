@@ -22,6 +22,8 @@ import pathlib
 import re
 import sys
 
+import yaml
+
 REPO = pathlib.Path(__file__).resolve().parent.parent.parent
 
 # Target schema — file path template → (auto ids, user ids).
@@ -84,6 +86,15 @@ TARGET_STAGES = {
     "dev/<nf>/traceability.md": "implementation-planning",
 }
 
+# nf-impl-status.py DEV_FM_KEYS 와 정합 — generator 출력이 검사를 통과해야
+# impl_frontmatter_valid PASS. 추가 키 (generator, source_readiness_config,
+# generated_sections, user_sections) 도 함께 노출하지만, 본 6 키는 *반드시*
+# 출력에 포함된다.
+LEGACY_FM_KEYS = {
+    "nf", "stage", "status", "source_architecture", "source_contract",
+    "generated_date",
+}
+
 
 # ─── marker helpers ─────────────────────────────────────────────────
 
@@ -102,6 +113,13 @@ def extract_blocks(text: str, kind: str) -> dict[str, str]:
     for m in re.finditer(pattern, text, re.DOTALL):
         out[m.group(1)] = m.group(2)
     return out
+
+
+# ─── readiness-config loader ────────────────────────────────────────
+
+def load_readiness_config(nf: str) -> dict:
+    path = REPO / "design" / nf / "readiness-config.yaml"
+    return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
 
 
 # ─── AUTO renderers ─────────────────────────────────────────────────
@@ -123,7 +141,7 @@ def render_references(nf: str) -> str:
 
 # ─── target render ──────────────────────────────────────────────────
 
-def render_traceability(nf: str, current_text: str) -> str:
+def render_traceability(nf: str, current_text: str, config: dict) -> str:
     target = "dev/<nf>/traceability.md"
     schema = TARGETS[target]
     autos = {
@@ -140,11 +158,22 @@ def render_traceability(nf: str, current_text: str) -> str:
 
     title = TARGET_TITLES[target].format(nf_upper=nf.upper())
     stage = TARGET_STAGES[target]
+    # generated_date 는 readiness-config.ratified_date 에서 받는다 — 결정론적,
+    # timestamp noise 없음. config 변경 시에만 변경.
+    ratified_date = str(config.get("ratified_date", ""))
 
+    # nf-impl-status DEV_FM_KEYS 6개 (status, source_architecture,
+    # source_contract, generated_date, nf, stage) 를 *반드시* 출력해
+    # impl_frontmatter_valid PASS 유지. status 는 'draft' 고정 (PR-D 단계에서
+    # readiness-config 산출 단계 지표로 전환 가능).
     fm_lines = [
         "---",
         f"nf: {nf}",
         f"stage: {stage}",
+        "status: draft",
+        f"source_architecture: design/{nf}/architecture",
+        f"source_contract: handoff/{nf}/contract.yaml",
+        f"generated_date: '{ratified_date}'",
         "generator: design/scripts/nf-readiness-pack-generate.py",
         f"source_readiness_config: design/{nf}/readiness-config.yaml",
         "generated_sections:",
@@ -190,12 +219,12 @@ RENDERERS = {
 
 # ─── action ─────────────────────────────────────────────────────────
 
-def render_target(nf: str, target_tpl: str) -> tuple[pathlib.Path, str, str]:
+def render_target(nf: str, target_tpl: str, config: dict) -> tuple[pathlib.Path, str, str]:
     """반환 (path, current_text, rendered_text)."""
     rel = target_tpl.replace("<nf>", nf)
     path = REPO / rel
     current = path.read_text(encoding="utf-8") if path.is_file() else ""
-    rendered = RENDERERS[target_tpl](nf, current)
+    rendered = RENDERERS[target_tpl](nf, current, config)
     return path, current, rendered
 
 
@@ -219,9 +248,10 @@ def diff_summary(current: str, rendered: str, max_lines: int = 10) -> list[str]:
 
 
 def cmd_check(nf: str) -> int:
+    config = load_readiness_config(nf)
     fail = 0
     for target_tpl in TARGETS:
-        path, current, rendered = render_target(nf, target_tpl)
+        path, current, rendered = render_target(nf, target_tpl, config)
         rel = path.relative_to(REPO)
         if current == rendered:
             print(f"PASS — {rel}")
@@ -237,8 +267,9 @@ def cmd_check(nf: str) -> int:
 
 
 def cmd_write(nf: str) -> int:
+    config = load_readiness_config(nf)
     for target_tpl in TARGETS:
-        path, current, rendered = render_target(nf, target_tpl)
+        path, current, rendered = render_target(nf, target_tpl, config)
         rel = path.relative_to(REPO)
         if current == rendered:
             print(f"unchanged — {rel}")

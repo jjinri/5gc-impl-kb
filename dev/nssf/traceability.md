@@ -1,6 +1,10 @@
 ---
 nf: nssf
 stage: implementation-planning
+status: draft
+source_architecture: design/nssf/architecture
+source_contract: handoff/nssf/contract.yaml
+generated_date: '2026-05-26'
 generator: design/scripts/nf-readiness-pack-generate.py
 source_readiness_config: design/nssf/readiness-config.yaml
 generated_sections:
