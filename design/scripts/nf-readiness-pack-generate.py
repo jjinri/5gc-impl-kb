@@ -25,6 +25,11 @@ PR-8 확장 — 3번째 target + policy-derived AUTO:
     (M1~M7 mandate) + test-matrix.md `## Test Inventory` 의 kind=security
     test count cross-source derive. policy 변경 시 render 갱신 증명.
 
+PR-9 확장 — 4번째 target + phase config view:
+  * dev/<nf>/team-execution-plan.md 신규 target.
+  * AUTO phase-integration-map — readiness-config.phase_policy.phases
+    derive 의 phase → work_items table. config-driven render 4번째 파일.
+
 AUTO/USER marker 패턴 (materialize-contract.py reference 모범). USER 영역
 사람 산문 보존 — generator 가 만지지 않음.
 
@@ -84,6 +89,21 @@ TARGETS = {
             "references-body",
         ],
     },
+    "dev/<nf>/team-execution-plan.md": {
+        "auto_ids": [
+            "phase-integration-map",
+        ],
+        "user_ids": [
+            "intro-note",
+            "orchestrator-lane-body",
+            "code-lane-body",
+            "reviewer-lane-body",
+            "tester-lane-body",
+            "verifier-lane-body",
+            "integration-order-body",
+            "references-body",
+        ],
+    },
 }
 
 # References — fixed per NF source-of-truth list. PR-5+ 가 readiness-config
@@ -127,6 +147,7 @@ TARGET_TITLES = {
     "dev/<nf>/traceability.md": "{nf_upper} Traceability",
     "dev/<nf>/implementation-plan.md": "{nf_upper} Implementation Plan",
     "dev/<nf>/test-matrix.md": "{nf_upper} Test Matrix",
+    "dev/<nf>/team-execution-plan.md": "{nf_upper} Team Execution Plan",
 }
 
 # Frontmatter 의 stage 라벨.
@@ -134,6 +155,7 @@ TARGET_STAGES = {
     "dev/<nf>/traceability.md": "implementation-planning",
     "dev/<nf>/implementation-plan.md": "implementation-planning",
     "dev/<nf>/test-matrix.md": "implementation-planning",
+    "dev/<nf>/team-execution-plan.md": "implementation-planning",
 }
 
 # nf-impl-status.py DEV_FM_KEYS 와 정합 — generator 출력이 검사를 통과해야
@@ -261,6 +283,32 @@ def render_test_inventory_index(nf: str) -> str:
             lines.append(f"- `{tid}`")
         lines.append("")
     return "\n".join(lines).rstrip()
+
+
+def render_phase_integration_map(nf: str, config: dict) -> str:
+    """H3 render — `## Integration Order` H2 아래 sub-section. readiness-
+    config.phase_policy.phases derive (phase id → description + work_items)."""
+    phase_policy = config.get("phase_policy") or {}
+    phases = phase_policy.get("phases") or {}
+    if not phases:
+        return ("### Phase Integration Map\n\n"
+                "_readiness-config.phase_policy.phases 부재 — render skip._")
+    tracer = phase_policy.get("tracer_bullet_operation", "?")
+    lines = ["### Phase Integration Map", ""]
+    lines.append(f"`design/{nf}/readiness-config.yaml` `phase_policy` derive — "
+                 f"tracer-bullet operation = `{tracer}`, "
+                 f"총 {len(phases)} phase. config 변경 시 본 map 이 같이 갱신된다.")
+    lines.append("")
+    lines.append("| phase | description | work_items |")
+    lines.append("|---|---|---|")
+    for phase_id, body in phases.items():
+        if not isinstance(body, dict):
+            continue
+        desc = str(body.get("description", "")).replace("|", r"\|")
+        wis = body.get("work_items") or []
+        wis_str = ", ".join(f"`{w}`" for w in wis) if wis else "_none_"
+        lines.append(f"| `{phase_id}` | {desc} | {wis_str} |")
+    return "\n".join(lines)
 
 
 def load_security_baseline() -> dict:
@@ -607,11 +655,92 @@ def render_test_matrix(nf: str, current_text: str, config: dict) -> str:
     return "\n".join(parts).rstrip() + "\n"
 
 
+def render_team_execution_plan(nf: str, current_text: str, config: dict) -> str:
+    target = "dev/<nf>/team-execution-plan.md"
+    schema = TARGETS[target]
+    autos = {
+        "phase-integration-map":
+            render_phase_integration_map(nf, config),
+    }
+    users_existing = extract_blocks(current_text, "USER") if current_text else {}
+
+    def user_body(uid: str) -> str:
+        body = users_existing.get(uid)
+        if body is None or not body.strip():
+            return f"TODO: {uid} — 사람이 보강 (fresh placeholder)."
+        return body
+
+    title = TARGET_TITLES[target].format(nf_upper=nf.upper())
+    stage = TARGET_STAGES[target]
+    ratified_date = str(config.get("ratified_date", ""))
+
+    fm_lines = [
+        "---",
+        f"nf: {nf}",
+        f"stage: {stage}",
+        "status: draft",
+        f"source_architecture: design/{nf}/architecture",
+        f"source_contract: handoff/{nf}/contract.yaml",
+        f"generated_date: '{ratified_date}'",
+        "generator: design/scripts/nf-readiness-pack-generate.py",
+        f"source_readiness_config: design/{nf}/readiness-config.yaml",
+        "generated_sections:",
+    ]
+    for aid in schema["auto_ids"]:
+        fm_lines.append(f"  - {aid}")
+    fm_lines.append("user_sections:")
+    for uid in schema["user_ids"]:
+        fm_lines.append(f"  - {uid}")
+    fm_lines.append("---")
+    fm = "\n".join(fm_lines)
+
+    parts = [
+        fm,
+        "",
+        f"# {title}",
+        "",
+        user_block("intro-note", user_body("intro-note")),
+        "",
+        "## Orchestrator Lane",
+        "",
+        user_block("orchestrator-lane-body", user_body("orchestrator-lane-body")),
+        "",
+        "## Code Lane",
+        "",
+        user_block("code-lane-body", user_body("code-lane-body")),
+        "",
+        "## Reviewer Lane",
+        "",
+        user_block("reviewer-lane-body", user_body("reviewer-lane-body")),
+        "",
+        "## Tester Lane",
+        "",
+        user_block("tester-lane-body", user_body("tester-lane-body")),
+        "",
+        "## Verifier Lane",
+        "",
+        user_block("verifier-lane-body", user_body("verifier-lane-body")),
+        "",
+        "## Integration Order",
+        "",
+        user_block("integration-order-body", user_body("integration-order-body")),
+        "",
+        auto_block("phase-integration-map", autos["phase-integration-map"]),
+        "",
+        "## References",
+        "",
+        user_block("references-body", user_body("references-body")),
+        "",
+    ]
+    return "\n".join(parts).rstrip() + "\n"
+
+
 # Target dispatch — file template → renderer.
 RENDERERS = {
     "dev/<nf>/traceability.md": render_traceability,
     "dev/<nf>/implementation-plan.md": render_implementation_plan,
     "dev/<nf>/test-matrix.md": render_test_matrix,
+    "dev/<nf>/team-execution-plan.md": render_team_execution_plan,
 }
 
 
