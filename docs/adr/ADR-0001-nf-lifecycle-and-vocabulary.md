@@ -1,7 +1,7 @@
 # ADR-0001 — NF lifecycle and vocabulary
 
 Date: 2026-05-13
-Status: Accepted for migration planning
+Status: Accepted; slimmed 2026-05-26 after lifecycle policy extraction
 
 ## Context
 
@@ -13,40 +13,16 @@ A separate architecture-design step is required between contract extraction and 
 
 ## Decision
 
-Define the lifecycle in explicit stages and name canonical user-triggered skills by lifecycle responsibility.
-
-| Stage | Compatibility skill | Canonical skill | Meaning |
-|---|---|---|---|
-| Spec discovery | `/nf-init <nf> --primary <spec>` | `/nf-spec-discover <nf> --primary <spec>` | Identify primary/ref specs, create or refresh the manifest, and auto-generate the handoff seed when ready. |
-| Reset + rediscovery | `/nf-init <nf> --primary <spec> --reset` | `/nf-spec-discover <nf> --primary <spec> --reset` | Archive existing contract artifacts only, then refresh the manifest and auto-generate the seed when ready. |
-| Contract extraction | `/nf-build <nf>` | `/nf-contract-build <nf>` | Generate spec-derived contract artifacts and `handoff` contract. |
-| Contract validation | `/nf-status <nf>` | `/nf-contract-check <nf>` | Check whether the contract is ready for architecture design. |
-| Architecture design | none | `/nf-arch-design <nf>` | Convert contract into detailed module/runtime/state/test architecture. |
-| Implementation planning | none | `/nf-impl-plan <nf>` | Convert architecture into implementable tasks and test plan. |
-| Engineering Design Freeze | none | `/nf-eng-design <nf>` + `/nf-eng-status <nf>` | Freeze human-owned engineering decisions (`engineering/<nf>/engineering-design.md`); `eng_frozen` gate is the sole GO signal for autonomous code generation. See ADR-0002. |
-
-`nf-reset` remains deprecated. Reset is an explicit destructive option of the discovery stage, not an independent lifecycle skill.
-
-## User-triggered vs agent-internal work
-
-User-triggered skills are the public workflow surface. The user chooses the lifecycle stage.
-
-Agent-internal work is the script/tool/check sequence performed inside that skill. A skill may run required same-stage tools, such as `build-handoff.py` and `validate-extraction.py` during contract build. A skill should not silently call the next user-facing lifecycle skill; it should report the result and recommend the next user action.
+Normative source: [`design/policies/lifecycle.yaml`](../../design/policies/lifecycle.yaml) — lifecycle stages, gates, canonical skills, work boundary, and semantics. This ADR preserves rationale and migration history only.
 
 ## Consequences
 
-- Documentation should describe `/nf-build` as contract generation, not code build.
-- `handoff_ready` means the contract is ready to start architecture design, not that coding can start without architecture work.
-- `design/<nf>/contract/` is the current spec-derived contract location. `handoff/<nf>/contract.yaml` is the current machine-readable handoff contract location; legacy `_handoff.yaml` is retired. `design/<nf>/_contract_seed.yaml` is the auto-generated seed that replaces manual legacy handoff authoring, and `design/<nf>/_contract_status.yaml` is the contract-stage completeness report. `design/<nf>/architecture/` and `dev/<nf>/implementation-plan.md` are the current architecture and implementation-planning locations.
-- Existing commands remain compatibility aliases until alias removal is explicitly planned.
-
-## Follow-ups
-
-1. Keep reset integrated into `/nf-init --reset` and `/nf-spec-discover --reset`.
+- `/nf-contract-build` is contract generation, not implementation code build.
+- `handoff_ready` means the contract is ready to start architecture design, not that autonomous code generation can start without further stages (`readiness_pack_ready` is the aggregate GO signal).
 
 ## Migration notes
 
-- 2026-05-13: Added canonical wrapper skills for `/nf-spec-discover`, `/nf-contract-build`, and `/nf-contract-check`; existing `/nf-init`, `/nf-build`, and `/nf-status` remain compatibility aliases.
+- 2026-05-13: Added canonical wrapper skills for `/nf-spec-discover`, `/nf-contract-build`, and `/nf-contract-check`; existing `/nf-init`, `/nf-build`, and `/nf-status` remained compatibility aliases. *(Aliases removed 2026-05-26 — see below.)*
 - 2026-05-13: Moved NSSF topic contract markdown/json artifacts under `design/nssf/contract/`; kept `_handoff_seed.yaml`, `_status.yaml`, and `handoff/nssf/_handoff.yaml` names for compatibility.
 - 2026-05-14: Added `/nf-arch-design` skill, reusable architecture templates, and initial NSSF architecture draft documents under `design/nssf/architecture/`.
 - 2026-05-14: Added `/nf-impl-plan` skill, reusable dev planning templates, and initial NSSF implementation planning artifacts under `dev/nssf/`.
@@ -55,4 +31,5 @@ Agent-internal work is the script/tool/check sequence performed inside that skil
 - 2026-05-14: `nf-status.py` measures contract-stage completeness only; architecture and implementation-planning stage status are out of scope and would belong to a separate future skill.
 - 2026-05-18: Added that separate future skill — `/nf-arch-status` (`design/scripts/nf-arch-status.py` → `design/<nf>/_arch_status.yaml`, gate `arch_consistent`) and `/nf-impl-status` (`design/scripts/nf-impl-status.py` → `dev/<nf>/_impl_status.yaml`, gate `impl_consistent`). Read-only, discover-based, no semantic judge; Phase 1 = exact canonical sections + required files + frontmatter + tasks schema, cross-ref is advisory WARN. Phase 2 (deep traceability id-relation gate) deferred to a separate cycle. Resolves the 2026-05-14 out-of-scope note above.
 - 2026-05-14: Renamed `design/<nf>/_handoff_seed.yaml` → `design/<nf>/_contract_seed.yaml` and `design/<nf>/_status.yaml` → `design/<nf>/_contract_status.yaml` to match the contract-stage vocabulary. Scripts, skills, tests, and `.gitignore` were updated; no compatibility aliases.
-- 2026-05-19: Added the Engineering Design Freeze stage between implementation planning and autonomous code generation (ADR-0002). `/nf-eng-design` generates `engineering/<nf>/engineering-design.md`; `/nf-eng-status` (`design/scripts/nf-eng-status.py` → `engineering/<nf>/_engineering_status.yaml`) reports gate `eng_frozen` (deterministic, blocking) and `advisory.impl_plan_alignment` (non-blocking). `eng_frozen` is the sole GO signal for autonomous code generation. Inventory = `design/schemas/engineering-core-slots.yaml` profile ∪ per-NF deferral register; no validator hardcoding.
+- 2026-05-19: Added the Engineering Design Freeze stage between implementation planning and autonomous code generation (ADR-0002). `/nf-eng-design` generates `engineering/<nf>/engineering-design.md`; `/nf-eng-status` (`design/scripts/nf-eng-status.py` → `engineering/<nf>/_engineering_status.yaml`) reports gate `eng_frozen` (deterministic, blocking) and `advisory.impl_plan_alignment` (non-blocking). *(Historical: said "`eng_frozen` is the sole GO signal for autonomous code generation"; superseded by `lifecycle.yaml.gates.readiness_pack_ready` aggregate — `eng_frozen` is one of five required sub-gates.)* Inventory = `design/schemas/engineering-core-slots.yaml` profile ∪ per-NF deferral register; no validator hardcoding.
+- 2026-05-26: Slimmed normative content into `design/policies/lifecycle.yaml`. Removed Decision stages table (now `lifecycle.yaml.stages`) and User-triggered vs agent-internal section (now `lifecycle.yaml.work_boundary`). Removed `/nf-init`·`/nf-build`·`/nf-status` compatibility skill surface; reset semantics retained on canonical `/nf-spec-discover --reset` only (resolves the original 2026-05-13 follow-up to keep reset as a `--reset` option, not an independent skill).
