@@ -1,7 +1,7 @@
 # ADR-0004 — Project Security Baseline (TLS · mTLS · OAuth2 capability 의무)
 
 Date: 2026-05-21
-Status: Accepted (2026-05-21)
+Status: Accepted (2026-05-21); slimmed 2026-05-26 — normative mandates mirrored in `design/policies/security-baseline.yaml`
 
 > **Accepted** — NSSF 첫 engineering-design freeze 사이클 (PR #31/#32 merge 후) 의 follow-up 검토에서 `tls_security=external` + `oauth2_token_validation=false` frozen 결정이 *project 의 자율 코드 생성 목표* 와 충돌함을 발견. 33.501 을 NF spec lifecycle dependency 로 끌어들이는 대신, 본 ADR 가 *project 차원* 의 security capability 의무를 명시하고 NF 별 engineering-design 산출은 이 의무를 만족시키는 lib/구조 결정만 한다. Pane 2 다회 second-opinion 수렴 결과.
 
@@ -20,23 +20,7 @@ NSSF 첫 사이클의 engineering-design.md 는 `tls_security = external (mesh s
 
 본 repo 에 *Project Security Baseline* 을 정의한다. 모든 NF 의 codegen 산출은 본 baseline 을 의무 source 로 따른다. 33.501 / 33.310 / 33.210 등 security/profile spec 은 NF 별 `_manifest.yaml` 의 lifecycle extraction dependency 로 추가하지 않으며, 본 baseline 이 그 결론을 흡수한다.
 
-### Baseline 7 항목
-
-1. **내부 HTTPS/TLS code path 의무.** NF 바이너리는 TLS-capable HTTP/2 stack 을 *내부에* 보유한다. 외부 sidecar 의존 단일값으로 close 금지.
-2. **mTLS code path 의무.** server/client certificate, CA bundle, peer verification 을 NF 가 *수행할 수 있는* code path 가 존재한다.
-3. **inbound OAuth2 bearer token validation code path 의무.** NF 가 inbound access token 을 *검증할 수 있는* code path 가 존재한다.
-4. **outbound OAuth2 client credentials / token attach code path 의무.** NF 가 outbound 호출에 access token 을 *부착할 수 있는* code path 가 존재한다 (NRF token endpoint 호출 + AMF callback 등 peer NF 호출 양쪽).
-5. **dev/local disable 가능, production-capable path 존재.** 1~4 의 capability 는 config 로 enable/disable 할 수 있으나, *production-capable code path 자체는 항상 존재* 한다. dev profile 에서 disable 했다는 이유로 production code path 를 누락 금지.
-6. **third-party library 사용 의무.** TLS / X.509 / JWT / JWS / OAuth2 primitive 는 NF 가 *직접 구현하지 않는다*. maintained library 선택 (예 OpenSSL/BoringSSL/mbedTLS, libcurl, libjwt, jansson) — 후보 비교는 NF 별 engineering-design.md 의 `sbi_server_stack`/`sbi_client_stack`/관련 slot 에서 수행.
-7. **profile spec 깊이 외부 처리.** 33.310 (certificate enrollment, CMPv2 등) / 33.210 (cipher suite profile, IPsec 등) 수준의 세부 — *operator-provided compliant cert/config + library compliance assumption* 으로 처리한다. NF 는 cipher suite / TLS version / profile 별 검증을 *직접 결정* 하지 않고, *operator/library default + config policy 로 설정 가능* 하게 둔다. compliance 는 library + operator-provided config 책임.
-
-### Source-of-truth
-
-- 본 ADR = baseline 의무 *source*.
-- NF 별 `engineering/<nf>/engineering-design.md` = baseline 을 만족시키는 lib/구조 *결정*.
-- NF 별 `design/<nf>/architecture/` = baseline 이 강제하는 flow (inbound HTTPS/h2 + mTLS peer + bearer validation, outbound token acquisition + token attach) 의 구조화.
-- NF 별 `dev/<nf>/` = task/test 분해.
-- codegen agent = 본 ADR (의무) + engineering-design (선택된 lib) + architecture (flow) + dev (task) 4 source 합집합을 따른다.
+Normative source: [`design/policies/security-baseline.yaml`](../../design/policies/security-baseline.yaml) — `baseline_mandates` (M1~M7) · `nf_specific_role` · `codegen_required_sources` · `rejected_alternatives`. 본 ADR 는 rationale + project-wide policies (source precedence, spec dependency 정책) + migration history 를 유지하며, mandate 본문 enumeration 은 yaml 단일 출처.
 
 ### Source precedence (normative)
 
@@ -48,10 +32,6 @@ NSSF 첫 사이클의 engineering-design.md 는 `tls_security = external (mesh s
 - 하위 산출은 baseline 항목을 *약화* 할 수 없다 — 예: production-capable code path 누락 금지, third-party library 의무 회피 금지, dev disable 을 production 으로 확장 금지.
 - 하위 산출은 baseline 을 *강화·세부화* 할 수 있다 — 예: NF 가 추가 cipher suite 제약, NF-specific OAuth2 scope, 더 엄격한 cert validation 요구.
 
-### NF-specific security role
-
-본 baseline 은 *모든 NF 공통 minimum*. NF-specific security role 은 추가될 수 있다 — 예: NRF = OAuth2 token issuer / authorization server, SCP/SEPP = mediation + peer auth gateway, AMF = NAS security context manager. 추가된 role 은 baseline 항목을 *약화* 할 수 없다. NF-specific role 추가는 NF 별 `engineering/<nf>/engineering-design.md` 또는 별 ADR 에서 닫힌다.
-
 ### Spec dependency 정책
 
 - 33.501 / 33.310 / 33.210 등 *project-wide security/profile spec* 은 NF 별 `_manifest.yaml.deps.security` 에서 `excluded` reason 으로 *명시 외부화* 한다. excluded reason 은 "project security baseline ADR-0004 으로 흡수, lifecycle extraction dependency 아님" 형식.
@@ -61,14 +41,6 @@ NSSF 첫 사이클의 engineering-design.md 는 `tls_security = external (mesh s
   - 두 의미는 직교 — 33.501 docx 가 `specs/33.501/` 에 cp 되면 `present=true`, 동시에 ADR-0004 흡수로 `excluded=true` 가능 (가장 정확한 상태). 현재 manifest 의 `present:false + excluded` 표기는 *implementation bug* 로 follow-up PR 에서 정정.
 - NF 별 spec discovery (`/nf-spec-discover`) 는 본 정책을 자동 적용한다 — security/profile spec 발견 시 ADR-0004 reference 로 자동 exclude (present 는 사실대로 표기).
 - 추후 33.501 본문 인용이 필요한 결정 (예 특정 OAuth2 scope 정의) 은 본 ADR 의 amendment 로 추가한다. NF spec dependency 로 끌어들이지 않는다.
-
-## Considered options
-
-- **33.501 in-scope dependency 추가 (NF spec lifecycle 확장).** contract 가 33.501 본문 어휘를 hidden default 로 주입해 traceability 흐려짐. 33.310/33.210 까지 chain 으로 끌려와 lifecycle 비대. → reject.
-- **engineering-design.md amendment 만, project ADR 없음.** baseline 이 NF 별 산출에 분산되면 다음 NF (AMF/NRF/...) 작성 시 재발견 비용·일관성 위험. → reject.
-- **baseline 을 CONTEXT.md 만으로 명시.** CONTEXT.md 는 *용어집* (vocabulary doc) — 결정 source 가 아니다. ADR + CONTEXT 어휘 항목 양쪽 필요. → 채택.
-- **TLS/OAuth primitive 직접 구현 허용 (FIPS 인증 등 사유).** scope 폭발 + maintained library 가 이미 standard-compliant + 본 repo 의 codegen 목표상 자체 구현은 surface area 과대. → reject (의무 6).
-- **production-capable path 를 *선택적* 으로.** dev profile 에서 production code 없이도 OK 면 codegen 산출이 production-not-capable 로 출시될 위험. → reject (의무 5).
 
 ## Consequences
 
