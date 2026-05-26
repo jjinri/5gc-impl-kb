@@ -8,6 +8,8 @@ generated_date: '2026-05-26'
 generator: design/scripts/nf-readiness-pack-generate.py
 source_readiness_config: design/nssf/readiness-config.yaml
 generated_sections:
+  - unit-tests-table
+  - integration-tests-table
   - security-gate-matrix
 user_sections:
   - intro-note
@@ -36,6 +38,27 @@ user_sections:
 - evidence — `build/Testing/Temporary/LastTest.log` 의 unit 섹션, coverage report (`gcov` / `llvm-cov`).
 <!-- USER:unit-body:end -->
 
+<!-- AUTO:unit-tests-table:start -->
+### Unit Tests Inventory
+
+`dev/nssf/test-matrix.md` `## Test Inventory` 의 kind=unit row derive — 총 12개. test-matrix 변경 시 본 sub-section 이 같이 갱신된다.
+
+| id | scenario | refs |
+|---|---|---|
+| `t-selection-invalid-query` | invalid-structured-query | `api/NSSelectionGet`, `error-propagation.md` |
+| `t-selection-unauthorized` | unauthorized-nssai | `SelectionEngine.md`, `error-propagation.md` |
+| `t-selection-not-available` | nssai-not-available | `SelectionEngine.md`, `AvailabilityEngine.md` |
+| `t-availability-put-invalid-body` | availability-put-invalid-body | `api/NSSAIAvailabilityPut`, `error-propagation.md`, `request-flow.md` |
+| `t-availability-patch-conflict` | availability-patch-conflict (etag 옵션 지원 시) | `api/NSSAIAvailabilityPatch`, `error-propagation.md` |
+| `t-availability-delete-not-found` | availability-delete-not-found | `api/NSSAIAvailabilityDelete`, `error-propagation.md` |
+| `t-availability-options` | availability-options-supported-features | `api/NSSAIAvailabilityOptions`, `configuration-strategy.md` |
+| `t-availability-options-unauthorized` | availability-options-unauthorized | `api/NSSAIAvailabilityOptions`, `error-propagation.md`, `interface` |
+| `t-subscription-create-invalid-callback` | subscription-create-invalid-callback | `api/NSSAIAvailabilityPost`, `error-propagation.md`, `SubscriptionStore.md` |
+| `t-subscription-modify` | subscription-modify-filter | `api/NSSAIAvailabilitySubModifyPatch`, `SubscriptionStore.md` |
+| `t-subscription-modify-not-found` | subscription-modify-not-found | `api/NSSAIAvailabilitySubModifyPatch`, `error-propagation.md` |
+| `t-subscription-unsubscribe-not-found` | subscription-unsubscribe-not-found | `api/NSSAIAvailabilityUnsubscribe`, `error-propagation.md` |
+<!-- AUTO:unit-tests-table:end -->
+
 ## Integration
 
 <!-- USER:integration-body:start -->
@@ -45,6 +68,24 @@ user_sections:
 - 핵심 gate command — `ctest --test-dir build -L integration -R nssf_` PASS.
 - evidence — fixture PostgreSQL log, integration test stdout, retry_queue row count assertion.
 <!-- USER:integration-body:end -->
+
+<!-- AUTO:integration-tests-table:start -->
+### Integration Tests Inventory
+
+`dev/nssf/test-matrix.md` `## Test Inventory` 의 kind=integration row derive — 총 9개. test-matrix 변경 시 본 sub-section 이 같이 갱신된다.
+
+| id | scenario | refs |
+|---|---|---|
+| `t-selection-success` | success-registration-selection | `api/NSSelectionGet`, `SelectionEngine.md`, `request-flow.md` |
+| `t-availability-put` | availability-put-creates-record | `api/NSSAIAvailabilityPut`, `AvailabilityEngine.md`, `request-flow.md` |
+| `t-availability-patch` | availability-patch-applies | `api/NSSAIAvailabilityPatch`, `AvailabilityEngine.md` |
+| `t-availability-delete` | availability-delete | `api/NSSAIAvailabilityDelete`, `AvailabilityEngine.md` |
+| `t-subscription-create` | subscription-create | `api/NSSAIAvailabilityPost`, `SubscriptionStore.md` |
+| `t-subscription-notify` | subscription-create-and-notify | `api/NSSAIAvailabilityPost`, `SubscriptionStore.md`, `NotificationDispatcher.md`, `observability.md` |
+| `t-subscription-unsubscribe` | subscription-unsubscribe | `api/NSSAIAvailabilityUnsubscribe`, `SubscriptionStore.md` |
+| `t-notify-retry` | notification-retry-on-5xx | `NotificationDispatcher.md`, `error-propagation.md`, `configuration-strategy.md` |
+| `t-notify-dead-letter` | notification-dead-letter | `NotificationDispatcher.md`, `error-propagation.md` |
+<!-- AUTO:integration-tests-table:end -->
 
 ## Contract
 

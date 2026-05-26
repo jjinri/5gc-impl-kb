@@ -136,7 +136,11 @@ TARGETS = {
     },
     "dev/<nf>/verification-plan.md": {
         # PR-13b1 — security-baseline policy → verification-plan H3 matrix.
+        # PR-14b1 — Unit/Integration kind table 추가 (cross-file derive from
+        # test-matrix `## Test Inventory`).
         "auto_ids": [
+            "unit-tests-table",
+            "integration-tests-table",
             "security-gate-matrix",
         ],
         "user_ids": [
@@ -259,47 +263,33 @@ TEST_KIND_ORDER = [
 ]
 
 
-def parse_test_inventory(nf: str) -> list[tuple[str, str]]:
-    """dev/<nf>/test-matrix.md `## Test Inventory` 첫 table 의 (id, kind)
-    목록을 반환. 행 순서는 파일 순서 유지."""
+def parse_test_inventory_full(nf: str) -> list[dict]:
+    """dev/<nf>/test-matrix.md `## Test Inventory` 첫 table 의 full row.
+    Returns list of dict {id, kind, scenario, given, when, then, refs}.
+    Header column 순서는 test-matrix 표 그대로 가정 (id, kind, scenario,
+    given, when, then, refs).
+    """
     path = REPO / "dev" / nf / "test-matrix.md"
     if not path.is_file():
         return []
-    txt = path.read_text(encoding="utf-8")
-    # `## Test Inventory` 직후 첫 markdown table.
-    marker = "## Test Inventory"
-    idx = txt.find(marker)
-    if idx == -1:
-        return []
-    rest = txt[idx + len(marker):]
-    # 다음 `## ` (또는 EOF) 직전까지가 본 섹션.
-    next_h2 = rest.find("\n## ")
-    section = rest if next_h2 == -1 else rest[:next_h2]
-    rows: list[tuple[str, str]] = []
-    in_table = False
-    for ln in section.splitlines():
-        ln = ln.rstrip()
-        if not ln:
-            continue
-        if ln.startswith("|") and "|" in ln[1:]:
-            # header / separator / data
-            cells = [c.strip() for c in ln.strip("|").split("|")]
-            if not in_table:
-                # header row — column 0 must be "id", column 1 "kind".
-                if cells[:2] == ["id", "kind"]:
-                    in_table = True
-                continue
-            # separator row — `---` only.
-            if all(set(c) <= set("-:") for c in cells):
-                continue
-            # data row.
-            if len(cells) >= 2:
-                tid_raw = cells[0]
-                kind = cells[1]
-                # id 는 backtick 으로 감싸짐 — strip.
-                tid = tid_raw.strip("`")
-                rows.append((tid, kind))
-    return rows
+    from lib.md_table import parse_section
+    rows = parse_section(path.read_text(encoding="utf-8"), "Test Inventory")
+    out: list[dict] = []
+    cols = ("id", "kind", "scenario", "given", "when", "then", "refs")
+    for r in rows:
+        entry: dict = {}
+        for i, name in enumerate(cols):
+            entry[name] = r[i] if i < len(r) else ""
+        # id 가 backtick 으로 감싸짐 — strip.
+        entry["id"] = entry["id"].strip("`")
+        out.append(entry)
+    return out
+
+
+def parse_test_inventory(nf: str) -> list[tuple[str, str]]:
+    """Backward-compatible (id, kind) projection. PR-14b1 에서 full-row
+    parser 가 도입된 후 본 함수는 thin wrapper."""
+    return [(r["id"], r["kind"]) for r in parse_test_inventory_full(nf)]
 
 
 def render_test_inventory_index(nf: str) -> str:
@@ -383,6 +373,29 @@ def render_phase_integration_map(nf: str, config: dict) -> str:
         wis = body.get("work_items") or []
         wis_str = ", ".join(f"`{_cell(w)}`" for w in wis) if wis else "_none_"
         lines.append(f"| `{pid}` | {desc} | {wis_str} |")
+    return "\n".join(lines)
+
+
+def render_kind_test_table(nf: str, kind: str, title: str) -> str:
+    """H3 render — verification-plan 의 kind 별 sub-section. test-matrix
+    `## Test Inventory` 의 kind 매칭 row 만 추출해 {id, scenario, refs}
+    table 로 render."""
+    rows = [r for r in parse_test_inventory_full(nf) if r["kind"] == kind]
+    if not rows:
+        return (f"### {title}\n\n"
+                f"_test-matrix.md `## Test Inventory` 의 kind={kind} row 부재._")
+    lines = [f"### {title}", ""]
+    lines.append(f"`dev/{nf}/test-matrix.md` `## Test Inventory` 의 "
+                 f"kind={kind} row derive — 총 {len(rows)}개. test-matrix 변경 시"
+                 " 본 sub-section 이 같이 갱신된다.")
+    lines.append("")
+    lines.append("| id | scenario | refs |")
+    lines.append("|---|---|---|")
+    for r in rows:
+        tid = _cell(r["id"])
+        scenario = _cell(r["scenario"])
+        refs = _cell(r["refs"])
+        lines.append(f"| `{tid}` | {scenario} | {refs} |")
     return "\n".join(lines)
 
 
@@ -891,6 +904,10 @@ def render_verification_plan(nf: str, current_text: str, config: dict) -> str:
     target = "dev/<nf>/verification-plan.md"
     schema = TARGETS[target]
     autos = {
+        "unit-tests-table": render_kind_test_table(
+            nf, "unit", "Unit Tests Inventory"),
+        "integration-tests-table": render_kind_test_table(
+            nf, "integration", "Integration Tests Inventory"),
         "security-gate-matrix": render_security_gate_matrix(nf),
     }
     users_existing = extract_blocks(current_text, "USER") if current_text else {}
@@ -936,9 +953,13 @@ def render_verification_plan(nf: str, current_text: str, config: dict) -> str:
         "",
         user_block("unit-body", user_body("unit-body")),
         "",
+        auto_block("unit-tests-table", autos["unit-tests-table"]),
+        "",
         "## Integration",
         "",
         user_block("integration-body", user_body("integration-body")),
+        "",
+        auto_block("integration-tests-table", autos["integration-tests-table"]),
         "",
         "## Contract",
         "",
