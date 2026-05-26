@@ -138,10 +138,15 @@ TARGETS = {
         # PR-13b1 — security-baseline policy → verification-plan H3 matrix.
         # PR-14b1 — Unit/Integration kind table 추가 (cross-file derive from
         # test-matrix `## Test Inventory`).
+        # PR-14b2 — Contract/End-to-End/Observability kind table 추가
+        # (USER → AUTO promotion 완료).
         "auto_ids": [
             "unit-tests-table",
             "integration-tests-table",
+            "contract-tests-table",
             "security-gate-matrix",
+            "end-to-end-tests-table",
+            "observability-tests-table",
         ],
         "user_ids": [
             "intro-note",
@@ -376,26 +381,50 @@ def render_phase_integration_map(nf: str, config: dict) -> str:
     return "\n".join(lines)
 
 
-def render_kind_test_table(nf: str, kind: str, title: str) -> str:
+def render_kind_test_table(nf: str, kinds, title: str) -> str:
     """H3 render — verification-plan 의 kind 별 sub-section. test-matrix
-    `## Test Inventory` 의 kind 매칭 row 만 추출해 {id, scenario, refs}
-    table 로 render."""
-    rows = [r for r in parse_test_inventory_full(nf) if r["kind"] == kind]
+    `## Test Inventory` 의 kind 매칭 row 만 추출해 {id, kind, scenario, refs}
+    table 로 render.
+
+    `kinds` 는 single kind string 또는 kind list (그룹 매칭). PR-14b1 review
+    fix (PR-14b2 에서 재적용) — Integration sub-section 은 [integration,
+    module-integration] 그룹으로 묶어 t-repo-contract (kind=module-integration)
+    누락 차단.
+    """
+    if isinstance(kinds, str):
+        kind_set = {kinds}
+        kind_label = kinds
+    else:
+        kind_set = set(kinds)
+        kind_label = "/".join(kinds)
+    rows = [r for r in parse_test_inventory_full(nf) if r["kind"] in kind_set]
     if not rows:
         return (f"### {title}\n\n"
-                f"_test-matrix.md `## Test Inventory` 의 kind={kind} row 부재._")
+                f"_test-matrix.md `## Test Inventory` 의 kind={kind_label}"
+                " row 부재._")
     lines = [f"### {title}", ""]
     lines.append(f"`dev/{nf}/test-matrix.md` `## Test Inventory` 의 "
-                 f"kind={kind} row derive — 총 {len(rows)}개. test-matrix 변경 시"
-                 " 본 sub-section 이 같이 갱신된다.")
+                 f"kind={kind_label} row derive — 총 {len(rows)}개. test-matrix"
+                 " 변경 시 본 sub-section 이 같이 갱신된다.")
     lines.append("")
-    lines.append("| id | scenario | refs |")
-    lines.append("|---|---|---|")
-    for r in rows:
-        tid = _cell(r["id"])
-        scenario = _cell(r["scenario"])
-        refs = _cell(r["refs"])
-        lines.append(f"| `{tid}` | {scenario} | {refs} |")
+    # 그룹 매칭의 경우 kind 컬럼을 함께 표시 (1 kind 경우는 생략).
+    if len(kind_set) > 1:
+        lines.append("| id | kind | scenario | refs |")
+        lines.append("|---|---|---|---|")
+        for r in rows:
+            tid = _cell(r["id"])
+            kind = _cell(r["kind"])
+            scenario = _cell(r["scenario"])
+            refs = _cell(r["refs"])
+            lines.append(f"| `{tid}` | {kind} | {scenario} | {refs} |")
+    else:
+        lines.append("| id | scenario | refs |")
+        lines.append("|---|---|---|")
+        for r in rows:
+            tid = _cell(r["id"])
+            scenario = _cell(r["scenario"])
+            refs = _cell(r["refs"])
+            lines.append(f"| `{tid}` | {scenario} | {refs} |")
     return "\n".join(lines)
 
 
@@ -907,8 +936,15 @@ def render_verification_plan(nf: str, current_text: str, config: dict) -> str:
         "unit-tests-table": render_kind_test_table(
             nf, "unit", "Unit Tests Inventory"),
         "integration-tests-table": render_kind_test_table(
-            nf, "integration", "Integration Tests Inventory"),
+            nf, ["integration", "module-integration"],
+            "Integration Tests Inventory"),
+        "contract-tests-table": render_kind_test_table(
+            nf, "contract", "Contract Tests Inventory"),
         "security-gate-matrix": render_security_gate_matrix(nf),
+        "end-to-end-tests-table": render_kind_test_table(
+            nf, "end-to-end", "End-to-End Tests Inventory"),
+        "observability-tests-table": render_kind_test_table(
+            nf, "observability", "Observability Tests Inventory"),
     }
     users_existing = extract_blocks(current_text, "USER") if current_text else {}
 
@@ -965,6 +1001,8 @@ def render_verification_plan(nf: str, current_text: str, config: dict) -> str:
         "",
         user_block("contract-body", user_body("contract-body")),
         "",
+        auto_block("contract-tests-table", autos["contract-tests-table"]),
+        "",
         "## Security",
         "",
         user_block("security-body", user_body("security-body")),
@@ -975,9 +1013,13 @@ def render_verification_plan(nf: str, current_text: str, config: dict) -> str:
         "",
         user_block("end-to-end-body", user_body("end-to-end-body")),
         "",
+        auto_block("end-to-end-tests-table", autos["end-to-end-tests-table"]),
+        "",
         "## Observability",
         "",
         user_block("observability-body", user_body("observability-body")),
+        "",
+        auto_block("observability-tests-table", autos["observability-tests-table"]),
         "",
         "## References",
         "",

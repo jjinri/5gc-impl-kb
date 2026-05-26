@@ -10,7 +10,10 @@ source_readiness_config: design/nssf/readiness-config.yaml
 generated_sections:
   - unit-tests-table
   - integration-tests-table
+  - contract-tests-table
   - security-gate-matrix
+  - end-to-end-tests-table
+  - observability-tests-table
 user_sections:
   - intro-note
   - unit-body
@@ -72,19 +75,20 @@ user_sections:
 <!-- AUTO:integration-tests-table:start -->
 ### Integration Tests Inventory
 
-`dev/nssf/test-matrix.md` `## Test Inventory` 의 kind=integration row derive — 총 9개. test-matrix 변경 시 본 sub-section 이 같이 갱신된다.
+`dev/nssf/test-matrix.md` `## Test Inventory` 의 kind=integration/module-integration row derive — 총 10개. test-matrix 변경 시 본 sub-section 이 같이 갱신된다.
 
-| id | scenario | refs |
-|---|---|---|
-| `t-selection-success` | success-registration-selection | `api/NSSelectionGet`, `SelectionEngine.md`, `request-flow.md` |
-| `t-availability-put` | availability-put-creates-record | `api/NSSAIAvailabilityPut`, `AvailabilityEngine.md`, `request-flow.md` |
-| `t-availability-patch` | availability-patch-applies | `api/NSSAIAvailabilityPatch`, `AvailabilityEngine.md` |
-| `t-availability-delete` | availability-delete | `api/NSSAIAvailabilityDelete`, `AvailabilityEngine.md` |
-| `t-subscription-create` | subscription-create | `api/NSSAIAvailabilityPost`, `SubscriptionStore.md` |
-| `t-subscription-notify` | subscription-create-and-notify | `api/NSSAIAvailabilityPost`, `SubscriptionStore.md`, `NotificationDispatcher.md`, `observability.md` |
-| `t-subscription-unsubscribe` | subscription-unsubscribe | `api/NSSAIAvailabilityUnsubscribe`, `SubscriptionStore.md` |
-| `t-notify-retry` | notification-retry-on-5xx | `NotificationDispatcher.md`, `error-propagation.md`, `configuration-strategy.md` |
-| `t-notify-dead-letter` | notification-dead-letter | `NotificationDispatcher.md`, `error-propagation.md` |
+| id | kind | scenario | refs |
+|---|---|---|---|
+| `t-selection-success` | integration | success-registration-selection | `api/NSSelectionGet`, `SelectionEngine.md`, `request-flow.md` |
+| `t-availability-put` | integration | availability-put-creates-record | `api/NSSAIAvailabilityPut`, `AvailabilityEngine.md`, `request-flow.md` |
+| `t-availability-patch` | integration | availability-patch-applies | `api/NSSAIAvailabilityPatch`, `AvailabilityEngine.md` |
+| `t-availability-delete` | integration | availability-delete | `api/NSSAIAvailabilityDelete`, `AvailabilityEngine.md` |
+| `t-subscription-create` | integration | subscription-create | `api/NSSAIAvailabilityPost`, `SubscriptionStore.md` |
+| `t-subscription-notify` | integration | subscription-create-and-notify | `api/NSSAIAvailabilityPost`, `SubscriptionStore.md`, `NotificationDispatcher.md`, `observability.md` |
+| `t-subscription-unsubscribe` | integration | subscription-unsubscribe | `api/NSSAIAvailabilityUnsubscribe`, `SubscriptionStore.md` |
+| `t-notify-retry` | integration | notification-retry-on-5xx | `NotificationDispatcher.md`, `error-propagation.md`, `configuration-strategy.md` |
+| `t-notify-dead-letter` | integration | notification-dead-letter | `NotificationDispatcher.md`, `error-propagation.md` |
+| `t-repo-contract` | module-integration | repository interface contract | `state-persistence.md`, `tasks.yaml#nssf-repo-*`, `engineering-design.md` |
 <!-- AUTO:integration-tests-table:end -->
 
 ## Contract
@@ -96,6 +100,17 @@ user_sections:
 - 핵심 gate command — `ctest --test-dir build -R nssf_contract_` PASS.
 - evidence — operation × cause matrix 적합 출력 (모든 cell green), schema diff report 0건.
 <!-- USER:contract-body:end -->
+
+<!-- AUTO:contract-tests-table:start -->
+### Contract Tests Inventory
+
+`dev/nssf/test-matrix.md` `## Test Inventory` 의 kind=contract row derive — 총 2개. test-matrix 변경 시 본 sub-section 이 같이 갱신된다.
+
+| id | scenario | refs |
+|---|---|---|
+| `t-notify-oauth2-enabled` | oauth2-client-credentials-enabled | `NotificationDispatcher.md`, `configuration-strategy.md`, `ADR-0004` |
+| `t-notify-oauth2-disabled` | oauth2-client-credentials-disabled | `NotificationDispatcher.md`, `configuration-strategy.md` |
+<!-- AUTO:contract-tests-table:end -->
 
 ## Security
 
@@ -143,6 +158,17 @@ user_sections:
 - evidence — 시나리오 별 e2e log + retry_queue dispatch evidence.
 <!-- USER:end-to-end-body:end -->
 
+<!-- AUTO:end-to-end-tests-table:start -->
+### End-to-End Tests Inventory
+
+`dev/nssf/test-matrix.md` `## Test Inventory` 의 kind=end-to-end row derive — 총 2개. test-matrix 변경 시 본 sub-section 이 같이 갱신된다.
+
+| id | scenario | refs |
+|---|---|---|
+| `t-correlation-e2e` | correlation-end-to-end | `observability.md`, `NotificationDispatcher.md` |
+| `t-shutdown-drain` | graceful-shutdown-drain | `runtime-model.md`, `NotificationDispatcher.md` |
+<!-- AUTO:end-to-end-tests-table:end -->
+
 ## Observability
 
 <!-- USER:observability-body:start -->
@@ -155,6 +181,12 @@ user_sections:
 - 핵심 gate command — `ctest --test-dir build -R nssf_observability_` PASS.
 - evidence — metric emit dump, log redaction 검증 출력, trace span graph 캡처.
 <!-- USER:observability-body:end -->
+
+<!-- AUTO:observability-tests-table:start -->
+### Observability Tests Inventory
+
+_test-matrix.md `## Test Inventory` 의 kind=observability row 부재._
+<!-- AUTO:observability-tests-table:end -->
 
 ## References
 
