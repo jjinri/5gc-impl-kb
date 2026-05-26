@@ -120,6 +120,9 @@ GATE_DEFS = [
         "all_work_items_have_tests",
         "all_work_items_have_verification_commands",
         "team_execution_plan_present",
+        "phase_wi_coverage",
+        "wi_depends_on_valid",
+        "wi_phase_order_valid",
         "human_review_pack_traceable",
         "gaps_classified",
         "blocker_gaps_zero",
@@ -530,25 +533,241 @@ def check_all_work_items_have_verification_commands(dev_dir: pathlib.Path) -> di
 
 
 def check_team_execution_plan_present(dev_dir: pathlib.Path) -> dict:
+    """relaxed — PR-10 (2026-05-26). 5 lane H2 mandate 제거. 본 check 는
+    file 존재 + 비-placeholder 본문 *만* 강제. lane structure 는 hint —
+    runtime 이 actual agent/team topology 결정. blocking gate 는
+    phase_wi_coverage / wi_depends_on_valid / wi_phase_order_valid 에서 보장."""
     base = {
         "id": "team_execution_plan_present", "tier": 1,
-        "name": "team-execution-plan.md 5 lane 섹션 존재",
-        "criterion": ("team-execution-plan.md 가 존재하고 canonical 5 lane H2 "
-                      "(Orchestrator/Code/Reviewer/Tester/Verifier) + "
-                      "Integration Order/References 순서 일치."),
+        "name": "team-execution-plan.md 존재 + 비-placeholder 본문",
+        "criterion": ("team-execution-plan.md 가 존재하고, frontmatter +"
+                      " AUTO/USER marker 외 의미 있는 본문 (>200자)."
+                      " lane H2 구조는 *hint*, mandate 아님."),
     }
     p = dev_dir / "team-execution-plan.md"
     if not p.exists():
         base.update(status="FAIL", current="team-execution-plan.md 없음",
                     to_pass=["/nf-impl-plan <nf> 으로 team-execution-plan.md 생성"])
         return base
-    got = h2(p)
-    want = READINESS_PACK_MD_CANON["team-execution-plan.md"]
-    if got != want:
-        base.update(status="FAIL", current=f"H2 불일치 — {got}",
-                    to_pass=[f"canonical 5 lane 섹션 순서 일치 — {want}"])
+    txt = p.read_text(encoding="utf-8")
+    # frontmatter strip
+    _, body = parse_frontmatter(txt)
+    # marker strip (AUTO/USER marker 라인 자체 + TODO placeholder 라인 제거).
+    cleaned_lines = []
+    for ln in body.splitlines():
+        if "<!-- AUTO:" in ln or "<!-- USER:" in ln:
+            continue
+        if "TODO:" in ln and "사람이 보강" in ln:
+            continue
+        cleaned_lines.append(ln)
+    cleaned = "".join(cleaned_lines).strip()
+    if len(cleaned) < 200:
+        base.update(status="FAIL",
+                    current=f"본문 길이 {len(cleaned)}자 (TODO placeholder 가능성)",
+                    to_pass=["team-execution-plan.md USER block 에 실제 lane/role"
+                             " hint 또는 execution context 본문 작성"])
+        return base
+    base.update(status="PASS",
+                current=f"본문 {len(cleaned)}자, 비-placeholder 확인",
+                to_pass=[])
+    return base
+
+
+def _load_codegen_work_items(dev_dir: pathlib.Path) -> tuple[dict | None, str | None]:
+    p = dev_dir / "codegen-work-items.yaml"
+    if not p.exists():
+        return None, "codegen-work-items.yaml 없음"
+    try:
+        return yaml.safe_load(p.read_text(encoding="utf-8")) or {}, None
+    except yaml.YAMLError as e:
+        return None, f"YAML parse error: {e}"
+
+
+def _load_readiness_config_for_nf(nf: str) -> dict | None:
+    p = REPO / "design" / nf / "readiness-config.yaml"
+    if not p.exists():
+        return None
+    try:
+        return yaml.safe_load(p.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError:
+        return None
+
+
+def _wi_id_set(items: list) -> set[str]:
+    out: set[str] = set()
+    for it in items or []:
+        if isinstance(it, dict) and isinstance(it.get("id"), str):
+            out.add(it["id"])
+    return out
+
+
+def _wi_by_id(items: list) -> dict[str, dict]:
+    out: dict[str, dict] = {}
+    for it in items or []:
+        if isinstance(it, dict) and isinstance(it.get("id"), str):
+            out[it["id"]] = it
+    return out
+
+
+def check_phase_wi_coverage(dev_dir: pathlib.Path, nf: str) -> dict:
+    """readiness-config.phase_policy.phases[*].work_items ⊆
+    codegen-work-items.yaml items[].id."""
+    base = {
+        "id": "phase_wi_coverage", "tier": 1,
+        "name": "readiness-config phase WI ⊆ codegen-work-items WI",
+        "criterion": ("design/<nf>/readiness-config.yaml `phase_policy.phases."
+                      "*.work_items` 의 모든 WI ID 가 dev/<nf>/codegen-work-"
+                      "items.yaml `items[].id` 에 존재."),
+    }
+    rc = _load_readiness_config_for_nf(nf)
+    if rc is None:
+        base.update(status="FAIL", current="readiness-config.yaml 없음/파싱 실패",
+                    to_pass=["design/<nf>/readiness-config.yaml 생성/수정"])
+        return base
+    wi_doc, err = _load_codegen_work_items(dev_dir)
+    if err:
+        base.update(status="FAIL", current=err,
+                    to_pass=["codegen-work-items.yaml 생성"])
+        return base
+    wi_ids = _wi_id_set(wi_doc.get("items") or [])
+    phases = ((rc.get("phase_policy") or {}).get("phases") or {})
+    missing: list[str] = []
+    seen: list[str] = []
+    for pid, body in phases.items():
+        if not isinstance(body, dict):
+            continue
+        for wi in (body.get("work_items") or []):
+            seen.append(wi)
+            if wi not in wi_ids:
+                missing.append(f"phase={pid} WI={wi}")
+    if missing:
+        base.update(status="FAIL", current=f"누락 — {missing[:5]}"
+                    + (" ..." if len(missing) > 5 else ""),
+                    to_pass=["readiness-config phase_policy 의 WI 를 codegen-"
+                             "work-items items[] 에 추가하거나 phase_policy 에서 제거"])
     else:
-        base.update(status="PASS", current="5 lane + integration order 일치",
+        base.update(status="PASS",
+                    current=f"phase WI {len(seen)} 개 모두 items[] 에 존재",
+                    to_pass=[])
+    return base
+
+
+def check_wi_depends_on_valid(dev_dir: pathlib.Path) -> dict:
+    """각 WI 의 depends_on 원소가 다른 WI id 로 resolve + DAG (no cycle)."""
+    base = {
+        "id": "wi_depends_on_valid", "tier": 1,
+        "name": "WI depends_on 그래프 유효 (refs resolve + DAG)",
+        "criterion": ("codegen-work-items.yaml `items[].depends_on` 의 모든"
+                      " 원소가 다른 items[].id 로 resolve + 그래프에 cycle 없음."),
+    }
+    wi_doc, err = _load_codegen_work_items(dev_dir)
+    if err:
+        base.update(status="FAIL", current=err, to_pass=["codegen-work-items.yaml 생성"])
+        return base
+    items = wi_doc.get("items") or []
+    by_id = _wi_by_id(items)
+    ids = set(by_id.keys())
+    unresolved: list[str] = []
+    graph: dict[str, list[str]] = {}
+    for wi_id, it in by_id.items():
+        deps = it.get("depends_on") or []
+        if not isinstance(deps, list):
+            unresolved.append(f"{wi_id} depends_on 비-list")
+            continue
+        for d in deps:
+            if d not in ids:
+                unresolved.append(f"{wi_id} → {d} (unresolved)")
+        graph[wi_id] = [d for d in deps if d in ids]
+    if unresolved:
+        base.update(status="FAIL",
+                    current=f"unresolved refs — {unresolved[:5]}"
+                    + (" ..." if len(unresolved) > 5 else ""),
+                    to_pass=["depends_on 원소를 valid WI id 로 교정"])
+        return base
+    # Cycle detection — Kahn topological sort.
+    indeg = {n: 0 for n in graph}
+    for n, deps in graph.items():
+        for d in deps:
+            indeg[n] += 1  # edge d→n (d 가 먼저)
+    # Kahn requires reverse edges 처리 — depends_on 은 *선행* WI 다.
+    # n 이 d 의존 → edge d→n. n 의 in-degree = len(deps).
+    queue = [n for n, d in indeg.items() if d == 0]
+    visited = 0
+    incoming: dict[str, list[str]] = {n: [] for n in graph}
+    for n, deps in graph.items():
+        for d in deps:
+            incoming[n].append(d)
+    indeg2 = {n: len(incoming[n]) for n in graph}
+    q = [n for n in graph if indeg2[n] == 0]
+    order: list[str] = []
+    while q:
+        n = q.pop(0)
+        order.append(n)
+        for m in graph:
+            if n in incoming[m]:
+                indeg2[m] -= 1
+                if indeg2[m] == 0:
+                    q.append(m)
+    if len(order) != len(graph):
+        cyclic = [n for n in graph if n not in order]
+        base.update(status="FAIL",
+                    current=f"cycle 검출 — 잔여 {cyclic[:5]}",
+                    to_pass=["depends_on 그래프에서 cycle 을 끊음"])
+        return base
+    base.update(status="PASS",
+                current=f"WI {len(graph)} 개 DAG, cycle 없음",
+                to_pass=[])
+    return base
+
+
+def check_wi_phase_order_valid(dev_dir: pathlib.Path, nf: str) -> dict:
+    """각 WI x 가 depends_on y 이면 phase(y) ≤ phase(x). phase order 위반 0."""
+    base = {
+        "id": "wi_phase_order_valid", "tier": 1,
+        "name": "WI depends_on phase 순서 유효",
+        "criterion": ("WI x 의 depends_on 에 있는 모든 y 의 phase 가 x 의 phase"
+                      " 이전 또는 같음. phase 는 readiness-config.phase_policy."
+                      "phases 에서 순서대로 phase1→phase2... 로 ordinal 부여."),
+    }
+    rc = _load_readiness_config_for_nf(nf)
+    if rc is None:
+        base.update(status="FAIL", current="readiness-config.yaml 없음/파싱 실패",
+                    to_pass=["design/<nf>/readiness-config.yaml 생성/수정"])
+        return base
+    wi_doc, err = _load_codegen_work_items(dev_dir)
+    if err:
+        base.update(status="FAIL", current=err, to_pass=["codegen-work-items.yaml 생성"])
+        return base
+    phases = ((rc.get("phase_policy") or {}).get("phases") or {})
+    # WI → phase ordinal (insertion order = ordinal).
+    wi_phase: dict[str, int] = {}
+    for idx, (pid, body) in enumerate(phases.items()):
+        if not isinstance(body, dict):
+            continue
+        for wi in (body.get("work_items") or []):
+            wi_phase[wi] = idx
+    items = wi_doc.get("items") or []
+    by_id = _wi_by_id(items)
+    violations: list[str] = []
+    for wi_id, it in by_id.items():
+        if wi_id not in wi_phase:
+            continue  # WI 가 phase_policy 외에 — phase_wi_coverage 에서 처리.
+        x_phase = wi_phase[wi_id]
+        for d in (it.get("depends_on") or []):
+            if d not in wi_phase:
+                continue
+            if wi_phase[d] > x_phase:
+                violations.append(
+                    f"{wi_id} (phase {x_phase}) ← depends_on {d} (phase {wi_phase[d]})")
+    if violations:
+        base.update(status="FAIL",
+                    current=f"phase 순서 위반 — {violations[:5]}"
+                    + (" ..." if len(violations) > 5 else ""),
+                    to_pass=["phase_policy 순서 또는 depends_on 을 정합 — 선행 WI"
+                             " 의 phase 가 후행 WI 의 phase 이하"])
+    else:
+        base.update(status="PASS",
+                    current=f"phase mapped WI {len(wi_phase)} 개 순서 정합",
                     to_pass=[])
     return base
 
@@ -893,6 +1112,9 @@ def main() -> None:
         check_all_work_items_have_tests(dev_dir),
         check_all_work_items_have_verification_commands(dev_dir),
         check_team_execution_plan_present(dev_dir),
+        check_phase_wi_coverage(dev_dir, nf),
+        check_wi_depends_on_valid(dev_dir),
+        check_wi_phase_order_valid(dev_dir, nf),
         check_human_review_pack_traceable(dev_dir),
         check_gaps_classified(dev_dir),
         check_blocker_gaps_zero(dev_dir),

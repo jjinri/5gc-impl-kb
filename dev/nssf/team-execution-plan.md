@@ -23,7 +23,7 @@ user_sections:
 # NSSF Team Execution Plan
 
 <!-- USER:intro-note:start -->
-`/nf-implement nssf` 의 5 agent lane 책임 분리. `impl_ready_for_codegen` gate 의 `team_execution_plan_present` 는 다섯 lane H2 가 모두 존재하는지 검사한다.
+`/nf-implement nssf` 의 execution role / write-scope *hints*. runtime 이 actual agent/team topology 결정. 본 문서의 5 lane H2 는 *예시 구조* — `impl_ready_for_codegen` 의 `team_execution_plan_present` 는 PR-10 (2026-05-26) 부터 H2 mandate 가 아니라 *비-placeholder 본문* 만 강제하고, blocking 검증은 WI graph (`phase_wi_coverage` / `wi_depends_on_valid` / `wi_phase_order_valid`) 가 담당한다.
 <!-- USER:intro-note:end -->
 
 ## Orchestrator Lane
