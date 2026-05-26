@@ -1,0 +1,272 @@
+# Schema for design/<nf>/readiness-config.yaml — nf-readiness-config-v1.
+#
+# 본 schema 는 사람 ratify 대상 NF 구현·운영·security·phase·gap·deferred
+# 결정의 *machine-readable contract* 다. engineering-core-slots v2 가 본
+# schema 의 *implementation slot 부분 schema* 로 흡수된다 — 중복 정의하지
+# 않고 ref 한다.
+#
+# Phase 단계 — PR-3 (현재) = shape spec, validator wiring 없음.
+# PR-4 generator 가 본 schema 를 흡수해 advisory WARN-only 로 시작하고,
+# Phase C exit 후 blocking 으로 승격한다.
+#
+# Cross-source guarantee (PR-2 closed decision 7):
+#   `implementation.slots.*` 의 13 slot shape =
+#   design/schemas/engineering-core-slots.yaml `slots` 와 동일.
+# 본 파일은 *추가 section* (specs, security, operator_inputs, phase_policy,
+# gaps, deferred_decisions) 만 정의한다.
+
+version: 1
+schema_id: nf-readiness-config-v1
+
+# 공통 frontmatter (top-level required).
+common_frontmatter:
+  required:
+    - schema_version
+    - nf
+    - ratified_by
+    - ratified_date
+  schema_version_enum:
+    - nf-readiness-config-v1
+  nf:
+    type: scalar
+    constraint: >-
+      `design/nf-registry.yaml` `nfs.<nf>` 키와 일치해야 함.
+  ratified_by:
+    type: scalar
+  ratified_date:
+    type: scalar
+    format: YYYY-MM-DD
+
+# Top-level sections.
+sections:
+
+  # ─── specs ──────────────────────────────────────────────────────────
+  specs:
+    required: true
+    fields:
+      primary:
+        type: scalar
+        constraint: >-
+          3GPP spec 번호 (점 포함, 예 "29.531"). `design/nf-registry.yaml`
+          `nfs.<nf>.primary_spec` 과 일치.
+      openapi:
+        type: non_empty_list
+        item_type: string
+        constraint: >-
+          `specs/<spec>/*.yaml` 경로. lifecycle extraction 입력.
+      absorbed_security_specs:
+        type: list
+        item_type: scalar
+        constraint: >-
+          `design/policies/spec-dependencies.yaml.absorbed_security_profile_specs[].spec`
+          enum 중 하나. ADR-0004 흡수 spec.
+      excluded_operational:
+        type: list
+        item_type: object
+        item_required:
+          - spec
+          - reason
+
+  # ─── implementation (engineering-core-slots v2 흡수) ────────────────
+  implementation:
+    required: true
+    description: >-
+      13 engineering core slot. 본 section 의 *slot shape* 는
+      `design/schemas/engineering-core-slots.yaml` 의 `slots.*` 와 동일하다.
+      개별 slot 의 required field / discriminant / variant / dependency_shape
+      는 engineering-core-slots v2 의 정의를 따른다. 중복 정의하지 않는다.
+    schema_ref: design/schemas/engineering-core-slots.yaml
+    slot_set:
+      - language
+      - runtime
+      - deployment_topology
+      - module_source_layout
+      - sbi_server_stack
+      - sbi_client_stack
+      - schema_codegen
+      - tls_security
+      - oauth2_token_validation
+      - persistence
+      - telemetry
+      - configuration_management
+      - test_build_tooling
+    common_row_fields:
+      schema_ref: design/schemas/engineering-core-slots.yaml#common_row_fields
+      required_per_row:
+        - decision
+        - status
+        - rationale
+        - consequence
+        - source
+        - ratified_by
+        - date
+      status_enum:
+        - decided
+        - explicitly_out_of_scope
+
+  # ─── security (project baseline 참조 + NF 특정 강화) ────────────────
+  security:
+    required: true
+    fields:
+      baseline_profile:
+        type: scalar
+        constraint: >-
+          `design/policies/security-baseline.yaml` 의 baseline 적용 프로파일
+          이름. 본 PR-3 단계 enum: project-default.
+      dev_disable_allowed:
+        type: boolean
+        constraint: >-
+          security capability 가 dev profile 에서 disable 가능한지 (ADR-0004
+          의무 5). production-capable code path 는 *항상 존재* 해야 함.
+      production_capable_required:
+        type: boolean
+        constraint: >-
+          codegen 산출이 production-capable 인지 (true 권고, false 는
+          ADR-0004 baseline 위반).
+      nf_specific_role:
+        type: list
+        optional: true
+        item_required:
+          - role
+          - source
+        constraint: >-
+          baseline 강화 항목 (예 NRF=OAuth2 issuer). 약화 금지 (ADR-0004
+          §NF-specific security role).
+
+  # ─── operator_inputs (배포 시점 운영자 주입) ────────────────────────
+  operator_inputs:
+    required: true
+    fields:
+      required:
+        type: non_empty_list
+        item_type: scalar
+        constraint: >-
+          배포 시점에 운영자가 주입해야 할 config key 목록 (예 tls_cert,
+          postgres_dsn, jwks_endpoint). gaps `operator-provided` 와 정합.
+      optional:
+        type: list
+        item_type: scalar
+
+  # ─── phase_policy (구현 phase 분해) ─────────────────────────────────
+  phase_policy:
+    required: true
+    fields:
+      tracer_bullet_operation:
+        type: scalar
+        constraint: >-
+          첫 sliced delivery 의 API operation (NSSF 예 NSSelectionGet).
+          contract `api/*` 중 하나.
+      phases:
+        type: mapping
+        constraint: >-
+          phase ID (예 phase1, phase2 ...) → phase entry object.
+        value_shape:
+          type: object
+          required:
+            - description
+            - work_items
+          fields:
+            description:
+              type: scalar
+              constraint: >-
+                phase 의 wave/PR 컨텍스트 (예 "tracer-bullet, PR G").
+            work_items:
+              type: non_empty_list
+              item_type: scalar
+              constraint: >-
+                WI ID 목록. 각 ID 는 generated
+                `dev/<nf>/codegen-work-items.yaml.items[].id` 와 일치해야
+                한다 (PR-4 generator 가 양방향 정합 검증).
+
+  # ─── gaps (NSSF instance gap list) ──────────────────────────────────
+  gaps:
+    required: true
+    fields:
+      categories_source:
+        type: scalar
+        constraint: >-
+          gap category 의 source-of-truth file path. 본 PR-3 단계 값:
+          design/policies/gaps.yaml.
+      rows:
+        type: list
+        optional: true
+        item_required:
+          - id
+          - category
+          - description
+          - owner
+          - target_resolution
+        constraint: >-
+          NSSF-specific gap 목록. category 값은 `design/policies/gaps.yaml`
+          `categories[].id` enum.
+
+  # ─── deferred_decisions (per-NF 연기 레지스터) ───────────────────────
+  deferred_decisions:
+    required: true
+    description: >-
+      Per-NF 연기 레지스터 (audit doc §4 promotion: 출처
+      `design/<nf>/architecture/decisions/ADR-0001-architecture-baseline.md`
+      `## Open choices`). 각 행은 *resolved* (engineering slot 결정에 흡수)
+      또는 *explicitly_out_of_scope*.
+    fields:
+      rows:
+        type: list
+        item_required:
+          - id
+          - decision
+          - status
+          - rationale
+          - consequence
+          - source
+          - ratified_by
+          - date
+        item_status_enum:
+          - decided
+          - explicitly_out_of_scope
+        constraint: >-
+          status=decided 행은 `references_slot` 에 흡수된 implementation
+          slot 명시 권고. status=explicitly_out_of_scope 행은 rationale
+          에 source spec / ADR / Open choice 명시 필수.
+
+# Cross-section invariants (PR-4 generator + validator 가 본 항목 검사).
+cross_section_invariants:
+  - id: RC-1
+    statement: >-
+      `specs.primary` = `design/nf-registry.yaml.generated.nfs.<nf>.primary_spec`
+      또는 `manual_overrides.nfs.<nf>.primary_spec`.
+  - id: RC-2
+    statement: >-
+      `specs.absorbed_security_specs[]` ⊆
+      `design/policies/spec-dependencies.yaml.absorbed_security_profile_specs[].spec`.
+  - id: RC-3
+    statement: >-
+      `implementation.slots.*` 의 13 slot 이 *모두* 존재 (status=decided
+      또는 explicitly_out_of_scope). 누락 시 eng_frozen 의미가 약해진다.
+  - id: RC-4
+    statement: >-
+      `security.production_capable_required=true` 이면 `implementation.slots.tls_security.mode`
+      ∈ {enabled} 이고 `implementation.slots.oauth2_token_validation.enabled=true`
+      (ADR-0004 의무 1·3 + 의무 5 production-capable path).
+  - id: RC-5
+    statement: >-
+      `phase_policy.phases.*` 의 모든 WI ID 가 generated
+      `dev/<nf>/codegen-work-items.yaml.items[].id` 와 일치. mismatch 는
+      drift 신호 — generator 가 양방향 정합 검증.
+  - id: RC-6
+    statement: >-
+      `gaps.rows[].category` 가 `design/policies/gaps.yaml.categories[].id`
+      enum (6: blocker, deferred, operator-provided, library-assumed,
+      test-gap, assumption) 중 하나.
+  - id: RC-7
+    statement: >-
+      `deferred_decisions.rows[].status=decided` 행이 `references_slot`
+      을 명시하면, 그 slot 이 `implementation.slot_set` 13개 중 하나.
+
+# Promotion source (PR-1 audit doc §4 추적).
+promotion_source_map:
+  implementation: engineering/<nf>/engineering-design.md (## Decisions YAML block)
+  deferred_decisions: design/<nf>/architecture/decisions/ADR-0001-architecture-baseline.md (## Open choices)
+  phase_policy: dev/<nf>/codegen-work-items.yaml (phase 주석 + WI items)
+  gaps: dev/<nf>/open-gaps-and-assumptions.md (## Gaps 표)
+  security: docs/adr/ADR-0004-project-security-baseline.md (baseline mandates)
+  operator_inputs: design/<nf>/architecture/configuration-strategy.md (security config keys)
