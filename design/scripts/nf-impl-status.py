@@ -610,19 +610,20 @@ def _wi_by_id(items: list) -> dict[str, dict]:
 
 
 def check_phase_wi_coverage(dev_dir: pathlib.Path, nf: str) -> dict:
-    """**bidirectional** (PR-10 review fix, 2026-05-26).
-    - forward: readiness-config.phase_policy.phases[*].work_items ⊆
-      codegen-work-items.yaml items[].id (unresolved 차단).
-    - reverse: codegen-work-items.yaml items[].id ⊆ flatten(phase_policy.
-      phases[*].work_items) (unphased WI 차단). Pane 2 권고 — phase 미할당
-      WI 가 silent 통과하면 codegen 단계의 작업 누락 위험."""
+    """**bidirectional + uniqueness** (PR-10 review fix x2, 2026-05-26).
+    - items[].id 내부 중복 차단 (items 정의 단계 무결성).
+    - phase_policy.phases[*].work_items 의 flat 중복 차단 (phase 간/내 중복
+      할당은 phase ordering 위반 위험).
+    - forward: phase_policy WI ⊆ items[].id.
+    - reverse: items[].id ⊆ phase_policy WI (unphased 차단)."""
     base = {
         "id": "phase_wi_coverage", "tier": 1,
-        "name": "phase WI set ↔ items[] set 양방향 정합",
+        "name": "phase WI ↔ items[] 집합 동일 + 중복 없음",
         "criterion": ("design/<nf>/readiness-config.yaml `phase_policy.phases."
                       "*.work_items` 와 dev/<nf>/codegen-work-items.yaml "
-                      "`items[].id` 가 *집합 동일*. forward 누락 (unresolved) "
-                      "+ reverse 누락 (unphased) 둘 다 차단."),
+                      "`items[].id` 가 *집합 동일 + 각 source 안에서 중복 없음*."
+                      " forward unresolved + reverse unphased + items 중복 +"
+                      " phase 중복 모두 차단."),
     }
     rc = _load_readiness_config_for_nf(nf)
     if rc is None:
@@ -634,18 +635,38 @@ def check_phase_wi_coverage(dev_dir: pathlib.Path, nf: str) -> dict:
         base.update(status="FAIL", current=err,
                     to_pass=["codegen-work-items.yaml 생성"])
         return base
-    wi_ids = _wi_id_set(wi_doc.get("items") or [])
+
+    items = wi_doc.get("items") or []
+    # codegen-work-items.yaml items[].id 중복 검사.
+    items_list: list[str] = []
+    for it in items:
+        if isinstance(it, dict) and isinstance(it.get("id"), str):
+            items_list.append(it["id"])
+    items_dup = sorted({i for i in items_list if items_list.count(i) > 1})
+    wi_ids = set(items_list)
+
+    # readiness-config phase_policy.phases[*].work_items 중복 검사 (flat).
     phases = ((rc.get("phase_policy") or {}).get("phases") or {})
-    phase_wis: set[str] = set()
+    phase_list: list[str] = []
     for pid, body in phases.items():
         if not isinstance(body, dict):
             continue
         for wi in (body.get("work_items") or []):
-            phase_wis.add(wi)
+            phase_list.append(wi)
+    phase_dup = sorted({w for w in phase_list if phase_list.count(w) > 1})
+    phase_wis = set(phase_list)
+
     unresolved = sorted(phase_wis - wi_ids)
     unphased = sorted(wi_ids - phase_wis)
-    if unresolved or unphased:
+
+    if items_dup or phase_dup or unresolved or unphased:
         msgs: list[str] = []
+        if items_dup:
+            msgs.append(f"items[] 중복 id {items_dup[:5]}"
+                        + (" ..." if len(items_dup) > 5 else ""))
+        if phase_dup:
+            msgs.append(f"phase_policy 중복 ref {phase_dup[:5]}"
+                        + (" ..." if len(phase_dup) > 5 else ""))
         if unresolved:
             msgs.append(f"unresolved (phase→items) {unresolved[:5]}"
                         + (" ..." if len(unresolved) > 5 else ""))
@@ -654,10 +675,11 @@ def check_phase_wi_coverage(dev_dir: pathlib.Path, nf: str) -> dict:
                         + (" ..." if len(unphased) > 5 else ""))
         base.update(status="FAIL", current=" ; ".join(msgs),
                     to_pass=["readiness-config phase_policy 와 codegen-work-"
-                             "items.yaml items[] 의 WI ID 집합을 동일하게 맞춤"])
+                             "items.yaml items[] 의 WI ID 집합을 동일하게 + 각"
+                             " source 안에서 중복 제거"])
     else:
         base.update(status="PASS",
-                    current=f"양방향 정합 — {len(wi_ids)} WI",
+                    current=f"양방향 정합 + 중복 없음 — {len(wi_ids)} WI",
                     to_pass=[])
     return base
 
