@@ -61,7 +61,7 @@ Readiness Pack 9 파일이 autonomous codegen agent 가 원본 OpenAPI YAML 재�
 | `all_work_items_have_tests` | 1 | 위 8 키 mandate + `items[].tests` 모두 non-empty + TODO 아님 |
 | `all_work_items_have_verification_commands` | 1 | 위 8 키 mandate + `items[].verification_commands` 모두 non-empty + TODO 아님 |
 | `team_execution_plan_present` | 1 | `team-execution-plan.md` 가 존재하고 frontmatter + AUTO/USER marker 외 비-placeholder 본문 (>200자) 보유. **lane H2 구조는 hint, mandate 아님** (PR-10, 2026-05-26 relaxation — runtime 이 actual agent/team topology 결정) |
-| `phase_wi_coverage` | 1 | `design/<nf>/readiness-config.yaml` `phase_policy.phases.*.work_items` 의 모든 WI ID 가 `dev/<nf>/codegen-work-items.yaml` `items[].id` 에 존재 |
+| `phase_wi_coverage` | 1 | `design/<nf>/readiness-config.yaml` `phase_policy.phases.*.work_items` 와 `dev/<nf>/codegen-work-items.yaml` `items[].id` 가 **집합 동일** (forward unresolved + reverse unphased 둘 다 차단) — PR-10 review fix |
 | `wi_depends_on_valid` | 1 | `codegen-work-items.yaml` `items[].depends_on` 의 모든 원소가 다른 `items[].id` 로 resolve + 그래프 DAG (cycle 없음) |
 | `wi_phase_order_valid` | 1 | WI x 의 `depends_on` 에 있는 모든 y 의 phase ordinal 이 x 의 phase ordinal 이하 (phase ordinal = `phase_policy.phases` insertion order) |
 | `human_review_pack_traceable` | 1 | Human Review Pack 4 파일 존재 + frontmatter 필수 키 + per-file 사람 audit 흔적 (design-adequacy `## Checklist` 표에 status != pending/TODO 행 1+, spec-to-design `## Coverage Trace` 에 non-TODO 행 1+, open-gaps `## Gaps` 에 id != TODO 행 1+, implementation-readiness-review `## Recommendation` 에 30자+ 비-TODO 본문 1+) |

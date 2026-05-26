@@ -610,14 +610,19 @@ def _wi_by_id(items: list) -> dict[str, dict]:
 
 
 def check_phase_wi_coverage(dev_dir: pathlib.Path, nf: str) -> dict:
-    """readiness-config.phase_policy.phases[*].work_items ⊆
-    codegen-work-items.yaml items[].id."""
+    """**bidirectional** (PR-10 review fix, 2026-05-26).
+    - forward: readiness-config.phase_policy.phases[*].work_items ⊆
+      codegen-work-items.yaml items[].id (unresolved 차단).
+    - reverse: codegen-work-items.yaml items[].id ⊆ flatten(phase_policy.
+      phases[*].work_items) (unphased WI 차단). Pane 2 권고 — phase 미할당
+      WI 가 silent 통과하면 codegen 단계의 작업 누락 위험."""
     base = {
         "id": "phase_wi_coverage", "tier": 1,
-        "name": "readiness-config phase WI ⊆ codegen-work-items WI",
+        "name": "phase WI set ↔ items[] set 양방향 정합",
         "criterion": ("design/<nf>/readiness-config.yaml `phase_policy.phases."
-                      "*.work_items` 의 모든 WI ID 가 dev/<nf>/codegen-work-"
-                      "items.yaml `items[].id` 에 존재."),
+                      "*.work_items` 와 dev/<nf>/codegen-work-items.yaml "
+                      "`items[].id` 가 *집합 동일*. forward 누락 (unresolved) "
+                      "+ reverse 누락 (unphased) 둘 다 차단."),
     }
     rc = _load_readiness_config_for_nf(nf)
     if rc is None:
@@ -631,23 +636,28 @@ def check_phase_wi_coverage(dev_dir: pathlib.Path, nf: str) -> dict:
         return base
     wi_ids = _wi_id_set(wi_doc.get("items") or [])
     phases = ((rc.get("phase_policy") or {}).get("phases") or {})
-    missing: list[str] = []
-    seen: list[str] = []
+    phase_wis: set[str] = set()
     for pid, body in phases.items():
         if not isinstance(body, dict):
             continue
         for wi in (body.get("work_items") or []):
-            seen.append(wi)
-            if wi not in wi_ids:
-                missing.append(f"phase={pid} WI={wi}")
-    if missing:
-        base.update(status="FAIL", current=f"누락 — {missing[:5]}"
-                    + (" ..." if len(missing) > 5 else ""),
-                    to_pass=["readiness-config phase_policy 의 WI 를 codegen-"
-                             "work-items items[] 에 추가하거나 phase_policy 에서 제거"])
+            phase_wis.add(wi)
+    unresolved = sorted(phase_wis - wi_ids)
+    unphased = sorted(wi_ids - phase_wis)
+    if unresolved or unphased:
+        msgs: list[str] = []
+        if unresolved:
+            msgs.append(f"unresolved (phase→items) {unresolved[:5]}"
+                        + (" ..." if len(unresolved) > 5 else ""))
+        if unphased:
+            msgs.append(f"unphased (items→phase) {unphased[:5]}"
+                        + (" ..." if len(unphased) > 5 else ""))
+        base.update(status="FAIL", current=" ; ".join(msgs),
+                    to_pass=["readiness-config phase_policy 와 codegen-work-"
+                             "items.yaml items[] 의 WI ID 집합을 동일하게 맞춤"])
     else:
         base.update(status="PASS",
-                    current=f"phase WI {len(seen)} 개 모두 items[] 에 존재",
+                    current=f"양방향 정합 — {len(wi_ids)} WI",
                     to_pass=[])
     return base
 

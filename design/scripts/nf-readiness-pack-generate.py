@@ -90,17 +90,16 @@ TARGETS = {
         ],
     },
     "dev/<nf>/team-execution-plan.md": {
+        # PR-10 lane relaxation 후속 (PR-10 review fix, 2026-05-26) —
+        # 5 lane H2 hard-code 제거. user_ids 는 free-form body 단일 블록
+        # + intro/references 보존. lane structure 는 USER:body 안에서
+        # 사용자가 자유롭게 둔다.
         "auto_ids": [
             "phase-integration-map",
         ],
         "user_ids": [
             "intro-note",
-            "orchestrator-lane-body",
-            "code-lane-body",
-            "reviewer-lane-body",
-            "tester-lane-body",
-            "verifier-lane-body",
-            "integration-order-body",
+            "body",
             "references-body",
         ],
     },
@@ -286,15 +285,16 @@ def render_test_inventory_index(nf: str) -> str:
 
 
 def render_phase_integration_map(nf: str, config: dict) -> str:
-    """H3 render — `## Integration Order` H2 아래 sub-section. readiness-
-    config.phase_policy.phases derive (phase id → description + work_items)."""
+    """H2 render — team-execution-plan.md 의 lane H2 mandate 가 PR-10 에서
+    제거됐고 user_ids 구조 reorg 후속 (PR-10 review fix) 으로 본 AUTO 도
+    free-form layout 안 H2 로 격상."""
     phase_policy = config.get("phase_policy") or {}
     phases = phase_policy.get("phases") or {}
     if not phases:
-        return ("### Phase Integration Map\n\n"
+        return ("## Phase Integration Map\n\n"
                 "_readiness-config.phase_policy.phases 부재 — render skip._")
     tracer = phase_policy.get("tracer_bullet_operation", "?")
-    lines = ["### Phase Integration Map", ""]
+    lines = ["## Phase Integration Map", ""]
     lines.append(f"`design/{nf}/readiness-config.yaml` `phase_policy` derive — "
                  f"tracer-bullet operation = `{tracer}`, "
                  f"총 {len(phases)} phase. config 변경 시 본 map 이 같이 갱신된다.")
@@ -701,31 +701,9 @@ def render_team_execution_plan(nf: str, current_text: str, config: dict) -> str:
         "",
         user_block("intro-note", user_body("intro-note")),
         "",
-        "## Orchestrator Lane",
-        "",
-        user_block("orchestrator-lane-body", user_body("orchestrator-lane-body")),
-        "",
-        "## Code Lane",
-        "",
-        user_block("code-lane-body", user_body("code-lane-body")),
-        "",
-        "## Reviewer Lane",
-        "",
-        user_block("reviewer-lane-body", user_body("reviewer-lane-body")),
-        "",
-        "## Tester Lane",
-        "",
-        user_block("tester-lane-body", user_body("tester-lane-body")),
-        "",
-        "## Verifier Lane",
-        "",
-        user_block("verifier-lane-body", user_body("verifier-lane-body")),
-        "",
-        "## Integration Order",
-        "",
-        user_block("integration-order-body", user_body("integration-order-body")),
-        "",
         auto_block("phase-integration-map", autos["phase-integration-map"]),
+        "",
+        user_block("body", user_body("body")),
         "",
         "## References",
         "",
