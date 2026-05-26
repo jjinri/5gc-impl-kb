@@ -74,3 +74,6 @@ jobs:
 
       - name: nf-impl-status --no-write (validator gate)
         run: python3 design/scripts/nf-impl-status.py nssf --no-write
+
+      - name: validate-artifact-catalog (drift guard for docs/lifecycle-artifacts.md §3)
+        run: python3 design/scripts/validate-artifact-catalog.py
