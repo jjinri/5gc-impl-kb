@@ -30,6 +30,13 @@ PR-9 확장 — 4번째 target + phase config view:
   * AUTO phase-integration-map — readiness-config.phase_policy.phases
     derive 의 phase → work_items table. config-driven render 4번째 파일.
 
+PR-11 확장 — 5번째 target + config-driven gaps table:
+  * dev/<nf>/open-gaps-and-assumptions.md 신규 target.
+  * AUTO gaps-table — readiness-config.gaps.rows derive 의 gap table
+    {id, category, description, owner, target_resolution}. config 변경 시
+    table 갱신. validator (_gaps_table_non_todo / gaps_classified /
+    blocker_gaps_zero) 가 본 generated table 을 입력으로 사용.
+
 AUTO/USER marker 패턴 (materialize-contract.py reference 모범). USER 영역
 사람 산문 보존 — generator 가 만지지 않음.
 
@@ -103,6 +110,20 @@ TARGETS = {
             "references-body",
         ],
     },
+    "dev/<nf>/open-gaps-and-assumptions.md": {
+        # PR-11 — gaps table 을 readiness-config.gaps.rows 에서 deterministic
+        # 으로 render. validator (gaps_classified / blocker_gaps_zero /
+        # human_review_pack_traceable.gaps_table_non_todo) 가 본 table 을
+        # 입력으로 사용.
+        "auto_ids": [
+            "gaps-table",
+        ],
+        "user_ids": [
+            "intro-note",
+            "summary-body",
+            "references-body",
+        ],
+    },
 }
 
 # References — fixed per NF source-of-truth list. PR-5+ 가 readiness-config
@@ -147,6 +168,7 @@ TARGET_TITLES = {
     "dev/<nf>/implementation-plan.md": "{nf_upper} Implementation Plan",
     "dev/<nf>/test-matrix.md": "{nf_upper} Test Matrix",
     "dev/<nf>/team-execution-plan.md": "{nf_upper} Team Execution Plan",
+    "dev/<nf>/open-gaps-and-assumptions.md": "{nf_upper} Open Gaps and Assumptions",
 }
 
 # Frontmatter 의 stage 라벨.
@@ -155,6 +177,7 @@ TARGET_STAGES = {
     "dev/<nf>/implementation-plan.md": "implementation-planning",
     "dev/<nf>/test-matrix.md": "implementation-planning",
     "dev/<nf>/team-execution-plan.md": "implementation-planning",
+    "dev/<nf>/open-gaps-and-assumptions.md": "implementation-planning",
 }
 
 # nf-impl-status.py DEV_FM_KEYS 와 정합 — generator 출력이 검사를 통과해야
@@ -282,6 +305,30 @@ def render_test_inventory_index(nf: str) -> str:
             lines.append(f"- `{tid}`")
         lines.append("")
     return "\n".join(lines).rstrip()
+
+
+def render_gaps_table(nf: str, config: dict) -> str:
+    """`## Gaps` H2 아래 markdown table render. readiness-config.gaps.rows
+    derive. _gaps_table_non_todo / gaps_classified / blocker_gaps_zero
+    validator 가 본 table 을 입력으로 사용한다."""
+    rows = (config.get("gaps") or {}).get("rows") or []
+    if not rows:
+        return "_readiness-config.gaps.rows 부재 — render skip._"
+    lines = [
+        "| id | category | description | owner | target_resolution |",
+        "|---|---|---|---|---|",
+    ]
+    for r in rows:
+        if not isinstance(r, dict):
+            continue
+        rid = str(r.get("id", "?"))
+        cat = str(r.get("category", "?"))
+        desc = str(r.get("description", "?")).replace("\n", " ").strip()
+        desc = desc.replace("|", r"\|")
+        owner = str(r.get("owner", "?")).replace("|", r"\|")
+        target = str(r.get("target_resolution", "?")).replace("|", r"\|")
+        lines.append(f"| {rid} | {cat} | {desc} | {owner} | {target} |")
+    return "\n".join(lines)
 
 
 def render_phase_integration_map(nf: str, config: dict) -> str:
@@ -713,12 +760,74 @@ def render_team_execution_plan(nf: str, current_text: str, config: dict) -> str:
     return "\n".join(parts).rstrip() + "\n"
 
 
+def render_open_gaps_and_assumptions(nf: str, current_text: str, config: dict) -> str:
+    target = "dev/<nf>/open-gaps-and-assumptions.md"
+    schema = TARGETS[target]
+    autos = {
+        "gaps-table": render_gaps_table(nf, config),
+    }
+    users_existing = extract_blocks(current_text, "USER") if current_text else {}
+
+    def user_body(uid: str) -> str:
+        body = users_existing.get(uid)
+        if body is None or not body.strip():
+            return f"TODO: {uid} — 사람이 보강 (fresh placeholder)."
+        return body
+
+    title = TARGET_TITLES[target].format(nf_upper=nf.upper())
+    stage = TARGET_STAGES[target]
+    ratified_date = str(config.get("ratified_date", ""))
+
+    fm_lines = [
+        "---",
+        f"nf: {nf}",
+        f"stage: {stage}",
+        "status: draft",
+        f"source_architecture: design/{nf}/architecture",
+        f"source_contract: handoff/{nf}/contract.yaml",
+        f"generated_date: '{ratified_date}'",
+        "generator: design/scripts/nf-readiness-pack-generate.py",
+        f"source_readiness_config: design/{nf}/readiness-config.yaml",
+        "generated_sections:",
+    ]
+    for aid in schema["auto_ids"]:
+        fm_lines.append(f"  - {aid}")
+    fm_lines.append("user_sections:")
+    for uid in schema["user_ids"]:
+        fm_lines.append(f"  - {uid}")
+    fm_lines.append("---")
+    fm = "\n".join(fm_lines)
+
+    parts = [
+        fm,
+        "",
+        f"# {title}",
+        "",
+        user_block("intro-note", user_body("intro-note")),
+        "",
+        "## Gaps",
+        "",
+        auto_block("gaps-table", autos["gaps-table"]),
+        "",
+        "## Summary",
+        "",
+        user_block("summary-body", user_body("summary-body")),
+        "",
+        "## References",
+        "",
+        user_block("references-body", user_body("references-body")),
+        "",
+    ]
+    return "\n".join(parts).rstrip() + "\n"
+
+
 # Target dispatch — file template → renderer.
 RENDERERS = {
     "dev/<nf>/traceability.md": render_traceability,
     "dev/<nf>/implementation-plan.md": render_implementation_plan,
     "dev/<nf>/test-matrix.md": render_test_matrix,
     "dev/<nf>/team-execution-plan.md": render_team_execution_plan,
+    "dev/<nf>/open-gaps-and-assumptions.md": render_open_gaps_and_assumptions,
 }
 
 
