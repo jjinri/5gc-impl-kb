@@ -2,11 +2,11 @@
 
 > **목적.** Claude Code 의 auto-memory (`~/.claude/projects/<path>/memory/`) 는 PC 별 local 이라 git clone 으로 동기화되지 않는다. 본 파일은 그 내용을 git tracked 형태로 보존해 다른 PC 의 첫 세션에서 *행동 일관성* 이 유지되게 한다.
 
-> **다음 세션 시작 시 행동.** Claude (또는 사람) 이 새 PC 에서 본 repo 를 처음 열 때, 본 파일 내용을 읽고 `~/.claude/projects/<현 repo path>/memory/` 디렉터리 부재 시 아래 *4개 메모리 파일 + MEMORY.md 인덱스* 를 그대로 cp 한다. Claude 가 자동 처리해도 OK.
+> **다음 세션 시작 시 행동.** Claude (또는 사람) 이 새 PC 에서 본 repo 를 처음 열 때, 본 파일 내용을 읽고 `~/.claude/projects/<현 repo path>/memory/` 디렉터리 부재 시 아래 *5개 메모리 파일 + MEMORY.md 인덱스* 를 그대로 cp 한다. Claude 가 자동 처리해도 OK.
 
 ---
 
-## 1. Memory 파일 4개 (verbatim)
+## 1. Memory 파일 5개 (verbatim)
 
 ### 1.1 `feedback_option_labels.md`
 
@@ -87,13 +87,46 @@ type: project
 - 본 repo 의 어떤 새 도구·문서·skill 에서도 "implementation"·"production" 이라는 단어로 *design 산출 상태* 를 가리키지 않는다. 두 단어는 dev/ 만의 단어.
 ```
 
-### 1.5 `MEMORY.md` (인덱스)
+### 1.5 `project_no_jvm.md`
+
+```markdown
+---
+name: NF 의 runtime binary + 생성 코드 + linked libs 에서 JVM/Java 금지 (build-time tool 은 허용)
+description: 본 5gc-impl-kb 의 NF runtime artifact + 생성 C 코드 + linked third-party 라이브러리에는 JVM 의존 금지. build-time tool (codegen·lint·doc) 의 host 언어는 자유. 사용자 명시 (2026-05-27)
+type: project
+---
+본 repo (5gc-impl-kb) 의 *NF runtime artifact*, *생성된 C 코드*, *C 코드가 link 하는 third-party 라이브러리* 에 JVM/Java 의존 금지. **build-time tool 의 host 언어는 자유** (openapi-generator-cli 같은 JVM 도구도 build step 으로 OK 단 산출은 C).
+
+**Why:** 2026-05-27 `/nf-implement nssf` Phase 1 진입 직전 사용자 명시 → "JVM 의존, java 는 존재해서는 안됨" + 직후 보강 "build 툴은 CMake, tool 언어 무관. C 언어 작성 툴은 언어 무관. 생성되는 코드는 C 이고, C 코드 내에서 호출해서 사용해야 하는 third-party 라이브러리". 추정 배경 — embedded / native deployment 의 footprint 최소화, JVM 의 cold-start / memory overhead 회피, license/distribution 단순화 (단 build 머신은 무관).
+
+**How to apply (allowed):**
+- **openapi-generator-cli (Java)** — build-time codegen tool 로 OK. C generator backend 출력 사용. JRE 가 build 머신에 있어야 하지만 NF 산출에는 들어가지 않음.
+- **CMake** — host C++ tool, 무관.
+- **Python toolchain** (pyyaml, jinja2, pytest 등) — build/test/doc tool, 무관.
+- **clang-tidy / clang-analyzer** — C++ tool, 무관 (lint/analysis).
+
+**How to apply (forbidden):**
+- **NF binary 가 JVM 을 require** — 절대 금지 (e.g. Cassandra Java client native bridge 등).
+- **생성된 코드가 JNI/JVM 호출** — 금지.
+- **link 되는 third-party 라이브러리가 JVM 의존** — 금지 (예 일부 Cassandra client native 가 JVM 의존). libcurl / nghttp2 / libpq / libjwt / openssl / cJSON 같은 *순수 C 라이브러리* 만 허용.
+- **CI 에서 NF artifact 에 java 포함** — 산출 docker image / binary 에 JRE 가 들어가면 안 됨 (단 build stage 에서 JRE 사용해서 generator 돌리는 것은 OK).
+
+**Validator guidance for AI agents:**
+- engineering-design.md 의 `schema_codegen` 가 openapi-generator(C) 같은 build-time JVM tool 을 가리키면 — *정상*. 거부하지 않음.
+- engineering-design.md 의 `sbi_server_stack`·`sbi_client_stack`·`persistence` 등 *runtime-linked* slot 이 JVM 의존 라이브러리 가리키면 — *FAIL 로 보고*.
+- WI-codegen-bootstrap 등 build step 이 JRE install 을 요구하면 — *정상*. CI workflow 에 `apt-get install default-jre` 추가 OK.
+
+**Override 시 — 본 메모리 즉시 갱신.** 사용자가 "build 머신에서도 JVM 금지" 로 강화 시 반대 방향 update.
+```
+
+### 1.6 `MEMORY.md` (인덱스)
 
 ```markdown
 - [작업 리스트 의무화](feedback_task_list.md) — non-trivial 작업은 TaskCreate 로 시각화 후 in_progress / completed 갱신
 - [선택지 라벨 그리스 문자 금지](feedback_option_labels.md) — 옵션 라벨은 키보드 입력 가능한 (1)/(a) 등만, α·β·γ·① 등 금지
 - [본 repo 는 design + dev 통합 monorepo](project_framing.md) — 정체성·범위·사람 역할·결정 배치 (design vs dev) 합의
 - [Gate 이름 정정 — implementation/production 금지](project_gate_naming.md) — 신규 gate `draft/review_ready/handoff_ready/canonical`
+- [JVM/Java runtime 금지 (build-time tool 은 허용)](project_no_jvm.md) — NF runtime binary + 생성 C 코드 + linked libs 에 JVM 금지. build-time codegen/lint tool 의 host 언어는 자유.
 ```
 
 ---
@@ -104,7 +137,7 @@ type: project
 # repo 가 /home/<user>/AI/5gc-impl-kb 에 clone 되었다고 가정
 DIR=~/.claude/projects/-home-$USER-AI-5gc-impl-kb/memory
 mkdir -p "$DIR"
-# 본 파일 (docs/handover.md) 의 § 1 의 5개 markdown 블록을 각각 같은 이름 파일로 cp
+# 본 파일 (docs/handover.md) 의 § 1 의 6개 markdown 블록 (5 memory + MEMORY.md 인덱스) 을 각각 같은 이름 파일로 cp
 # (Claude 가 첫 세션에서 자동 처리해도 됨 — "memory 재구성" 요청)
 ```
 
