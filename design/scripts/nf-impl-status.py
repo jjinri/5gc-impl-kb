@@ -978,16 +978,27 @@ def _extract_auto_block(text: str, aid: str) -> str | None:
     return m.group(1) if m else None
 
 
-def _load_security_baseline_mandate_count() -> int | None:
-    p = REPO / "design" / "policies" / "security-baseline.yaml"
+def _load_security_baseline_mandate_count(
+    path: pathlib.Path | None = None,
+) -> tuple[int | None, str | None]:
+    # baseline_mandates dict 항목 수 반환. (count, error). 둘 중 하나만 non-None.
+    p = path if path is not None else (
+        REPO / "design" / "policies" / "security-baseline.yaml"
+    )
     if not p.is_file():
-        return None
+        return None, f"{p.name} 파일 부재"
     try:
-        d = yaml.safe_load(p.read_text(encoding="utf-8")) or {}
-    except yaml.YAMLError:
-        return None
-    mandates = d.get("baseline_mandates") or []
-    return sum(1 for m in mandates if isinstance(m, dict))
+        d = yaml.safe_load(p.read_text(encoding="utf-8"))
+    except yaml.YAMLError as e:
+        return None, f"{p.name} YAML parse 오류: {e}"
+    if not isinstance(d, dict):
+        return None, f"{p.name} 최상위가 mapping 아님"
+    mandates = d.get("baseline_mandates")
+    if mandates is None:
+        return None, f"{p.name} `baseline_mandates` 키 부재"
+    if not isinstance(mandates, list):
+        return None, f"{p.name} `baseline_mandates` 가 list 아님"
+    return sum(1 for m in mandates if isinstance(m, dict)), None
 
 
 def check_verification_plan_auto_complete(dev_dir: pathlib.Path) -> dict:
@@ -1039,8 +1050,10 @@ def check_verification_plan_auto_complete(dev_dir: pathlib.Path) -> dict:
         if cnt == 0:
             fails.append(f"{aid}: 0 row")
     # security-gate-matrix 의 row 수 = mandates 수
-    mandate_count = _load_security_baseline_mandate_count()
-    if mandate_count is not None:
+    mandate_count, baseline_err = _load_security_baseline_mandate_count()
+    if baseline_err is not None:
+        fails.append(f"security-baseline: {baseline_err}")
+    elif mandate_count is not None:
         sgm = _extract_auto_block(txt, "security-gate-matrix")
         if sgm is not None:
             cnt = count_data_rows(sgm)
