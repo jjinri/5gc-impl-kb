@@ -1,0 +1,66 @@
+# Spec dependency policy — project-wide security/profile spec absorption.
+#
+# Extracted from docs/adr/ADR-0004-project-security-baseline.md §Spec
+# dependency 정책 without behavior change.
+
+schema_version: policies-v1
+policy_id: spec-dependencies
+rationale_source:
+  - docs/adr/ADR-0004-project-security-baseline.md
+
+# Project-wide security/profile specs — absorbed by ADR-0004, excluded from
+# NF lifecycle extraction dependency.
+absorbed_security_profile_specs:
+  - spec: "33.501"
+    title: Security Architecture and Procedures for 5G System
+    absorbed_by: docs/adr/ADR-0004-project-security-baseline.md
+    nf_manifest_exclude_reason: >-
+      project security baseline ADR-0004 으로 흡수, lifecycle extraction
+      dependency 아님
+  - spec: "33.310"
+    title: Network Domain Security (NDS); Authentication Framework (AF) for SBA
+    absorbed_by: docs/adr/ADR-0004-project-security-baseline.md
+    nf_manifest_exclude_reason: >-
+      project security baseline ADR-0004 으로 흡수, lifecycle extraction
+      dependency 아님
+  - spec: "33.210"
+    title: Network Domain Security (NDS); IP network layer security
+    absorbed_by: docs/adr/ADR-0004-project-security-baseline.md
+    nf_manifest_exclude_reason: >-
+      project security baseline ADR-0004 으로 흡수, lifecycle extraction
+      dependency 아님
+
+# Manifest field semantics — `present` vs `excluded` 의 직교 의미 (ADR-0004
+# §Spec dependency 정책 항목 2).
+manifest_field_semantics:
+  present:
+    meaning: spec 파일 보유 여부
+    type: boolean
+    derivation: >-
+      `specs/<spec>/` 안에 docx 또는 yaml 가 존재하면 true. 사용자가 cp
+      했는지의 사실 정보.
+  excluded:
+    meaning: lifecycle extraction scope 여부
+    type: boolean
+    derivation: >-
+      본 spec 을 contract extraction 의 *입력으로 사용* 하느냐. true 면
+      contract 단계가 본 spec 을 source 로 읽지 않는다.
+  orthogonality: >-
+    두 의미는 *직교* 다 — `present=true ∧ excluded=true` 가능 (예 33.501
+    docx 가 specs/33.501/ 에 cp 됐고 동시에 ADR-0004 흡수로 contract
+    extraction 에서 제외). 두 의미 혼용은 implementation bug.
+
+# /nf-spec-discover 의 자동 적용 정책 (ADR-0004 §Spec dependency 정책
+# 항목 3).
+auto_exclude_on_discovery:
+  applies_when:
+    - spec discovery 가 absorbed_security_profile_specs 목록의 spec 을 발견
+  action: >-
+    `_manifest.yaml.deps.security` 의 해당 spec 에 ADR-0004 reference 를
+    excluded reason 으로 자동 표기. `present` 는 사실대로 표기.
+
+# Amendment 정책 (ADR-0004 §Spec dependency 정책 항목 4).
+amendment_rule: >-
+  추후 33.501 등 absorbed spec 의 본문 인용이 필요한 결정 (예 특정 OAuth2
+  scope 정의) 은 ADR-0004 의 amendment 로 추가한다. NF spec dependency 로
+  끌어들이지 않는다.
