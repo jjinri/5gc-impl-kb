@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import pathlib
 import subprocess
+import sys
 
 
 REPO = pathlib.Path(__file__).resolve().parents[2]
@@ -12,7 +13,7 @@ NSSF_YAML = REPO / "specs" / "29.531" / "TS29531_Nnssf_NSSelection.yaml"
 
 def _run(*args: str) -> dict:
     out = subprocess.run(
-        [".venv/bin/python3", str(SCRIPT), *args],
+        [sys.executable, str(SCRIPT), *args],
         capture_output=True, text=True, cwd=REPO, timeout=60,
     )
     assert out.returncode == 0, out.stderr
