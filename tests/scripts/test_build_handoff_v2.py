@@ -128,48 +128,114 @@ def test_build_handoff_v2_missing_seed_errors(tmp_path: pathlib.Path) -> None:
 
 
 # PR F1.2 — build-handoff.py 가 handoff yaml self-contained 정책 위해 api topic / error-handling
-# topic 을 OpenAPI yaml 분석으로 enrich. 본 enrichment 가 nf-status 의 api_operation_complete +
-# problem_details_matrix_complete check 직접 의존. live NSSF data 로 검증 (seed + manifest +
-# primary yaml 풀 셋업이 fixture 로 옮기기 큼).
+# topic 을 OpenAPI yaml 분석으로 enrich. nf-status 의 api_operation_complete +
+# problem_details_matrix_complete check 가 본 enrichment 에 직접 의존. 이전엔 live NSSF 산출
+# (`design/nssf/_contract_seed.yaml`, `handoff/nssf/contract.yaml`) 을 직접 읽어 검증했으나, 본
+# repo 정책상 두 파일 모두 gitignored generated cache 이므로 fresh checkout 에서 실패. 본 fixture
+# 는 tmp_path 안에 enrichment branch 를 트리거할 최소 manifest + minimal OpenAPI yaml + seed 를
+# 합성해 deterministic 검증한다.
 
-def test_build_handoff_v2_api_topic_enriched_for_nssf() -> None:
-    """NSSF api topic 이 method/path 외 responses/security_requirements/error_responses/
-    source_refs 4 키 추가 보유. seed 가 method/path 만 줘도 build-handoff 가 yaml 에서
-    추출해 채움. nf-status.py 의 api_operation_complete 6 키 mandate 충족.
+def _seed_with_yaml(tmp_path: pathlib.Path) -> None:
+    """tmp_path 안에 enrichment branch 를 타게 하는 최소 산출 배치.
+
+    추가 산출 (`_seed` 대비).
+    - design/demo/_manifest.yaml — primary_spec + primary_files.yamls.
+    - specs/X/X.yaml — paths + global security 를 가진 minimal OpenAPI.
+    - seed.topics["api/OpA"] 에 method + path 키 (enrichment trigger).
     """
-    out = subprocess.run(
-        [str(REPO / ".venv" / "bin" / "python3"),
-         str(REPO / "design" / "scripts" / "build-handoff.py"), "nssf"],
-        capture_output=True, text=True, cwd=REPO, timeout=60,
+    _seed(tmp_path)
+    nf = tmp_path / "design" / "demo"
+    (nf / "_manifest.yaml").write_text(
+        yaml.safe_dump({
+            "primary_spec": "X",
+            "primary_files": {"yamls": ["X.yaml"]},
+        }),
+        encoding="utf-8",
     )
-    assert out.returncode == 0, out.stderr
-    data = yaml.safe_load((REPO / "handoff" / "nssf" / "contract.yaml").read_text(encoding="utf-8"))
-    api_topics = {tid: t for tid, t in (data.get("topics") or {}).items() if tid.startswith("api/")}
-    assert api_topics, "NSSF handoff yaml has no api topics"
+    spec_dir = tmp_path / "specs" / "X"
+    spec_dir.mkdir(parents=True)
+    (spec_dir / "X.yaml").write_text(
+        yaml.safe_dump({
+            "openapi": "3.0.0",
+            "info": {"title": "Test", "version": "1.0"},
+            "security": [{"oauth2": ["read"]}],
+            "paths": {
+                "/opa/{id}": {
+                    "get": {
+                        "operationId": "getOpA",
+                        "responses": {
+                            "200": {
+                                "description": "OK",
+                                "content": {
+                                    "application/json": {
+                                        "schema": {"$ref": "#/components/schemas/S"},
+                                    },
+                                },
+                            },
+                            "400": {"description": "INVALID_INPUT"},
+                            "500": {"description": "INTERNAL_ERROR"},
+                        },
+                    },
+                },
+            },
+        }),
+        encoding="utf-8",
+    )
+    # seed 의 api/OpA topic 에 method + path 추가 (enrichment trigger).
+    seed_path = nf / "_contract_seed.yaml"
+    seed = yaml.safe_load(seed_path.read_text(encoding="utf-8"))
+    seed["topics"]["api/OpA"]["method"] = "GET"
+    seed["topics"]["api/OpA"]["path"] = "/opa/{id}"
+    seed_path.write_text(yaml.safe_dump(seed), encoding="utf-8")
+
+
+def test_build_handoff_v2_api_topic_enrichment_from_yaml(tmp_path: pathlib.Path) -> None:
+    """api topic 이 seed 의 method + path 만으로 yaml 에서 responses /
+    security_requirements / error_responses / source_refs 4 키를 채워야 함.
+    nf-status.py 의 api_operation_complete 6 키 mandate 의 직접 의존.
+    """
+    _seed_with_yaml(tmp_path)
+    out_path = _run_build("demo", tmp_path)
+    data = yaml.safe_load(out_path.read_text(encoding="utf-8"))
+
+    api_topics = {tid: t for tid, t in (data.get("topics") or {}).items()
+                  if tid.startswith("api/")}
+    assert api_topics, "synthetic seed missing api/* topic"
     for tid, t in api_topics.items():
         for key in ("method", "path", "responses", "security_requirements",
                     "error_responses", "source_refs"):
             assert key in t, f"{tid} missing key {key!r} after build-handoff enrichment"
-        # source_refs 가 최소 1개 (yaml 경로 자동 추가).
-        assert t["source_refs"], f"{tid} source_refs empty"
+        # 200 은 responses, 400/500 은 error_responses 로 분리됨.
+        assert "200" in t["responses"]
+        assert set(t["error_responses"]) == {"400", "500"}
+        # global security 가 operation-level fallback 으로 적용.
+        assert t["security_requirements"] == [{"oauth2": ["read"]}]
+        # source_refs 에 yaml 경로 (relative) 가 자동 추가됨.
+        assert any("X.yaml" in ref for ref in t["source_refs"]), \
+            f"{tid} source_refs missing yaml path"
 
 
-def test_build_handoff_v2_error_handling_operations_for_nssf() -> None:
-    """NSSF error-handling topic 이 operations × causes 매트릭스 보유.
-    nf-status.py problem_details_matrix_complete check 가 operations 필수 검증.
+def test_build_handoff_v2_error_handling_operations_from_yaml(
+    tmp_path: pathlib.Path,
+) -> None:
+    """error-handling topic 이 yaml 의 paths × methods 를 walk 해 operations ×
+    causes 매트릭스를 emit. nf-status.py problem_details_matrix_complete check 의
+    직접 의존.
     """
-    out = subprocess.run(
-        [str(REPO / ".venv" / "bin" / "python3"),
-         str(REPO / "design" / "scripts" / "build-handoff.py"), "nssf"],
-        capture_output=True, text=True, cwd=REPO, timeout=60,
-    )
-    assert out.returncode == 0, out.stderr
-    data = yaml.safe_load((REPO / "handoff" / "nssf" / "contract.yaml").read_text(encoding="utf-8"))
+    _seed_with_yaml(tmp_path)
+    out_path = _run_build("demo", tmp_path)
+    data = yaml.safe_load(out_path.read_text(encoding="utf-8"))
+
     eh = (data.get("topics") or {}).get("error-handling")
-    assert eh is not None, "NSSF handoff yaml missing error-handling topic"
+    assert eh is not None, "error-handling topic missing"
     ops = eh.get("operations") or {}
     assert ops, "error-handling.operations enrichment empty"
-    for op_id, info in ops.items():
-        assert isinstance(info, dict)
-        assert "causes" in info, f"operation {op_id!r} missing causes list"
-        assert isinstance(info["causes"], list)
+    # operationId 기준 keying — yaml 의 'getOpA' 가 진입해 있어야 함.
+    assert "getOpA" in ops
+    info = ops["getOpA"]
+    assert info["method"] == "GET"
+    assert info["path"] == "/opa/{id}"
+    statuses = {c["status"] for c in info["causes"]}
+    assert statuses == {"400", "500"}, f"unexpected causes: {info['causes']}"
+    for c in info["causes"]:
+        assert c["description"], "cause description empty"
