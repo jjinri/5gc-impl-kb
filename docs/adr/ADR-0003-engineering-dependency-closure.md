@@ -1,7 +1,7 @@
 # ADR-0003 — Engineering Dependency Closure in eng_frozen Profile v2
 
 Date: 2026-05-19
-Status: Accepted (2026-05-19)
+Status: Accepted (2026-05-19); cross-referenced 2026-05-26 — operationalized in `engineering-core-slots.yaml` v2
 
 > ADR-0002 가 Engineering Design Freeze 단계와 `eng_frozen` 게이트를 정의하고 Accepted 됐다. ADR-0003 은 그 *accepted profile policy* 를 version 1 → 2 로 확장한다 — software-using slot 에 대해 software dependency/library/version closure 를 `eng_frozen` 에 포함시킨다. ADR-0002 를 재정의하지 않으며, ADR-0002 에는 extension note 만 추가한다.
 >
@@ -14,6 +14,8 @@ ADR-0002 + skill-build 사이클(PR #28)로 `eng_frozen` 메커니즘이 가동�
 또한 outbound NF 호출 필요성(예 NSSF 의 NotificationDispatcher → AMF callback)은 F architecture 가 도출하는 *required capability* 이지 Engineering Design 에서 처음 발견할 것이 아니다. v1 엔 inbound `sbi_http_framework` 만 있어 outbound client 결정을 구조적으로 강제하지 못했다.
 
 ## Decision
+
+Normative source: [`design/schemas/engineering-core-slots.yaml`](../../design/schemas/engineering-core-slots.yaml) v2 — `dependency_shape`, `sbi_server_stack`/`sbi_client_stack`, `common_row_fields`, slot 별 `required_shape`. 본 ADR §Decision 의 5점 모두 v2 schema 에 implementation. ADR 본문은 rationale + considered options 만 유지.
 
 `design/schemas/engineering-core-slots.yaml` 을 `version: 2` 로 강화한다 (pipeline policy 변경 — 모든 NF 의 `eng_frozen` 의미를 바꾼다).
 

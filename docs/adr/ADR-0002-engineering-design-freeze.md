@@ -1,7 +1,7 @@
 # ADR-0002 — Engineering Design Freeze 단계와 `eng_frozen` 게이트
 
 Date: 2026-05-19
-Status: Accepted (2026-05-19)
+Status: Accepted (2026-05-19); cross-referenced 2026-05-26 — stage/gate definition in `lifecycle.yaml`, inventory profile in `engineering-core-slots.yaml` v2 (ADR-0003)
 
 > Accepted — Proposed 시 요구한 사람 ratify 4건이 skill-build 사이클 (plan `docs/plans/2026-05-19-eng-design-freeze-skill-build-plan.md` R1~R5) 에서 사용자 승인으로 잠김: (1) `engineering/<nf>/` tracking policy = `engineering-design.md` 추적·`_engineering_status.yaml` gitignored, (2) core slot 12 + 내부 `version` 필드 (`design/schemas/engineering-core-slots.yaml`), (3) canonical 섹션 5, (4) `explicitly_out_of_scope` + 모든 frozen row `ratified_by`/`date` 필수 schema. 구현 = profile + `nf-eng-status.py` + `/nf-eng-design`·`/nf-eng-status`. Open choices 표는 Decided 로 해소됨.
 >
@@ -14,6 +14,8 @@ Status: Accepted (2026-05-19)
 연기된 엔지니어링 결정의 인벤토리 원천은 이미 실재한다 — `design/<nf>/architecture/decisions/ADR-0001-architecture-baseline.md` `## Open choices` 의 **연기 레지스터** 7행 (4 `TBD` + 3 `보류`). 그러나 이 표가 전부 *결정으로 해소* 됐는지 판정하는 단계·게이트가 없다.
 
 ## Decision
+
+Normative sources: [`design/policies/lifecycle.yaml`](../../design/policies/lifecycle.yaml) — `stages.engineering_design_freeze`, `stages.engineering_validation`, `gates.eng_frozen`, `gates.readiness_pack_ready`. [`design/schemas/engineering-core-slots.yaml`](../../design/schemas/engineering-core-slots.yaml) v2 — inventory profile (core slots, `common_row_fields`, ratify rules). 본 ADR 의 §Decision 본문은 *왜 그렇게 결정했나* (rationale) 를 유지한다.
 
 `/nf-impl-plan`(G)과 **자율 코드 생성** 사이에 **Engineering Design Freeze** 단계를 신설하고, 통과 게이트 `eng_frozen` 을 *technology decision freeze* (library / DB / runtime / tool / operator-policy) 의 단일 게이트로 정의한다.
 
@@ -61,14 +63,7 @@ aggregate 정의는 `docs/plans/2026-05-21-nf-readiness-implementation-workflow-
 
 ## Open choices
 
-모두 skill-build 사이클(2026-05-19, plan R1~R5 사용자 승인)에서 **Decided** 로 해소됨.
-
-| 항목 | 상태 | 결정 |
-|---|---|---|
-| `engineering-design.md` canonical 섹션 집합 | Decided | `## Purpose`·`## Decisions`·`## Out of scope`·`## Open Questions`·`## References` (nf-eng-status.py `ENG_CANON` 과 single-source). `## Open Questions` 비어야 PASS |
-| `advisory.impl_plan_alignment` 산식 | Decided | `dev/<nf>/tasks.yaml` 의 미결정 표현(`TBD`/decide/choose/select/determine)+`## Decisions` 미매칭 → WARN, tasks.yaml 부재 → SKIP, 비차단 |
-| `engineering-core-slots.yaml` 버전 규약 | Decided | 파일명 무버전, 내부 `version: 1` 필드 (rename churn 회피) |
-| core slot 초기 목록 | Decided | 12 — language·runtime·sbi_http_framework·schema_codegen·tls_security·oauth2_token_validation·persistence·telemetry·deployment_topology·module_source_layout·test_build_tooling·configuration_management. conditional slot(persistence/tls_security/oauth2)은 discriminant typed shape |
+모두 skill-build 사이클 (2026-05-19, plan R1~R5 사용자 승인) 에서 Decided 로 해소되어 `nf-eng-status.py` (`ENG_CANON`, `advisory.impl_plan_alignment` 산식) + `engineering-core-slots.yaml` (내부 `version` 필드 + slot 목록) 에 operationalized. core slot 초기 12개는 ADR-0003 으로 `sbi_http_framework` → `sbi_server_stack` + `sbi_client_stack` 분리되어 v2 에서 13개 (engineering-core-slots.yaml 가 진실 출처).
 
 ## References
 
