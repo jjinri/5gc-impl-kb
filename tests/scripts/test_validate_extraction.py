@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import pathlib
 import subprocess
+import sys
 
 import yaml
 
@@ -75,7 +76,7 @@ def _write_min_nf(tmp_path: pathlib.Path) -> pathlib.Path:
 def _run(root: pathlib.Path, *args: str) -> subprocess.CompletedProcess:
     env = {**os.environ, "FIVEGC_REPO_ROOT": str(root)}
     return subprocess.run(
-        [str(REPO / ".venv" / "bin" / "python3"), str(SCRIPT), *args],
+        [sys.executable, str(SCRIPT), *args],
         capture_output=True, text=True, cwd=root, timeout=60, env=env,
     )
 
