@@ -185,7 +185,13 @@ user_sections:
 <!-- AUTO:observability-tests-table:start -->
 ### Observability Tests Inventory
 
-_test-matrix.md `## Test Inventory` 의 kind=observability row 부재._
+`dev/nssf/codegen-work-items.yaml` 의 observability WI (1개) 의 tests + verification_commands derive — 총 3 row. codegen-work-items 변경 시 본 sub-section 이 같이 갱신된다.
+
+| WI | test | verification_command |
+|---|---|---|
+| `WI-observability-finalize` | `tests/nssf/unit/test_observability_metrics.c` | `ctest --test-dir build -R nssf_observability_` |
+| `WI-observability-finalize` | `tests/nssf/unit/test_observability_log.c` | `ctest --test-dir build -R nssf_observability_` |
+| `WI-observability-finalize` | `tests/nssf/unit/test_observability_trace.c` | `ctest --test-dir build -R nssf_observability_` |
 <!-- AUTO:observability-tests-table:end -->
 
 ## References
