@@ -159,9 +159,24 @@ sections:
       phases:
         type: mapping
         constraint: >-
-          phase ID (예 phase1, phase2 ...) → 해당 phase 의 WI ID 목록.
-          WI ID 는 generated `dev/<nf>/codegen-work-items.yaml.items[].id`
-          와 일치해야 한다 (PR-4 generator 가 양방향 정합 검증).
+          phase ID (예 phase1, phase2 ...) → phase entry object.
+        value_shape:
+          type: object
+          required:
+            - description
+            - work_items
+          fields:
+            description:
+              type: scalar
+              constraint: >-
+                phase 의 wave/PR 컨텍스트 (예 "tracer-bullet, PR G").
+            work_items:
+              type: non_empty_list
+              item_type: scalar
+              constraint: >-
+                WI ID 목록. 각 ID 는 generated
+                `dev/<nf>/codegen-work-items.yaml.items[].id` 와 일치해야
+                한다 (PR-4 generator 가 양방향 정합 검증).
 
   # ─── gaps (NSSF instance gap list) ──────────────────────────────────
   gaps:
