@@ -64,12 +64,13 @@ Readiness Pack 9 파일이 autonomous codegen agent 가 원본 OpenAPI YAML 재�
 | `phase_wi_coverage` | 1 | `design/<nf>/readiness-config.yaml` `phase_policy.phases.*.work_items` 와 `dev/<nf>/codegen-work-items.yaml` `items[].id` 가 **집합 동일 + 각 source 안에서 중복 없음** (forward unresolved + reverse unphased + items 중복 id + phase 중복 ref 모두 차단) — PR-10 review fix x2 |
 | `wi_depends_on_valid` | 1 | `codegen-work-items.yaml` `items[].depends_on` 의 모든 원소가 다른 `items[].id` 로 resolve + 그래프 DAG (cycle 없음) |
 | `wi_phase_order_valid` | 1 | WI x 의 `depends_on` 에 있는 모든 y 의 phase ordinal 이 x 의 phase ordinal 이하 (phase ordinal = `phase_policy.phases` insertion order) |
+| `verification_plan_auto_complete` | 1 | `dev/<nf>/verification-plan.md` 의 6 AUTO sub-section (unit-tests-table / integration-tests-table / contract-tests-table / security-gate-matrix / end-to-end-tests-table / observability-tests-table) 모두 ≥1 data row + `security-gate-matrix` row 수 = `security-baseline.yaml.baseline_mandates` 수 + placeholder/TODO 산문 부재 — PR-17b |
 | `human_review_pack_traceable` | 1 | Human Review Pack 4 파일 존재 + frontmatter 필수 키 + per-file 사람 audit 흔적 (design-adequacy `## Checklist` 표에 status != pending/TODO 행 1+, spec-to-design `## Coverage Trace` 에 non-TODO 행 1+, open-gaps `## Gaps` 에 id != TODO 행 1+, implementation-readiness-review `## Recommendation` 에 30자+ 비-TODO 본문 1+) |
 | `gaps_classified` | 1 | `open-gaps-and-assumptions.md` `## Gaps` 표 모든 행이 category 컬럼 ∈ {blocker, deferred, operator-provided, library-assumed, test-gap, assumption} |
 | `blocker_gaps_zero` | 1 | 위 표의 `blocker` category 행 0개 |
 | `no_spec_reread_required` | 1 | aggregate sentinel — `open-gaps-and-assumptions.md` `## Gaps` 표 파싱 가능 + blocker 행 0 + `spec-to-design-coverage.md` `## Coverage Trace` 에 non-TODO 행 1+ + open-gaps/design-adequacy 본문에 "spec 재독해" 단서 부재 |
 
-gate — `impl_ready_for_codegen` = 위 14개 AND.
+gate — `impl_ready_for_codegen` = 위 15개 AND.
 
 본 gate 는 `impl_consistent` 와 *독립* 으로 평가된다. PR D 의 `readiness_pack_ready` aggregate gate (engineering 단계) 의 한 구성요소다.
 

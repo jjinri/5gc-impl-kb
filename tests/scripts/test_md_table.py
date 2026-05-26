@@ -9,7 +9,12 @@ Cover cases:
 
 from __future__ import annotations
 
-from design.scripts.lib.md_table import cell, split_row, parse_section
+from design.scripts.lib.md_table import (
+    cell,
+    count_data_rows,
+    parse_section,
+    split_row,
+)
 
 
 # ─── cell() ─────────────────────────────────────────────────────────
@@ -112,6 +117,42 @@ def test_parse_section_honors_escape():
     )
     rows = parse_section(text, "Bag")
     assert rows == [["a", "one|two"], ["b", "three"]]
+
+
+# ─── count_data_rows() ──────────────────────────────────────────────
+
+def test_count_data_rows_empty():
+    assert count_data_rows("") == 0
+
+
+def test_count_data_rows_only_header():
+    text = (
+        "| id | val |\n"
+        "|---|---|\n"
+    )
+    assert count_data_rows(text) == 0
+
+
+def test_count_data_rows_data_present():
+    text = (
+        "preamble\n"
+        "| id | val |\n"
+        "|---|---|\n"
+        "| a | b |\n"
+        "| c | d |\n"
+    )
+    assert count_data_rows(text) == 2
+
+
+def test_count_data_rows_ignores_after_blank_lines():
+    text = (
+        "intro\n"
+        "\n"
+        "| id |\n"
+        "|---|\n"
+        "| 1 |\n"
+    )
+    assert count_data_rows(text) == 1
 
 
 # ─── round-trip (cell → row → split_row) ────────────────────────────
