@@ -10,6 +10,7 @@ source_readiness_config: design/nssf/readiness-config.yaml
 generated_sections:
   - security-coverage-summary
 user_sections:
+  - intro-note
   - purpose-body
   - test-inventory-body
   - coverage-rules-body
@@ -18,6 +19,10 @@ user_sections:
 ---
 
 # NSSF Test Matrix
+
+<!-- USER:intro-note:start -->
+> **Source-of-truth** (resolved 2026-05-21). 본 inventory 의 신규 security 시나리오 (`t-tls-*`, `t-mtls-*`, `t-oauth2-inbound-*`, `t-oauth2-outbound-*`) 는 ADR-0004 baseline + architecture + engineering-design (TLS=OpenSSL app_library, OAuth2=libjwt+JWKS, sbi_client_stack=nghttp2+outbound TLS/OAuth2) 3 source 정합. 실 test 실행은 codegen 사이클 입력 — `nf-eng-status` `eng_frozen` PASS (GO 신호) 후 진입.
+<!-- USER:intro-note:end -->
 
 ## Purpose
 

@@ -76,6 +76,7 @@ TARGETS = {
             "security-coverage-summary",
         ],
         "user_ids": [
+            "intro-note",
             "purpose-body",
             "test-inventory-body",
             "coverage-rules-body",
@@ -576,6 +577,8 @@ def render_test_matrix(nf: str, current_text: str, config: dict) -> str:
         fm,
         "",
         f"# {title}",
+        "",
+        user_block("intro-note", user_body("intro-note")),
         "",
         "## Purpose",
         "",
