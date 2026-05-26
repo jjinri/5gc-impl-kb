@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """nf-readiness-pack-generate — readiness pack 산출의 deterministic render/check.
 
-PR-4 scope (Phase C 시작 — Plan 2026-05-26 §7).
-- 첫 target = dev/<nf>/traceability.md only.
-- AUTO/USER marker 패턴 (materialize-contract.py reference 모범).
-- --check: render to memory, compare with tracked, drift 시 exit 1.
-- --write: render to tracked path, 멱등.
+PR-4 scope (Phase C 시작 — Plan 2026-05-26 §7) — 첫 target = dev/<nf>/
+traceability.md only. AUTO 영역 = frontmatter (manifest) + references.
 
-본 generator 의 책임 — *deterministic AUTO 영역 render*. USER 영역은 사람
-산문 보존 — generator 가 만지지 않는다 (placeholder TODO 만 fresh 시).
+PR-5 확장 — AUTO 추가:
+  * test-inventory-index — dev/<nf>/test-matrix.md `## Test Inventory`
+    표를 parse 해 kind 별 test ID 그룹 render. 두 파일 사이 drift 검출.
 
-PR-4 기준 AUTO 영역은 frontmatter (manifest) + references (fixed per NF
-source-of-truth list) 만. 다른 영역은 모두 USER. PR-5+ 가 contract-module
-table, module-test table 등 추가 AUTO 영역으로 확장.
+AUTO/USER marker 패턴 (materialize-contract.py reference 모범). USER 영역
+사람 산문 보존 — generator 가 만지지 않음.
+
+--check: render to memory, compare with tracked, drift 시 exit 1.
+--write: render to tracked path, 멱등.
 
 No timestamp noise — `ratified_date` 등 config-driven 정보만 출력.
 """
@@ -30,7 +30,7 @@ REPO = pathlib.Path(__file__).resolve().parent.parent.parent
 # 본 generator 가 render 하는 모든 산출의 *기계 계약*.
 TARGETS = {
     "dev/<nf>/traceability.md": {
-        "auto_ids": ["references"],
+        "auto_ids": ["test-inventory-index", "references"],
         "user_ids": [
             "intro-note",
             "contract-module-table",
@@ -124,6 +124,95 @@ def load_readiness_config(nf: str) -> dict:
 
 # ─── AUTO renderers ─────────────────────────────────────────────────
 
+# ─── test-matrix.md parser ──────────────────────────────────────────
+
+# Test kind canonical order — render 순서를 결정론적으로 유지.
+TEST_KIND_ORDER = [
+    "unit",
+    "integration",
+    "module-integration",
+    "contract",
+    "security",
+    "end-to-end",
+]
+
+
+def parse_test_inventory(nf: str) -> list[tuple[str, str]]:
+    """dev/<nf>/test-matrix.md `## Test Inventory` 첫 table 의 (id, kind)
+    목록을 반환. 행 순서는 파일 순서 유지."""
+    path = REPO / "dev" / nf / "test-matrix.md"
+    if not path.is_file():
+        return []
+    txt = path.read_text(encoding="utf-8")
+    # `## Test Inventory` 직후 첫 markdown table.
+    marker = "## Test Inventory"
+    idx = txt.find(marker)
+    if idx == -1:
+        return []
+    rest = txt[idx + len(marker):]
+    # 다음 `## ` (또는 EOF) 직전까지가 본 섹션.
+    next_h2 = rest.find("\n## ")
+    section = rest if next_h2 == -1 else rest[:next_h2]
+    rows: list[tuple[str, str]] = []
+    in_table = False
+    for ln in section.splitlines():
+        ln = ln.rstrip()
+        if not ln:
+            continue
+        if ln.startswith("|") and "|" in ln[1:]:
+            # header / separator / data
+            cells = [c.strip() for c in ln.strip("|").split("|")]
+            if not in_table:
+                # header row — column 0 must be "id", column 1 "kind".
+                if cells[:2] == ["id", "kind"]:
+                    in_table = True
+                continue
+            # separator row — `---` only.
+            if all(set(c) <= set("-:") for c in cells):
+                continue
+            # data row.
+            if len(cells) >= 2:
+                tid_raw = cells[0]
+                kind = cells[1]
+                # id 는 backtick 으로 감싸짐 — strip.
+                tid = tid_raw.strip("`")
+                rows.append((tid, kind))
+    return rows
+
+
+def render_test_inventory_index(nf: str) -> str:
+    """H3-only render — `## Module → Test` H2 아래 sub-section 으로 둔다.
+    impl_sections_exact gate 가 traceability 의 H2 set 을 canonical
+    {Contract → Module, Module → Test, Open Gaps, References} 으로 강제 —
+    AUTO 가 새 H2 도입하면 게이트 깨짐."""
+    rows = parse_test_inventory(nf)
+    if not rows:
+        return ("### Test Inventory Index\n\n"
+                "_test-matrix.md `## Test Inventory` 표 부재 — render skip._")
+    # kind 별 그룹.
+    by_kind: dict[str, list[str]] = {}
+    for tid, kind in rows:
+        by_kind.setdefault(kind, []).append(tid)
+    # canonical order + 알려지지 않은 kind 는 알파벳순으로 뒤.
+    known = [k for k in TEST_KIND_ORDER if k in by_kind]
+    unknown = sorted(k for k in by_kind if k not in TEST_KIND_ORDER)
+    order = known + unknown
+    lines = ["### Test Inventory Index", ""]
+    lines.append(f"`dev/{nf}/test-matrix.md` `## Test Inventory` 표에서 "
+                 f"derive — 총 {len(rows)}개 test, {len(by_kind)} kind. "
+                 "test-matrix.md 변경 시 본 index 가 같이 갱신된다 "
+                 "(generator drift check).")
+    lines.append("")
+    for kind in order:
+        ids = by_kind[kind]
+        lines.append(f"#### {kind} ({len(ids)})")
+        lines.append("")
+        for tid in ids:
+            lines.append(f"- `{tid}`")
+        lines.append("")
+    return "\n".join(lines).rstrip()
+
+
 def render_references(nf: str) -> str:
     items = REFERENCES_BY_NF.get(nf)
     if not items:
@@ -145,6 +234,7 @@ def render_traceability(nf: str, current_text: str, config: dict) -> str:
     target = "dev/<nf>/traceability.md"
     schema = TARGETS[target]
     autos = {
+        "test-inventory-index": render_test_inventory_index(nf),
         "references": render_references(nf),
     }
     users_existing = extract_blocks(current_text, "USER") if current_text else {}
@@ -200,6 +290,8 @@ def render_traceability(nf: str, current_text: str, config: dict) -> str:
         "## Module → Test",
         "",
         user_block("module-test-table", user_body("module-test-table")),
+        "",
+        auto_block("test-inventory-index", autos["test-inventory-index"]),
         "",
         "## Open Gaps",
         "",

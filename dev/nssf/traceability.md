@@ -8,6 +8,7 @@ generated_date: '2026-05-26'
 generator: design/scripts/nf-readiness-pack-generate.py
 source_readiness_config: design/nssf/readiness-config.yaml
 generated_sections:
+  - test-inventory-index
   - references
 user_sections:
   - intro-note
@@ -97,6 +98,67 @@ user_sections:
 | nssf-scenario-end-to-end | subscription-create-and-notify · notification-retry-on-5xx · notification-dead-letter · correlation-end-to-end | t-subscription-notify · t-notify-retry · t-notify-dead-letter · t-correlation-e2e |
 | nssf-external-nf-gateway | (UDM SDM / NRF discovery mock port) | (test-matrix.md 의 외부 NF mock seam) |
 <!-- USER:module-test-table:end -->
+
+<!-- AUTO:test-inventory-index:start -->
+### Test Inventory Index
+
+`dev/nssf/test-matrix.md` `## Test Inventory` 표에서 derive — 총 37개 test, 6 kind. test-matrix.md 변경 시 본 index 가 같이 갱신된다 (generator drift check).
+
+#### unit (12)
+
+- `t-selection-invalid-query`
+- `t-selection-unauthorized`
+- `t-selection-not-available`
+- `t-availability-put-invalid-body`
+- `t-availability-patch-conflict`
+- `t-availability-delete-not-found`
+- `t-availability-options`
+- `t-availability-options-unauthorized`
+- `t-subscription-create-invalid-callback`
+- `t-subscription-modify`
+- `t-subscription-modify-not-found`
+- `t-subscription-unsubscribe-not-found`
+
+#### integration (9)
+
+- `t-selection-success`
+- `t-availability-put`
+- `t-availability-patch`
+- `t-availability-delete`
+- `t-subscription-create`
+- `t-subscription-notify`
+- `t-subscription-unsubscribe`
+- `t-notify-retry`
+- `t-notify-dead-letter`
+
+#### module-integration (1)
+
+- `t-repo-contract`
+
+#### contract (2)
+
+- `t-notify-oauth2-enabled`
+- `t-notify-oauth2-disabled`
+
+#### security (11)
+
+- `t-tls-handshake-success`
+- `t-tls-handshake-fail`
+- `t-mtls-peer-verify-success`
+- `t-mtls-peer-reject`
+- `t-oauth2-inbound-valid-bearer`
+- `t-oauth2-inbound-missing-token`
+- `t-oauth2-inbound-invalid-token`
+- `t-oauth2-inbound-insufficient-scope`
+- `t-oauth2-outbound-token-acquire`
+- `t-oauth2-outbound-token-endpoint-fail`
+- `t-outbound-tls-handshake-fail`
+
+#### end-to-end (2)
+
+- `t-correlation-e2e`
+- `t-shutdown-drain`
+<!-- AUTO:test-inventory-index:end -->
 
 ## Open Gaps
 
