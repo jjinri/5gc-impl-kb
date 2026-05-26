@@ -106,7 +106,3 @@ specs/29.531/<29.531 docx>
 - `design/<nf>/_*.yaml`, `design/<nf>/contract/**`, `handoff/<nf>/contract.yaml`, `_*_status.yaml` 는 재생성 가능한 local cache 다.
 - `dev/<nf>/` 의 readiness pack 은 NF 구현 KB 이며 git 추적 대상이다.
 - `docs/plans/**`, `docs/retros/**` 는 history 이며 현재 workflow source of truth 가 아니다.
-
-## 7. NSSF 현재 기준
-
-NSSF 는 `readiness_pack_ready PASS` 상태이며 `/nf-implement nssf` Phase 1 tracer-bullet 로 실제 source/test/CI 산출을 만들기 시작한다.

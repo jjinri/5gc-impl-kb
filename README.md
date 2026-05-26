@@ -92,10 +92,6 @@ handoff_ready
 | Engineering freeze | `/nf-eng-design` / `/nf-eng-status` | library/DB/runtime/tool 결정 freeze | tracked engineering design + local status |
 | Aggregate | `nf-readiness-status.py` | 최종 readiness gate 계산 | local status cache |
 
-## NSSF current state
-
-NSSF 는 `dev/nssf/` readiness pack 9 파일이 생성되어 `readiness_pack_ready PASS` 상태다. 다음 단계는 `/nf-implement nssf` Phase 1 tracer-bullet 이며, 구현 agent 는 원본 spec 을 의미 재발견 용도로 다시 읽지 않고 readiness pack 을 source of truth 로 사용한다.
-
 ## 원칙
 
 - **No spec semantic rediscovery**: implementation agent 는 원본 OpenAPI/spec 을 drift/source trace/generator input 으로만 사용할 수 있다. 구현 의미 판단은 KB 산출물이 제공해야 한다.
