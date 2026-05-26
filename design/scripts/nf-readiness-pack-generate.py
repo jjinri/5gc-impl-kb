@@ -428,6 +428,52 @@ def render_kind_test_table(nf: str, kinds, title: str) -> str:
     return "\n".join(lines)
 
 
+def _load_codegen_work_items(nf: str) -> list[dict]:
+    """dev/<nf>/codegen-work-items.yaml items[] 반환."""
+    path = REPO / "dev" / nf / "codegen-work-items.yaml"
+    if not path.is_file():
+        return []
+    try:
+        doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError:
+        return []
+    items = doc.get("items") or []
+    return [it for it in items if isinstance(it, dict)]
+
+
+def render_observability_tests_table(nf: str) -> str:
+    """H3 render — `## Observability` H2 아래 sub-section. test-matrix 에는
+    kind=observability row 가 없을 수 있어 (NSSF 사이클은 0) codegen-work-
+    items 의 obs WI (id 에 "observability" 포함) 의 tests + verification_
+    commands 를 source 로 한다 (PR-17a — Pane 2 권고)."""
+    items = _load_codegen_work_items(nf)
+    obs_items = [it for it in items if "observability" in str(it.get("id", "")).lower()]
+    if not obs_items:
+        return ("### Observability Tests Inventory\n\n"
+                "_codegen-work-items.yaml 에 observability WI 부재._")
+    rows: list[tuple[str, str, str]] = []
+    for it in obs_items:
+        wi_id = str(it.get("id", "?"))
+        cmds = it.get("verification_commands") or []
+        cmd = str(cmds[0]) if cmds else ""
+        for t in (it.get("tests") or []):
+            rows.append((wi_id, str(t), cmd))
+    if not rows:
+        return ("### Observability Tests Inventory\n\n"
+                "_observability WI 의 tests[] 부재._")
+    lines = ["### Observability Tests Inventory", ""]
+    lines.append(f"`dev/{nf}/codegen-work-items.yaml` 의 observability WI"
+                 f" ({len(obs_items)}개) 의 tests + verification_commands"
+                 f" derive — 총 {len(rows)} row. codegen-work-items 변경 시"
+                 " 본 sub-section 이 같이 갱신된다.")
+    lines.append("")
+    lines.append("| WI | test | verification_command |")
+    lines.append("|---|---|---|")
+    for wi_id, test, cmd in rows:
+        lines.append(f"| `{_cell(wi_id)}` | `{_cell(test)}` | `{_cell(cmd)}` |")
+    return "\n".join(lines)
+
+
 def render_security_gate_matrix(nf: str) -> str:
     """H3 render — `## Security` H2 아래 sub-section. security-baseline
     policy 의 M1~M7 mandate 와 verification 매핑.
@@ -943,8 +989,7 @@ def render_verification_plan(nf: str, current_text: str, config: dict) -> str:
         "security-gate-matrix": render_security_gate_matrix(nf),
         "end-to-end-tests-table": render_kind_test_table(
             nf, "end-to-end", "End-to-End Tests Inventory"),
-        "observability-tests-table": render_kind_test_table(
-            nf, "observability", "Observability Tests Inventory"),
+        "observability-tests-table": render_observability_tests_table(nf),
     }
     users_existing = extract_blocks(current_text, "USER") if current_text else {}
 
