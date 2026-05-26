@@ -15,7 +15,7 @@ Usage:
     3) docx clause 2 References 섹션을 추출해 모든 3GPP TS/TR 인용 수집 (NBSP-tolerant).
     4) 카테고리 분류 (architecture / procedures / cross-nf / data_types / discovery / sba_common / security / ids / zzz_skip).
     5) specs/ 실재 여부 표시.
-    6) status 보고 — manifest_completeness 비율, 부재 spec 우선순위 목록, /nf-build 가능 여부.
+    6) status 보고 — manifest_completeness 비율, 부재 spec 우선순위 목록, /nf-contract-build 가능 여부.
 
 본 도구는 *제안* 만 한다. 사용자가 결과를 보고 design/<nf>/_manifest.yaml 을 직접 수정/추가/제외할 수 있다.
 """
@@ -274,7 +274,7 @@ def render_yaml(manifest: dict) -> str:
             line += f", role: \"{d['role']}\" }}"
             out.append(line)
     out.append("")
-    out.append(f"# /nf-init 산출 status")
+    out.append(f"# /nf-spec-discover 산출 status")
     out.append(f"status:")
     out.append(f"  manifest_completeness: \"{manifest['status']['present_count']}/{manifest['status']['in_scope_count']}\"")
     out.append(f"  ready_for_build: {str(manifest['status']['ready']).lower()}")

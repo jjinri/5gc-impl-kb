@@ -1,13 +1,13 @@
 ---
 name: nf-arch-status
-description: 본 5gc-impl-kb 의 architecture 산출 (design/<nf>/architecture + module-decomposition) 이 canonical 섹션 계약과 자기 일관성을 만족하는지 검사해 `_arch_status.yaml` 산출하는 워크플로우. 사용자가 "/nf-arch-status nssf", "NSSF architecture 검증", "arch 일관성 검사", "architecture status", "이 NF arch 구현계획 가능?" 등을 말하거나 NF 이름 + architecture 검사를 지정하면 이 skill 을 사용한다. 동작 — `design/scripts/nf-arch-status.py <nf>` 호출 → `design/<nf>/_arch_status.yaml` 갱신 + 콘솔에 acceptance gate (`arch_consistent`) 보고. contract 단계 검사는 `/nf-status`(=`/nf-contract-check`), implementation-planning 단계는 `/nf-impl-status` 의 책임이며 본 skill 은 architecture 단계 *측정* 에 집중한다.
+description: 본 5gc-impl-kb 의 architecture 산출 (design/<nf>/architecture + module-decomposition) 이 canonical 섹션 계약과 자기 일관성을 만족하는지 검사해 `_arch_status.yaml` 산출하는 워크플로우. 사용자가 "/nf-arch-status nssf", "NSSF architecture 검증", "arch 일관성 검사", "architecture status", "이 NF arch 구현계획 가능?" 등을 말하거나 NF 이름 + architecture 검사를 지정하면 이 skill 을 사용한다. 동작 — `design/scripts/nf-arch-status.py <nf>` 호출 → `design/<nf>/_arch_status.yaml` 갱신 + 콘솔에 acceptance gate (`arch_consistent`) 보고. contract 단계 검사는 `/nf-contract-check`, implementation-planning 단계는 `/nf-impl-status` 의 책임이며 본 skill 은 architecture 단계 *측정* 에 집중한다.
 argument-hint: "<nf> [--no-write]"
 allowed-tools: Bash(.venv/bin/python3 design/scripts/nf-arch-status.py *) Bash(cat *) Bash(ls *)
 ---
 
 # nf-arch-status — architecture 자기 일관성 검사
 
-architecture 단계 status 검사다. ADR-0001 L54 가 예고한 "separate future skill" — contract 단계 `/nf-status` 와 책임이 분리된다.
+architecture 단계 status 검사다. ADR-0001 L54 가 예고한 "separate future skill" — contract 단계 `/nf-contract-check` 와 책임이 분리된다.
 
 ## 입력
 - `<nf>` — NF 이름.
@@ -19,7 +19,7 @@ architecture 단계 status 검사다. ADR-0001 L54 가 예고한 "separate futur
 
 | 시나리오 | 사용 skill |
 | --- | --- |
-| contract 완성도 검사 | `/nf-status` (= `/nf-contract-check`) |
+| contract 완성도 검사 | `/nf-contract-check` |
 | architecture 자기 일관성 검사 | `/nf-arch-status` (본 skill) |
 | implementation-planning 자기 일관성 검사 | `/nf-impl-status` |
 | architecture 산출 생성·갱신 | `/nf-arch-design` |

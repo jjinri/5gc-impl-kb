@@ -2,8 +2,8 @@
 """Generate the initial handoff seed from an NF manifest and primary OpenAPI YAML.
 
 This intentionally replaces the old manual `_handoff.yaml` authoring step:
-`/nf-init` discovers specs, then this script creates `design/<nf>/_contract_seed.yaml`
-so `/nf-build` can assemble `handoff/<nf>/contract.yaml`.
+`/nf-spec-discover` discovers specs, then this script creates `design/<nf>/_contract_seed.yaml`
+so `/nf-contract-build` can assemble `handoff/<nf>/contract.yaml`.
 
 Default behavior is conservative: if a seed already exists, preserve it unless
 `--force` is passed. Existing seeds may contain scoped MVP decisions and manual

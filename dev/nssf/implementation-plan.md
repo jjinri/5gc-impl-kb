@@ -59,7 +59,7 @@ user_sections:
 - 33.310 / 33.210 certificate / TLS / cipher profile 세부 — operator-provided compliant cert/config + library compliance assumption (ADR-0004 의무 7).
 - TLS / X.509 / JWT / JWS primitive 직접 구현 (ADR-0004 의무 6 — maintained third-party library 만).
 - 38.413 — AMF reallocation via RAN (NGAP REROUTE NAS REQUEST) 미구현 결정 유지. 운영 결정 변경 시 별도 사이클.
-- contract markdown body (현재 handoff yaml 까지만 — `design/nssf/contract/**/*.md` 의 AUTO/USER 본문 작성은 별도 nf-build 사이클).
+- contract markdown body (현재 handoff yaml 까지만 — `design/nssf/contract/**/*.md` 의 AUTO/USER 본문 작성은 별도 nf-contract-build 사이클).
 <!-- USER:scope-body:end -->
 
 <!-- AUTO:engineering-decisions-summary:start -->
