@@ -72,19 +72,20 @@ user_sections:
 <!-- AUTO:integration-tests-table:start -->
 ### Integration Tests Inventory
 
-`dev/nssf/test-matrix.md` `## Test Inventory` 의 kind=integration row derive — 총 9개. test-matrix 변경 시 본 sub-section 이 같이 갱신된다.
+`dev/nssf/test-matrix.md` `## Test Inventory` 의 kind=integration/module-integration row derive — 총 10개. test-matrix 변경 시 본 sub-section 이 같이 갱신된다.
 
-| id | scenario | refs |
-|---|---|---|
-| `t-selection-success` | success-registration-selection | `api/NSSelectionGet`, `SelectionEngine.md`, `request-flow.md` |
-| `t-availability-put` | availability-put-creates-record | `api/NSSAIAvailabilityPut`, `AvailabilityEngine.md`, `request-flow.md` |
-| `t-availability-patch` | availability-patch-applies | `api/NSSAIAvailabilityPatch`, `AvailabilityEngine.md` |
-| `t-availability-delete` | availability-delete | `api/NSSAIAvailabilityDelete`, `AvailabilityEngine.md` |
-| `t-subscription-create` | subscription-create | `api/NSSAIAvailabilityPost`, `SubscriptionStore.md` |
-| `t-subscription-notify` | subscription-create-and-notify | `api/NSSAIAvailabilityPost`, `SubscriptionStore.md`, `NotificationDispatcher.md`, `observability.md` |
-| `t-subscription-unsubscribe` | subscription-unsubscribe | `api/NSSAIAvailabilityUnsubscribe`, `SubscriptionStore.md` |
-| `t-notify-retry` | notification-retry-on-5xx | `NotificationDispatcher.md`, `error-propagation.md`, `configuration-strategy.md` |
-| `t-notify-dead-letter` | notification-dead-letter | `NotificationDispatcher.md`, `error-propagation.md` |
+| id | kind | scenario | refs |
+|---|---|---|---|
+| `t-selection-success` | integration | success-registration-selection | `api/NSSelectionGet`, `SelectionEngine.md`, `request-flow.md` |
+| `t-availability-put` | integration | availability-put-creates-record | `api/NSSAIAvailabilityPut`, `AvailabilityEngine.md`, `request-flow.md` |
+| `t-availability-patch` | integration | availability-patch-applies | `api/NSSAIAvailabilityPatch`, `AvailabilityEngine.md` |
+| `t-availability-delete` | integration | availability-delete | `api/NSSAIAvailabilityDelete`, `AvailabilityEngine.md` |
+| `t-subscription-create` | integration | subscription-create | `api/NSSAIAvailabilityPost`, `SubscriptionStore.md` |
+| `t-subscription-notify` | integration | subscription-create-and-notify | `api/NSSAIAvailabilityPost`, `SubscriptionStore.md`, `NotificationDispatcher.md`, `observability.md` |
+| `t-subscription-unsubscribe` | integration | subscription-unsubscribe | `api/NSSAIAvailabilityUnsubscribe`, `SubscriptionStore.md` |
+| `t-notify-retry` | integration | notification-retry-on-5xx | `NotificationDispatcher.md`, `error-propagation.md`, `configuration-strategy.md` |
+| `t-notify-dead-letter` | integration | notification-dead-letter | `NotificationDispatcher.md`, `error-propagation.md` |
+| `t-repo-contract` | module-integration | repository interface contract | `state-persistence.md`, `tasks.yaml#nssf-repo-*`, `engineering-design.md` |
 <!-- AUTO:integration-tests-table:end -->
 
 ## Contract
