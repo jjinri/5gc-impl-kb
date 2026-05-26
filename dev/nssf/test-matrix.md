@@ -4,19 +4,30 @@ stage: implementation-planning
 status: draft
 source_architecture: design/nssf/architecture
 source_contract: handoff/nssf/contract.yaml
-generated_date: 2026-05-14
+generated_date: '2026-05-26'
+generator: design/scripts/nf-readiness-pack-generate.py
+source_readiness_config: design/nssf/readiness-config.yaml
+generated_sections:
+  - security-coverage-summary
+user_sections:
+  - purpose-body
+  - test-inventory-body
+  - coverage-rules-body
+  - open-questions-body
+  - references-body
 ---
 
 # NSSF Test Matrix
 
-> **Source-of-truth** (resolved 2026-05-21). 본 inventory 의 신규 security 시나리오 (`t-tls-*`, `t-mtls-*`, `t-oauth2-inbound-*`, `t-oauth2-outbound-*`) 는 ADR-0004 baseline + architecture + engineering-design (TLS=OpenSSL app_library, OAuth2=libjwt+JWKS, sbi_client_stack=nghttp2+outbound TLS/OAuth2) 3 source 정합. 실 test 실행은 codegen 사이클 입력 — `nf-eng-status` `eng_frozen` PASS (GO 신호) 후 진입.
-
 ## Purpose
 
+<!-- USER:purpose-body:start -->
 본 문서는 NSSF 의 8 inbound operation + outbound notification + e2e 시나리오를 검증하는 test inventory 다. `design/nssf/architecture/test-strategy.md` 의 시나리오 카탈로그가 입력. 본 inventory 의 각 항목은 `dev/nssf/tasks.yaml` 의 task 와 `dev/nssf/traceability.md` 의 매핑으로 추적된다.
+<!-- USER:purpose-body:end -->
 
 ## Test Inventory
 
+<!-- USER:test-inventory-body:start -->
 | id | kind | scenario | given | when | then | refs |
 |---|---|---|---|---|---|---|
 | `t-selection-success` | integration | success-registration-selection | subscribed NSSAI + PLMN policy + availability map 모두 존재 | NSSelectionGet 호출 | 200 `AuthorizedNetworkSliceInfo`, allowed NSSAI 계산 + target AMF set 결정 | `api/NSSelectionGet`, `SelectionEngine.md`, `request-flow.md` |
@@ -56,24 +67,50 @@ generated_date: 2026-05-14
 | `t-oauth2-outbound-token-acquire` | security | oauth2-outbound-token-acquire | `oauth2_outbound.enabled=true`, mock NRF token endpoint | 변경 이벤트 + outbound dispatch | token cache miss → token endpoint 호출 → cache → outbound POST attach | `NotificationDispatcher.md`, `ADR-0004` |
 | `t-oauth2-outbound-token-endpoint-fail` | security | oauth2-outbound-token-endpoint-fail | mock NRF token endpoint 5xx 또는 client_secret invalid | 변경 이벤트 + outbound dispatch | 5xx → retry queue, client_secret invalid → dead-letter + alert | `error-propagation.md`, `NotificationDispatcher.md` |
 | `t-outbound-tls-handshake-fail` | security | outbound-tls-handshake-fail | callback receiver TLS fail (expired cert 등) | 변경 이벤트 + outbound dispatch | outbound TLS handshake 실패 → retry queue 진입 | `error-propagation.md`, `NotificationDispatcher.md` |
+<!-- USER:test-inventory-body:end -->
 
 ## Coverage Rules
 
+<!-- USER:coverage-rules-body:start -->
 - 8 operation 각각 *success path* 최소 1 개 + *주요 error* 1 개 이상.
 - ProblemDetails shape 검증을 mapper unit test 와 contract test 양쪽에서.
 - outbound notification 의 *correlation 전파* 는 e2e test 에서 *반드시* 검증.
 - repository 의 *interface 정합성* 은 PostgreSQL backend 기준 contract test 로 검증. test seam 의 in-memory mock 은 abstraction 검증.
 - ADR-0004 baseline 4 capability (TLS / mTLS / inbound OAuth2 / outbound OAuth2) 각각 *success* + *primary failure* 1 case 이상 — `t-tls-*`, `t-mtls-*`, `t-oauth2-inbound-*`, `t-oauth2-outbound-*` security 그룹이 cover.
 - subscription lifetime 만료 정책은 본 inventory 의 *unit* test 에 명시되지 않음 — 본 매트릭스 외 추가 시 별도 사이클.
+<!-- USER:coverage-rules-body:end -->
+
+<!-- AUTO:security-coverage-summary:start -->
+### Security Coverage Summary
+
+`design/policies/security-baseline.yaml` (ADR-0004 baseline) + 본 파일 `## Test Inventory` cross-source derive — 총 7 mandate, kind=security test 11개. 두 source 중 하나가 바뀌면 본 summary 가 갱신된다.
+
+**kind=security test count**: 11.
+
+**Project security mandates (ADR-0004)**:
+
+- `M1` `internal_https_tls_code_path` (applies_to=all_nfs).
+- `M2` `mtls_code_path` (applies_to=all_nfs).
+- `M3` `inbound_oauth2_bearer_validation_code_path` (applies_to=all_nfs).
+- `M4` `outbound_oauth2_token_attach_code_path` (applies_to=all_nfs).
+- `M5` `dev_disable_with_production_path_present` (applies_to=all_nfs).
+- `M6` `third_party_library_mandate` (applies_to=all_nfs).
+- `M7` `profile_spec_depth_externalized` (applies_to=all_nfs).
+
+Per-mandate test 매핑은 `## Test Inventory` 의 `refs` 컬럼 (예 `ADR-0004` cross-ref) 과 dev/<nf>/traceability.md 의 `## Module → Test` 표를 참조.
+<!-- AUTO:security-coverage-summary:end -->
 
 ## Open Questions
 
+<!-- USER:open-questions-body:start -->
 - `t-availability-patch-conflict` 의 412 etag 정책 채택 여부 — `error-propagation.md` open question 과 연동.
 - `notification-dead-letter` 후속 처리 (subscription 자동 deactivate) test 시나리오 — `NotificationDispatcher.md` open question 결정 시 추가.
 - *PII 마스킹* test — UE id 가 어떤 operation 의 payload 에 도달하는지 확정 후 inventory 추가.
+<!-- USER:open-questions-body:end -->
 
 ## References
 
+<!-- USER:references-body:start -->
 - `design/nssf/architecture/test-strategy.md` — 시나리오 카탈로그 (security 시나리오 10 추가됨) 의 출처.
 - `design/nssf/module-decomposition/` 4 module.
 - `handoff/nssf/contract.yaml` — schema 진실 출처.
@@ -81,3 +118,4 @@ generated_date: 2026-05-14
 - `engineering/nssf/engineering-design.md` — 선택된 TLS/OAuth2/persistence lib.
 - `dev/nssf/tasks.yaml` — task 와의 매핑.
 - `dev/nssf/traceability.md` — module ↔ test 매핑.
+<!-- USER:references-body:end -->
