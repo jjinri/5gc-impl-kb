@@ -1,0 +1,100 @@
+# NSSF openapi-generator-cli config
+#
+# 본 yaml 은 WI-codegen-bootstrap (Phase 1 wave 1) 진입 시 openapi-generator-cli
+# 가 *어떻게* contract 를 C 코드로 emit 하는지의 config.
+#
+# 현재 (PR #87 + execution-control pack 시점) — 본 config 는 *placeholder
+# pinned reference*. 실 generator 실행은 WI-codegen-bootstrap PR 에서.
+schema_version: openapi-generator-config-v1
+nf: nssf
+stage: implementation-planning
+source_engineering_design: engineering/nssf/engineering-design.md
+source_generation_manifest: src/nssf/generated/GENERATION_MANIFEST.yaml
+generated_date: 2026-05-27
+status: pinned_placeholder  # WI-codegen-bootstrap 진입 시 실 실행 + 'active' 갱신
+
+# ─── 1. Tool selection + version pin ──────────────────────────────────
+tool:
+  name: openapi-generator-cli
+  channel: docker
+  pinned_image: 'openapitools/openapi-generator-cli:v7.10.0'  # 추천 default — WI-codegen-bootstrap 시점 ratify 필요
+  fallback_jar:
+    artifact: 'openapi-generator-cli-7.10.0.jar'
+    download_url: 'https://repo1.maven.org/maven2/org/openapitools/openapi-generator-cli/7.10.0/openapi-generator-cli-7.10.0.jar'
+    sha256: 'PINNED_PLACEHOLDER_SHA256_TO_RESOLVE_AT_WI_CODEGEN_BOOTSTRAP'  # 실 hash 는 WI-codegen-bootstrap PR 에서 자동 emit
+  notes: |
+    version pin 은 ratify 시점에 *3 plane (channel image / fallback jar /
+    sha256)* 모두 확정. Phase 1 wave 1 진입 PR 의 acceptance 1순위.
+
+# ─── 2. Generator settings ────────────────────────────────────────────
+generator:
+  language: c
+  package_name: nssf
+  model_package: models
+  api_package: api
+  source_folder: src/nssf/generated
+  additional_properties:
+    library: 'curl'  # openapi-generator-c 의 default HTTP client backend
+    apiSuffix: 'Api'
+    modelNamePrefix: ''
+    modelNameSuffix: ''
+    cJSONInclude: 'cJSON.h'  # vendored cJSON include
+    generateGoModFile: false
+  template_dir: ''  # 표준 template 사용 (WI-codegen-bootstrap 에서 override 가능)
+  global_property:
+    apiTests: false
+    apiDocs: false
+    modelTests: false
+    modelDocs: false
+
+# ─── 3. Inputs ────────────────────────────────────────────────────────
+inputs:
+  - id: nssf_nsselection
+    spec_path: specs/29.531/TS29531_Nnssf_NSSelection.yaml
+    purpose: 'generator-only mode — semantic rediscovery 금지 (agent-execution-plan no_spec_reread.allowed.generator_input)'
+
+  - id: nssf_nssaiavailability
+    spec_path: specs/29.531/TS29531_Nnssf_NSSAIAvailability.yaml
+    purpose: 'generator-only mode — semantic rediscovery 금지'
+
+# ─── 4. Output expectations ───────────────────────────────────────────
+expected_outputs:
+  models_path: src/nssf/generated/models/
+  api_path: src/nssf/generated/api/
+  external_path: src/nssf/generated/external/  # TS29571 외부 dependency
+  cmakelists: src/nssf/generated/CMakeLists.txt
+
+  expected_data_model_count: 14  # contract data-model
+  expected_external_dependency_count: '>= 1 (PatchItem 최소)'
+
+# ─── 5. cJSON vendoring ───────────────────────────────────────────────
+cjson_vendoring:
+  source: 'https://github.com/DaveGamble/cJSON'
+  pinned_tag: 'v1.7.18'  # 추천 default — WI-codegen-bootstrap 시점 ratify 필요
+  vendor_path: 'infra/nssf/codegen/vendor/cJSON/'
+  files:
+    - cJSON.c
+    - cJSON.h
+  license: MIT
+  notes: 'cJSON 은 single-pair (header + source). vendored source commit.'
+
+# ─── 6. Drift detection ───────────────────────────────────────────────
+drift_detection:
+  enabled: false  # WI-codegen-bootstrap 진입 시 true
+  check_kind: 'regenerate-and-diff'
+  ci_step_name: 'phase1_wave1_codegen_drift_check'
+  allowlist: infra/nssf/codegen/drift-allowlist.yaml
+  expected_pr_actions:
+    - 'generator version upgrade — drift expected, PR 에 명시'
+    - 'spec 변경 (3GPP minor update) — drift 자연, contract 재생성 + 본 PR 에 포함'
+    - 'unexpected drift — fail, PR 차단'
+
+# ─── 7. Build-time tool 정책 ──────────────────────────────────────────
+build_time_tool_policy:
+  jvm_required: true  # openapi-generator-cli 는 JRE 필요
+  jvm_runtime_in_nf_binary: false  # NSSF 바이너리에는 JVM 미포함 (project_no_jvm policy 준수)
+  ci_apt_packages:
+    - default-jre  # build time only
+  notes: |
+    JVM 은 openapi-generator-cli 실행 시점만 필요. 산출 C 코드 + NSSF 바이너리
+    에 JVM 미포함 — project_no_jvm memory policy 준수.

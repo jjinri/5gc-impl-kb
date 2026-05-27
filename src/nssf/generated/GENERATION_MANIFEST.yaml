@@ -1,0 +1,88 @@
+# NSSF Generated Sources — Generation Manifest
+#
+# 본 yaml 은 src/<nf>/generated/ 안 *어떤 파일이 어떤 source 로부터 생성되는가*
+# 의 단일 진실 출처. WI-codegen-bootstrap (Phase 1 wave 1) 진입 시 본 manifest
+# 가 *드라이브 input* — openapi-generator 가 본 yaml 의 expected_artifacts 를
+# emit 하고, drift-allowlist.yaml 이 예외 파일을 분류.
+#
+# Phase 1 wave 0 (PR #87) 시점에서는 generated/ 디렉터리 안에 *hand-written
+# stub 1 개* (NSSelectionGet.h) 만 존재 + NSSF_GENERATED_BOUNDARY_STUB marker.
+# 이 stub 은 WI-codegen-bootstrap 진입 시 generator output 으로 교체 + marker
+# 제거 의무.
+schema_version: generation-manifest-v1
+nf: nssf
+stage: implementation-planning
+source_contract: handoff/nssf/contract.yaml
+source_engineering_design: engineering/nssf/engineering-design.md
+source_codegen_config: infra/nssf/codegen/openapi-generator-cli.config.yaml
+source_drift_allowlist: infra/nssf/codegen/drift-allowlist.yaml
+generated_date: 2026-05-27
+generator_status: phase1_wave0_stub  # WI-codegen-bootstrap 진입 시 'active' 로 갱신
+
+# ─── 1. Current Phase 1 wave 0 산출 ──────────────────────────────────
+# PR #87 가 만든 hand-written stub. WI-codegen-bootstrap 진입 시 교체.
+phase1_wave0_stubs:
+  - path: src/nssf/generated/api/NSSelectionGet.h
+    kind: handwritten_stub
+    marker: 'NSSF_GENERATED_BOUNDARY_STUB'
+    replace_during: WI-codegen-bootstrap
+    rationale: 'Phase 1 wave 0 tracer-bullet 의 generator boundary 표현. Phase 1 wave 1 진입 시 openapi-generator output 으로 교체.'
+
+# ─── 2. Phase 1 wave 1 (WI-codegen-bootstrap) 예상 산출 ───────────────
+# openapi-generator(C) + cJSON serializer 가 emit 할 model schema.
+# contract 의 14 data-model + TS29571 외부 dependency.
+expected_artifacts:
+  contract_data_models:
+    - AuthorizedNetworkSliceInfo
+    - AuthorizedNssaiAvailabilityInfo
+    - NfInstanceId
+    - NssaiAvailabilityInfo
+    - NssfEventSubscriptionCreateData
+    - NssfEventSubscriptionCreatedData
+    - PatchDocument
+    - PlmnId
+    - SliceInfoForPDUSession
+    - SliceInfoForRegistration
+    - SliceInfoForUEConfigurationUpdate
+    - Snssai
+    - SupportedFeatures
+    - Tai
+  external_ts29571_dependencies:
+    - PatchItem
+    # 정확한 TS29571 외부 dependency count 는 WI-codegen-bootstrap 시점에 build 산출이 확정.
+
+  emit_pattern:
+    headers: 'src/nssf/generated/models/<Schema>.h'
+    sources: 'src/nssf/generated/models/<Schema>.c'
+    serializer_kind: 'cJSON (engineering-design L114-115 ratified)'
+    naming_convention: 'PascalCase schema name = camelCase C identifier prefix'
+
+  build_target: nssf_generated
+  build_kind: STATIC
+  cmake_path: src/nssf/generated/CMakeLists.txt
+
+# ─── 3. Generator config reference ────────────────────────────────────
+generator_config:
+  package: openapi-generator
+  language_target: c
+  version_pin_required: true
+  config_file: infra/nssf/codegen/openapi-generator-cli.config.yaml
+  inputs:
+    - specs/29.531/TS29531_Nnssf_NSSelection.yaml
+    - specs/29.531/TS29531_Nnssf_NSSAIAvailability.yaml
+  generator_only_mode: true
+  notes: |
+    generator-only mode = agent 가 의미 해석 안 함. spec_reread_audit 의
+    allowed 카테고리 (generator_input).
+
+# ─── 4. Drift gate ────────────────────────────────────────────────────
+drift_gate:
+  enabled: false  # WI-codegen-bootstrap 진입 시 true 로 갱신
+  check_command: 'cmake --build build --target nssf_generated'
+  pass_criteria: '14 contract data-model + TS29571 외부 dependency 모두 emit + drift 없음'
+  allowlist_source: infra/nssf/codegen/drift-allowlist.yaml
+  notes: |
+    Phase 1 wave 0 (PR #87) 시점 — drift gate inactive. NSSelectionGet.h
+    stub 가 drift 검사 대상이 아니라 allowlist 의 GENERATED_BOUNDARY_STUB
+    entry 로 분류됨. WI-codegen-bootstrap 진입 시 drift gate 활성 + 본
+    stub 가 실 generator output 으로 교체 + allowlist entry 제거.
