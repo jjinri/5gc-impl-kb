@@ -1,17 +1,17 @@
 # NSSF openapi-generator-cli config
 #
-# 본 yaml 은 WI-codegen-bootstrap (Phase 1 wave 1) 진입 시 openapi-generator-cli
-# 가 *어떻게* contract 를 C 코드로 emit 하는지의 config.
-#
-# 현재 (PR #87 + execution-control pack 시점) — 본 config 는 *placeholder
-# pinned reference*. 실 generator 실행은 WI-codegen-bootstrap PR 에서.
+# 본 yaml 은 openapi-generator-cli 가 *어떻게* contract 를 C 코드로 emit
+# 하는지의 config. PR #92 (WI-codegen-bootstrap merged) 부터 active.
 schema_version: openapi-generator-config-v1
 nf: nssf
 stage: implementation-planning
 source_engineering_design: engineering/nssf/engineering-design.md
 source_generation_manifest: src/nssf/generated/GENERATION_MANIFEST.yaml
 generated_date: 2026-05-27
-status: pinned_placeholder  # WI-codegen-bootstrap 진입 시 실 실행 + 'active' 갱신
+status: active             # PR #92 머지 후 active. NSSelection-only emit 완료.
+emit_scope: nsselection_only  # NSSAIAvailability 는 PR-codegen-nssaiavailability-extension follow-up.
+drift_script_available: true   # infra/nssf/codegen/regenerate.sh --check (local).
+ci_enforced: false             # CI 에 regenerate.sh --check step 미포함 (JRE + 30MB jar download 비용). 사람 작업 시 local 실행.
 
 # ─── 1. Tool selection + version pin ──────────────────────────────────
 tool:
@@ -59,7 +59,7 @@ inputs:
 
 # ─── 4. Output expectations ───────────────────────────────────────────
 expected_outputs:
-  models_path: src/nssf/generated/models/
+  models_path: src/nssf/generated/model/
   api_path: src/nssf/generated/api/
   external_path: src/nssf/generated/external/  # TS29571 외부 dependency
   cmakelists: src/nssf/generated/CMakeLists.txt
@@ -67,20 +67,27 @@ expected_outputs:
   expected_data_model_count: 14  # contract data-model
   expected_external_dependency_count: '>= 1 (PatchItem 최소)'
 
-# ─── 5. cJSON vendoring ───────────────────────────────────────────────
-cjson_vendoring:
-  source: 'https://github.com/DaveGamble/cJSON'
-  pinned_tag: 'v1.7.18'  # 추천 default — WI-codegen-bootstrap 시점 ratify 필요
-  vendor_path: 'infra/nssf/codegen/vendor/cJSON/'
-  files:
-    - cJSON.c
-    - cJSON.h
-  license: MIT
-  notes: 'cJSON 은 single-pair (header + source). vendored source commit.'
+# ─── 5. cJSON dual-version policy (F3) ────────────────────────────────
+# cJSON 두 위치 — 의도된 분리. 둘이 다른 버전이면 의도된 reference vs runtime
+# 분리. wrapper 통일 정책은 type-overrides.yaml cjson_runtime_policy 참조.
+cjson_policy:
+  vendored_reference:
+    path: infra/nssf/codegen/vendor/cJSON/
+    tag: v1.7.18
+    role: 'ratified upstream reference + license tracking. runtime build 에서 link 안 함.'
+  runtime_link_target:
+    path: src/nssf/generated/external/cJSON.c
+    tag: 'generator-emitted (openapi-generator-cli 7.10.0 embedded copy, 동등 v1.7.x)'
+    role: 'nssf_generated STATIC lib 의 실 link target. PR #92 부터 active.'
+  unification_pending: |
+    두 cJSON 의 version mismatch (v1.7.18 vendored vs generator embedded) 는
+    duplicate symbol 위험 *없음* (current build 는 runtime_link_target 만 link).
+    향후 cJSON wrapper PR 또는 generator template override 시점에 통일 결정.
 
 # ─── 6. Drift detection ───────────────────────────────────────────────
 drift_detection:
-  enabled: false  # WI-codegen-bootstrap 진입 시 true
+  enabled: true                # PR #92 부터 active. regenerate.sh --check 동작.
+  ci_enforced: false           # CI 미포함 (JRE 30MB download 비용). local 실행.
   check_kind: 'regenerate-and-diff'
   ci_step_name: 'phase1_wave1_codegen_drift_check'
   allowlist: infra/nssf/codegen/drift-allowlist.yaml

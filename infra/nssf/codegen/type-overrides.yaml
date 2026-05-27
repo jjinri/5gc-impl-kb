@@ -88,7 +88,27 @@ patch_document_wrappers:
       generator 외 책임. 415 reject (non-application/json-patch+json
       content-type) 도 wrapper layer.
 
-# ─── 5. External refs (bundle / preprocess) ──────────────────────────
+# ─── 5. cJSON runtime policy (F3 — dual version 정책) ─────────────────
+cjson_runtime_policy:
+  vendored_reference:
+    path: infra/nssf/codegen/vendor/cJSON/
+    tag: v1.7.18
+    role: 'ratified upstream reference + license tracking. runtime build 에서 link 안 함.'
+  runtime_link_target:
+    path: src/nssf/generated/external/cJSON.c
+    tag: 'openapi-generator-cli 7.10.0 embedded copy (v1.7.x 동등)'
+    role: 'nssf_generated STATIC lib 의 실 link target. PR #92 부터 active.'
+  duplicate_symbol_risk: low
+  reasoning: |
+    현재 build 는 runtime_link_target 만 link. vendored reference 는 commit
+    만 + license 추적 + 향후 wrapper 통일 시 reference.
+  future_unification_options:
+    - 'option (a) — generator template override 로 generator 가 vendored cJSON 사용'
+    - 'option (b) — cJSON wrapper 신규 추가, project 가 vendored 를 wrapper 통해 사용 + generator emit 외부 cJSON 은 wrapper 만 호출'
+    - 'option (c) — vendored reference 삭제, generator embedded 단일 사용 (현재 status quo)'
+  decision_pending: '향후 wrapper PR 또는 cJSON 통일 결정 PR 진입 시 확정.'
+
+# ─── 6. External refs (bundle / preprocess) ──────────────────────────
 external_ref_strategy:
   ts29571_common_data:
     spec_path: specs/29.571/TS29571_CommonData.yaml

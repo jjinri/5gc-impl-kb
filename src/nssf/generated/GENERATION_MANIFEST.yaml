@@ -73,10 +73,10 @@ expected_artifacts:
     # 정확한 TS29571 외부 dependency count 는 WI-codegen-bootstrap 시점에 build 산출이 확정.
 
   emit_pattern:
-    headers: 'src/nssf/generated/models/<Schema>.h'
-    sources: 'src/nssf/generated/models/<Schema>.c'
-    serializer_kind: 'cJSON (engineering-design L114-115 ratified)'
-    naming_convention: 'PascalCase schema name = camelCase C identifier prefix'
+    headers: 'src/nssf/generated/model/<snake_case>.h'
+    sources: 'src/nssf/generated/model/<snake_case>.c'
+    serializer_kind: 'cJSON (generator emitted at src/nssf/generated/external/, runtime link target. infra/nssf/codegen/vendor/cJSON/ 는 ratified reference. cjson_policy 참조.)'
+    naming_convention: 'PascalCase schema name → snake_case file name + snake_case_t struct type. nf_ prefix 없음. 예: AuthorizedNetworkSliceInfo → authorized_network_slice_info.{h,c} + authorized_network_slice_info_t.'
 
   build_target: nssf_generated
   build_kind: STATIC
@@ -98,12 +98,17 @@ generator_config:
 
 # ─── 4. Drift gate ────────────────────────────────────────────────────
 drift_gate:
-  enabled: false  # WI-codegen-bootstrap 진입 시 true 로 갱신
-  check_command: 'cmake --build build --target nssf_generated'
-  pass_criteria: '14 contract data-model + TS29571 외부 dependency 모두 emit + drift 없음'
+  enabled: true                # PR #92 부터 active. regenerate.sh --check 동작.
+  ci_enforced: false           # CI 미포함 (JRE 30MB download 비용). local 실행. ci_enforced 활성화는 future PR.
+  check_command: 'bash infra/nssf/codegen/regenerate.sh --check'
+  oracle_command: 'python3 design/scripts/verify-generated-models.py nssf'
+  pass_criteria_drift: 'regenerate.sh --check exit 0 (committed src/nssf/generated/ ↔ generator output byte-level identical)'
+  pass_criteria_oracle: 'verify-generated-models.py expected_missing=0 (wrapper_expected + deferred 는 PASS classified)'
   allowlist_source: infra/nssf/codegen/drift-allowlist.yaml
   notes: |
-    Phase 1 wave 0 (PR #87) 시점 — drift gate inactive. NSSelectionGet.h
-    stub 가 drift 검사 대상이 아니라 allowlist 의 GENERATED_BOUNDARY_STUB
-    entry 로 분류됨. WI-codegen-bootstrap 진입 시 drift gate 활성 + 본
-    stub 가 실 generator output 으로 교체 + allowlist entry 제거.
+    PR #92 (WI-codegen-bootstrap) 머지 후 drift gate active.
+    - regenerate.sh --check 가 deterministic emit 보장.
+    - verify-generated-models.py 가 3-way classification 보장.
+    - api/NSSelectionGet.h handwritten stub 는 allowlist entry 로 유지
+      (NSSF runtime 이 generator api/ 를 link 안 하므로). PR-phase1-wave1-
+      nsselection-handler 진입 시 실 handler 로 교체 + allowlist entry 제거.

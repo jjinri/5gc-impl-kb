@@ -61,6 +61,8 @@ items:
       - "sudo apt-get install -y cmake build-essential  # CI prerequisite"
 
   # ===== Phase 1 wave 1 (NSSelectionGet full feature wiring, PR G) =====
+  # PR #92 merged — wave 1 첫 WI. NSSAIAvailability spec emit + 14 schema
+  # full coverage 는 PR-codegen-nssaiavailability-extension follow-up.
   - id: WI-codegen-bootstrap
     owner_lane: code
     depends_on:
@@ -69,25 +71,32 @@ items:
       - engineering/nssf/engineering-design.md (schema_codegen slot freeze)
       - handoff/nssf/contract.yaml (api topics + data-model topics)
       - specs/29.531/TS29531_Nnssf_NSSelection.yaml (generator input only, drift/trace source per spec-to-design-coverage)
-      - specs/29.531/TS29531_Nnssf_NSSAIAvailability.yaml (generator input only)
+      - "specs/29.531/TS29531_Nnssf_NSSAIAvailability.yaml (generator input only — emit 는 follow-up PR)"
     expected_files:
       - infra/nssf/codegen/openapi-generator-cli.config.yaml
-      - infra/nssf/codegen/vendor/cJSON/ (pinned)
-      - "src/nssf/generated/models/*.{h,c} (generator-emitted models — at minimum 14 contract data-model generated schemas + TS29571 external dependency schemas + cJSON serializer)"
-      - src/nssf/generated/CMakeLists.txt
-      - CMakeLists.txt (root, generated subdirectory 등록)
+      - infra/nssf/codegen/vendor/cJSON/ (pinned reference, v1.7.18 — runtime link 은 generator-emitted src/nssf/generated/external/cJSON 사용. dual version 정책은 type-overrides.yaml cjson_runtime_policy 참조.)
+      - "src/nssf/generated/model/*.{h,c} (PR #92 emit = 32 schemas — NSSelection-only. 14 contract schemas 중 7 emitted + 4 deferred to PR-codegen-nssaiavailability-extension + 3 wrapper_expected. TS29571 transitive ~25 informational.)"
+      - src/nssf/generated/include/{list,binary,keyValuePair}.h (generator utility headers)
+      - src/nssf/generated/external/{cJSON.h,cJSON.c,cJSON.licence} (generator pinned cJSON, runtime link target)
+      - src/nssf/generated/CMakeLists.txt (nssf_generated STATIC lib)
+      - CMakeLists.txt (root, add_subdirectory(src/nssf/generated))
+      - infra/nssf/codegen/regenerate.sh (deterministic regen + --check)
+      - design/scripts/verify-generated-models.py (3-way classification oracle)
+      - infra/nssf/codegen/type-overrides.yaml (wrapper plan + multi-spec strategy)
     acceptance:
-      - openapi-generator(C) 가 NSSF contract 의 14 generated data-model schema (AuthorizedNetworkSliceInfo, AuthorizedNssaiAvailabilityInfo, NfInstanceId, NssaiAvailabilityInfo, NssfEventSubscriptionCreateData, NssfEventSubscriptionCreatedData, PatchDocument, PlmnId, SliceInfoForPDUSession, SliceInfoForRegistration, SliceInfoForUEConfigurationUpdate, Snssai, SupportedFeatures, Tai) + TS29571 외부 dependency 를 모두 emit. 정확한 산출 count 는 build step 에서 validation.
-      - cJSON pinned version 이 engineering-design schema_codegen slot 인용과 일치.
-      - generated header 가 contract data-model JSON 의 c_type_hint 값과 1:1 일치.
-      - cmake configure + build 가 generated 모듈만으로 PASS.
+      - "PR #92 emit = NSSelection-only spec emit. 14 contract schema 중 7 emitted (AuthorizedNetworkSliceInfo, SliceInfoForRegistration/PDUSession/UEConfigurationUpdate, Snssai, PlmnId, Tai). 4 NSSAIAvailability-source schema (NssaiAvailabilityInfo, AuthorizedNssaiAvailabilityInfo, NssfEventSubscriptionCreate/CreatedData) 는 deferred — follow-up PR (PR-codegen-nssaiavailability-extension) 에서 emit. 3 wrapper_expected (NfInstanceId, SupportedFeatures, PatchDocument) 는 type-overrides.yaml 분류."
+      - generated header 가 data-model-implementation-map.md 의 target path/c_type_hint 와 일치 (path = src/nssf/generated/model/, c_type = <snake_case>_t).
+      - cmake configure + build 가 nssf_generated target 으로 PASS.
+      - "regenerate.sh --check — drift 없음 (deterministic emit)."
+      - "verify-generated-models.py — expected_present=7, expected_missing=0, wrapper_expected_missing=3 classified, deferred_missing=4 classified."
     tests:
-      - "tests/nssf/unit/test_generated_codegen_smoke.c — 14 contract generated schema 각 1회 alloc/serialize/free round-trip + TS29571 외부 schema (PatchItem 등) round-trip"
-      - tests/nssf/unit/test_generated_field_types.c — c_type_hint 일치 검증
+      - "tests/nssf/unit/test_generated_smoke.c — Unity 4 assertions (snssai_create+convertToJSON+free, snssai_parseFromJSON, plmn_id round-trip, cJSON vendored sanity)"
     verification_commands:
-      - cmake -S . -B build -DNSSF_BUILD_GENERATED=ON
-      - cmake --build build --target nssf_generated
-      - ctest --test-dir build -R nssf_generated_
+      - cmake -S . -B build -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug
+      - cmake --build build --parallel
+      - ctest --test-dir build --output-on-failure -R generated_smoke
+      - bash infra/nssf/codegen/regenerate.sh --check
+      - python3 design/scripts/verify-generated-models.py nssf
 
   - id: WI-schema-bootstrap
     owner_lane: code
