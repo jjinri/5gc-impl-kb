@@ -1,0 +1,397 @@
+# NSSF PR Slicing Plan — autonomous implementation PR 단위 분할
+#
+# 본 파일은 codegen-work-items.yaml 의 WI graph 를 *PR 단위 chunk* 로 분할한
+# 초안. 각 PR 의 scope_files / depends_on / required_checks 를 명시해
+# autonomous agent 가 PR 사이클을 결정론으로 진행 가능하게 한다.
+#
+# 본 파일은 *초안* — 후속 PR 진행 시 lessons 반영 필요 (예 PR 크기 조정,
+# 분할 추가, 결정 pass 삽입).
+schema_version: pr-slicing-plan-v1
+nf: nssf
+stage: implementation-planning
+source_codegen_work_items: dev/nssf/codegen-work-items.yaml
+source_agent_execution_plan: dev/nssf/agent-execution-plan.yaml
+source_verification_matrix: dev/nssf/verification-matrix.yaml
+generated_date: 2026-05-27
+
+# ─── 1. 정책 ──────────────────────────────────────────────────────────
+policy:
+  pr_size_target: '≤ 1500 LOC (vendored 제외) — review 가능 단위.'
+  pr_size_hard_max: '≤ 5000 LOC — review fatigue 한계. 초과 시 분할 필수.'
+  decision_pass_separate: |
+    library/stack 채택·교체·dependency 추가 결정은 *별도 decision pass PR* 로
+    분리. 코드 PR 과 결정 PR 섞지 않는다. 결정 PR 의 산출 = engineering-design
+    + readiness-config + codegen-work-items + team-execution-plan 갱신.
+  pr_chain_requirement: |
+    각 PR 의 depends_on 은 *이미 머지된* 또는 *현재 open* PR 의 id 만 참조.
+    cycle 금지.
+  rollback_unit: |
+    각 PR 은 *독립 revertible*. 머지 후 회귀 발견 시 revert 1건으로 정상화
+    가능해야 함. cross-PR 의 implicit dependency 금지.
+
+# ─── 2. PR 시퀀스 ─────────────────────────────────────────────────────
+prs:
+  - id: PR-phase1-wave0
+    title: 'feat(nssf): Phase 1 tracer-bullet — NSSelectionGet 501 stub + CMake skeleton'
+    phase: phase1_wave0
+    work_items:
+      - WI-tracer-bullet-toolchain
+    scope_files:
+      - CMakeLists.txt
+      - src/nssf/CMakeLists.txt
+      - src/nssf/transport/nsselection_handler.{h,c}
+      - src/nssf/generated/api/NSSelectionGet.h
+      - tests/nssf/CMakeLists.txt
+      - tests/nssf/unit/test_nsselection_handler.c
+      - tests/nssf/vendor/Unity/**
+      - .github/workflows/readiness-check.yml
+      - .gitignore
+    depends_on: []
+    status: merged
+    merged_pr: 'https://github.com/jjinri/5gc-impl-kb/pull/87'
+    required_checks:
+      - pytest_full_suite
+      - validate_artifact_catalog
+      - nf_readiness_pack_generate_check
+      - nf_impl_status
+      - phase1_wave0_cmake_configure
+      - phase1_wave0_cmake_build
+      - phase1_wave0_ctest_smoke
+    estimated_loc: 4620  # 실측 (Unity vendoring 4353 포함)
+    notes: |
+      Unity 2.6.0 vendoring 이 LOC 대부분 (4353). 본 PR 의 hard_max 초과는
+      vendoring 1회성 — 향후 PR 은 vendoring 미포함 시 1500 LOC 이하 목표.
+
+  - id: PR-execution-control-pack
+    title: 'plan(nssf): execution-control pack — agent + verification + slicing'
+    phase: phase0_readiness_gate
+    work_items: []
+    scope_files:
+      - dev/nssf/agent-execution-plan.yaml
+      - dev/nssf/verification-matrix.yaml
+      - dev/nssf/pr-slicing-plan.yaml
+      - dev/nssf/codegen-work-items.yaml  # cross-ref 추가 한정
+      - dev/nssf/team-execution-plan.md   # cross-ref 추가 한정
+    depends_on:
+      - PR-phase1-wave0
+    status: in_progress
+    required_checks:
+      - pytest_full_suite
+      - validate_artifact_catalog
+      - nf_readiness_pack_generate_check
+      - nf_impl_status
+    estimated_loc: 800
+
+  - id: PR-library-stack-decision-pass
+    title: 'decision(nssf): library stack pass — libcurl / libuv / uthash / zlog / valgrind'
+    phase: phase0_readiness_gate
+    work_items: []
+    scope_files:
+      - engineering/nssf/engineering-design.md
+      - design/nssf/readiness-config.yaml
+      - dev/nssf/codegen-work-items.yaml
+      - dev/nssf/team-execution-plan.md
+    depends_on:
+      - PR-execution-control-pack
+    status: not_started
+    required_checks:
+      - pytest_full_suite
+      - validate_artifact_catalog
+      - nf_readiness_pack_generate_check
+      - nf_impl_status
+      - nf_eng_status   # engineering-design 변경 시 freeze 재검증
+    estimated_loc: 500
+    notes: |
+      Pane 2 권고 stack — libcurl outbound client, libuv event loop, uthash
+      hot cache, zlog logging, valgrind memory check. engineering-design 의
+      sbi_client_stack / runtime / event_loop / inmemory_cache / logging /
+      tooling slot 갱신. 코드 변경 0 — 결정만.
+
+  - id: PR-phase1-wave1-codegen-bootstrap
+    title: 'feat(nssf): WI-codegen-bootstrap — openapi-generator + cJSON vendoring'
+    phase: phase1_wave1
+    work_items:
+      - WI-codegen-bootstrap
+    scope_files:
+      - infra/nssf/codegen/openapi-generator-cli.config.yaml
+      - infra/nssf/codegen/vendor/cJSON/**
+      - src/nssf/generated/models/**
+      - src/nssf/generated/CMakeLists.txt
+      - CMakeLists.txt  # generated subdirectory 등록
+    depends_on:
+      - PR-library-stack-decision-pass
+    status: not_started
+    required_checks:
+      - phase1_wave1_codegen_drift_check
+      - pytest_full_suite
+      - validate_artifact_catalog
+    estimated_loc: 2000
+    notes: 'openapi-generator 산출 LOC 가 큼. generated/ 만 별도 PR 권고.'
+
+  - id: PR-phase1-wave1-schema-bootstrap
+    title: 'feat(nssf): WI-schema-bootstrap — PostgreSQL bootstrap (availability / subscription / retry_queue)'
+    phase: phase1_wave1
+    work_items:
+      - WI-schema-bootstrap
+    scope_files:
+      - infra/nssf/schema.sql
+      - infra/nssf/schema_README.md
+      - tests/nssf/integration/test_schema_bootstrap.c
+    depends_on:
+      - PR-phase1-wave1-codegen-bootstrap
+    status: not_started
+    required_checks:
+      - pytest_full_suite
+    estimated_loc: 400
+
+  - id: PR-phase1-wave1-tls-bootstrap
+    title: 'feat(nssf): WI-tls-bootstrap — TLS context + OAuth2 JWKS + scope check'
+    phase: phase1_wave1
+    work_items:
+      - WI-tls-bootstrap
+    scope_files:
+      - src/nssf/runtime/tls_context.{h,c}
+      - src/nssf/runtime/oauth2_jwks.{h,c}
+      - src/nssf/runtime/oauth2_scope_check.{h,c}
+      - src/nssf/runtime/CMakeLists.txt
+      - tests/nssf/unit/test_tls_context_handshake.c
+      - tests/nssf/unit/test_oauth2_scope_check.c
+      - tests/nssf/integration/test_jwks_fetch.c
+    depends_on:
+      - PR-phase1-wave1-codegen-bootstrap
+    status: not_started
+    required_checks:
+      - pytest_full_suite
+    estimated_loc: 1200
+
+  - id: PR-phase1-wave1-problem-details-wrapper
+    title: 'feat(nssf): WI-problem-details-wrapper — RFC 7807 + 18 cause factory'
+    phase: phase1_wave1
+    work_items:
+      - WI-problem-details-wrapper
+    scope_files:
+      - src/nssf/wrappers/nf_problem_details_wrapper.{h,c}
+      - tests/nssf/unit/test_problem_details_factory.c
+      - tests/nssf/unit/test_problem_details_headers.c
+    depends_on:
+      - PR-phase1-wave1-codegen-bootstrap
+    status: not_started
+    required_checks:
+      - pytest_full_suite
+    estimated_loc: 800
+
+  - id: PR-phase1-wave1-nftype-wrapper
+    title: 'feat(nssf): WI-nftype-wrapper — anyOf passthrough policy'
+    phase: phase1_wave1
+    work_items:
+      - WI-nftype-wrapper
+    scope_files:
+      - src/nssf/wrappers/nf_type_wrapper.{h,c}
+      - tests/nssf/unit/test_nftype_wrapper.c
+    depends_on:
+      - PR-phase1-wave1-codegen-bootstrap
+    status: not_started
+    required_checks:
+      - pytest_full_suite
+    estimated_loc: 400
+
+  - id: PR-phase1-wave1-availability-repo
+    title: 'feat(nssf): WI-availability-repo — libpq backend + in-memory mock'
+    phase: phase1_wave1
+    work_items:
+      - WI-availability-repo
+    scope_files:
+      - src/nssf/repository/availability_repository.{h,c}
+      - src/nssf/repository/CMakeLists.txt
+      - tests/nssf/unit/test_availability_repo_inmemory.c
+      - tests/nssf/integration/test_availability_repo_pg.c
+    depends_on:
+      - PR-phase1-wave1-schema-bootstrap
+      - PR-phase1-wave1-codegen-bootstrap
+    status: not_started
+    required_checks:
+      - pytest_full_suite
+    estimated_loc: 1200
+
+  - id: PR-phase1-wave1-selection-engine
+    title: 'feat(nssf): WI-selection-engine — Registration / PDUSession / UEConfigUpdate'
+    phase: phase1_wave1
+    work_items:
+      - WI-selection-engine
+    scope_files:
+      - src/nssf/engine/selection_engine.{h,c}
+      - src/nssf/engine/CMakeLists.txt
+      - tests/nssf/unit/test_selection_engine_*.c
+    depends_on:
+      - PR-phase1-wave1-availability-repo
+      - PR-phase1-wave1-nftype-wrapper
+    status: not_started
+    required_checks:
+      - pytest_full_suite
+    estimated_loc: 1400
+
+  - id: PR-phase1-wave1-nsselection-handler
+    title: 'feat(nssf): WI-nsselection-handler — NSSelectionGet route + golden path'
+    phase: phase1_wave1
+    work_items:
+      - WI-nsselection-handler
+    scope_files:
+      - src/nssf/handlers/nsselection_get_handler.{h,c}
+      - src/nssf/handlers/CMakeLists.txt
+      - src/nssf/server/router.{h,c}
+      - src/nssf/server/CMakeLists.txt
+      - src/nssf/main.c
+      - tests/nssf/integration/test_nsselection_get_*.c
+      - tests/nssf/contract/test_nsselection_response_schema.c
+    depends_on:
+      - PR-phase1-wave1-selection-engine
+      - PR-phase1-wave1-tls-bootstrap
+      - PR-phase1-wave1-problem-details-wrapper
+    status: not_started
+    required_checks:
+      - phase1_wave1_integration_nsselection_get_happy
+      - phase1_wave1_integration_nsselection_get_errors
+      - phase1_wave1_contract_nsselection_response_schema
+    estimated_loc: 1500
+
+  - id: PR-phase2-availability-engine
+    title: 'feat(nssf): WI-availability-engine — Put/Patch/Delete/Options engine'
+    phase: phase2
+    work_items:
+      - WI-availability-engine
+    scope_files:
+      - src/nssf/engine/availability_engine.{h,c}
+      - tests/nssf/unit/test_availability_engine_*.c
+    depends_on:
+      - PR-phase1-wave1-nsselection-handler
+    status: not_started
+    required_checks: []  # phase2 진입 시 verification-matrix 의 phase2 checks 활성
+    estimated_loc: 1000
+
+  - id: PR-phase2-availability-handlers
+    title: 'feat(nssf): WI-availability-handlers — 4 handler (Put/Patch/Delete/Options)'
+    phase: phase2
+    work_items:
+      - WI-availability-handlers
+    scope_files:
+      - src/nssf/handlers/nssaiavailability_*_handler.{h,c}
+      - tests/nssf/integration/test_nssaiavailability_*_integration.c
+    depends_on:
+      - PR-phase2-availability-engine
+    status: not_started
+    required_checks:
+      - phase2_integration_put
+      - phase2_integration_patch
+      - phase2_integration_delete
+      - phase2_integration_options
+    estimated_loc: 1500
+
+  - id: PR-phase2-notification-dispatcher
+    title: 'feat(nssf): WI-notification-dispatcher — retry_queue + outbound TLS'
+    phase: phase2
+    work_items:
+      - WI-notification-dispatcher
+    scope_files:
+      - src/nssf/dispatcher/notification_dispatcher.{h,c}
+      - src/nssf/dispatcher/CMakeLists.txt
+      - tests/nssf/**/test_notification_dispatcher_*.c
+    depends_on:
+      - PR-phase1-wave1-schema-bootstrap
+      - PR-phase1-wave1-tls-bootstrap
+    status: not_started
+    required_checks:
+      - phase2_retry_queue_enqueue
+    estimated_loc: 1000
+
+  - id: PR-phase3-subscription-store
+    title: 'feat(nssf): WI-subscription-store — 3 op store layer'
+    phase: phase3
+    work_items:
+      - WI-subscription-store
+    scope_files:
+      - src/nssf/store/subscription_store.{h,c}
+    depends_on:
+      - PR-phase1-wave1-schema-bootstrap
+      - PR-phase2-notification-dispatcher
+    status: not_started
+    required_checks:
+      - phase3_initial_snapshot_dispatch
+    estimated_loc: 1200
+
+  - id: PR-phase3-subscription-handlers
+    title: 'feat(nssf): WI-subscription-handlers — Post/Unsubscribe/SubModifyPatch'
+    phase: phase3
+    work_items:
+      - WI-subscription-handlers
+    scope_files:
+      - src/nssf/handlers/subscription_*_handler.{h,c}
+      - tests/nssf/integration/test_subscription_*_integration.c
+    depends_on:
+      - PR-phase3-subscription-store
+    status: not_started
+    required_checks:
+      - phase3_integration_post
+      - phase3_integration_unsubscribe
+      - phase3_integration_submodifypatch
+    estimated_loc: 1400
+
+  - id: PR-phase4-contract-tests
+    title: 'test(nssf): WI-contract-tests — 8 op × 18 cause matrix'
+    phase: phase4
+    work_items:
+      - WI-contract-tests
+    scope_files:
+      - tests/nssf/contract/**
+    depends_on:
+      - PR-phase3-subscription-handlers
+    status: not_started
+    required_checks:
+      - phase4_contract_matrix
+    estimated_loc: 1500
+
+  - id: PR-phase4-security-tests
+    title: 'test(nssf): WI-security-tests — ADR-0004 7 항목 baseline evidence'
+    phase: phase4
+    work_items:
+      - WI-security-tests
+    scope_files:
+      - tests/nssf/security/**
+    depends_on:
+      - PR-phase3-subscription-handlers
+    status: not_started
+    required_checks:
+      - phase4_security_baseline_evidence
+    estimated_loc: 1200
+
+  - id: PR-phase4-e2e-tests
+    title: 'test(nssf): WI-e2e-tests — request-flow e2e 시나리오'
+    phase: phase4
+    work_items:
+      - WI-e2e-tests
+    scope_files:
+      - tests/nssf/e2e/**
+    depends_on:
+      - PR-phase3-subscription-handlers
+    status: not_started
+    required_checks:
+      - phase4_e2e_scenarios
+    estimated_loc: 1300
+
+  - id: PR-phase5-observability-finalize
+    title: 'feat(nssf): WI-observability-finalize — metric / log / trace seam'
+    phase: phase5
+    work_items:
+      - WI-observability-finalize
+    scope_files:
+      - src/nssf/observability/**
+      - tests/nssf/**/test_observability_*.c
+    depends_on:
+      - PR-phase4-contract-tests
+      - PR-phase4-security-tests
+      - PR-phase4-e2e-tests
+    status: not_started
+    required_checks:
+      - phase5_metric_seam
+      - phase5_log_redaction
+      - phase5_trace_sampler
+    estimated_loc: 1500

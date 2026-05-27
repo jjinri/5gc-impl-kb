@@ -6,6 +6,15 @@ source_architecture: design/nssf/architecture
 source_contract: handoff/nssf/contract.yaml
 generated_date: 2026-05-22
 
+# Cross-references (execution-control pack — PR-execution-control-pack).
+# 본 yaml 의 WI 가 phase / lane / verification / PR 단위로 어떻게 묶이는지는
+# 아래 4 파일에서 확정된다.
+cross_references:
+  agent_execution_plan: dev/nssf/agent-execution-plan.yaml   # phase / lane / no-spec-reread / checkpoint
+  verification_matrix: dev/nssf/verification-matrix.yaml     # check id 카탈로그
+  pr_slicing_plan: dev/nssf/pr-slicing-plan.yaml             # PR 단위 분할
+  team_execution_plan: dev/nssf/team-execution-plan.md       # lane H2 사람 산문
+
 # items[] — file-level autonomous codegen work units.
 # 각 item 필수 키 — id, owner_lane, depends_on, inputs, expected_files,
 #                   acceptance, tests, verification_commands.
