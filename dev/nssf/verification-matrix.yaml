@@ -56,6 +56,26 @@ checks:
     run_in_ci: true
     ci_step_name: 'nf-impl-status --no-write (validator gate)'
 
+  - id: nf_eng_status
+    command: '.venv/bin/python3 design/scripts/nf-eng-status.py nssf --no-write'
+    proves: 'eng_frozen PASS (engineering-design.md 13 core slot + per-NF 연기 register 결정 freeze)'
+    phase: phase0_readiness_gate
+    work_item: ALL
+    required: true
+    pass_criteria: 'gates.eng_frozen.status == PASS'
+    run_in_ci: false
+    notes: 'engineering-design 변경 시 freeze 재검증. PR-library-stack-decision-pass 의 required check.'
+
+  - id: execution_control_drift
+    command: '.venv/bin/python3 design/scripts/validate-execution-control-drift.py nssf'
+    proves: 'agent-execution-plan / team-execution-plan / verification-matrix / codegen-work-items / pr-slicing-plan / readiness-config 사이 id / reference 일관성'
+    phase: ALL
+    work_item: ALL
+    required: true
+    pass_criteria: 'exit 0 + stderr 의 모든 section PASS'
+    run_in_ci: true
+    ci_step_name: 'validate-execution-control-drift (drift guard for execution-control pack)'
+
   - id: nf_readiness_pack_generate_check
     command: '.venv/bin/python3 design/scripts/nf-readiness-pack-generate.py nssf --check'
     proves: 'readiness pack AUTO 섹션 drift 없음 (config-driven render PASS)'
