@@ -463,8 +463,9 @@ phase_policy:
   tracer_bullet_operation: NSSelectionGet
   phases:
     phase1:
-      description: "tracer-bullet, PR G — NSSelectionGet single-op end-to-end"
+      description: "tracer-bullet 부터 NSSelectionGet single-op end-to-end. wave 0 (WI-tracer-bullet-toolchain) 가 toolchain skeleton + 501 stub 으로 vertical slice 증명, 이후 wave 1 (WI-codegen-bootstrap → ... → WI-nsselection-handler) 가 full feature wiring."
       work_items:
+        - WI-tracer-bullet-toolchain
         - WI-codegen-bootstrap
         - WI-schema-bootstrap
         - WI-tls-bootstrap
