@@ -7,9 +7,10 @@
 ## TL;DR
 
 - **Status** — `phase1_wave1_codegen_bootstrap_merged`. NSSF 의 32 generated schema + nssf_generated static lib + verify oracle + drift gate active.
-- **Main HEAD** — `6b12c05` (PR #92 머지 후).
-- **본 세션 PR 머지** — `#87` ~ `#92` (6 PR). Phase 1 wave 0 tracer-bullet → execution-control pack → autonomous-impl-prep pack → drift validator → CI deps prep → WI-codegen-bootstrap.
-- **다음 PR 후보** — pr-slicing-plan.yaml 의 Phase 1 wave 1 sequence 의 next.
+- **Implementation baseline** — `6b12c05` (PR #92 merge commit) — 본 세션 (Pane 1) 의 implementation 산출 종착점. 본 PR (#94) 머지 + Pane 2 의 docs PR (#93 등) 머지 후 main HEAD 는 추가 이동. fresh clone 시 *현재 `origin/main`* 확인 권고.
+- **본 세션 (Pane 1) PR 머지** — `#87` ~ `#92` (6 PR). Phase 1 wave 0 tracer-bullet → execution-control pack → autonomous-impl-prep pack → drift validator → CI deps prep → WI-codegen-bootstrap.
+- **본 세션 (Pane 2) 병행 작업** — docs / README / CONTEXT / ONBOARDING / lifecycle-artifacts.md / workflow-lifecycle-diagrams 등 docs PR. 본 PR (#94) 의 base 는 *이미 #93 머지된* `34b263a` 이상 — Pane 2 의 추가 docs PR 이 main 에 머지되면 그 commit 이 base 가 된다.
+- **다음 PR 후보** — pr-slicing-plan.yaml 의 Phase 1 wave 1 sequence 의 next (§3 참조).
 
 ---
 
@@ -19,7 +20,12 @@
 # (1) repo sync
 git clone https://github.com/jjinri/5gc-impl-kb.git   # 또는 cd 후 git pull --ff-only
 cd 5gc-impl-kb
-git log --oneline -3   # 6b12c05 head 확인
+git fetch origin main
+git log --oneline -10
+# 기대 — log 에 #87 ~ #92 commit (Phase 1 wave 1 implementation baseline) 모두 포함.
+# Pane 2 docs PR (#93 등) 도 본 시점 이후 main 에 추가될 수 있음 — 그 commit
+# 들이 추가로 보여도 정상. 본 doc 의 baseline 은 #92 머지 시점 (6b12c05) 이지만,
+# 새 세션의 *현재* main HEAD 는 더 앞일 수 있다.
 
 # (2) Python venv (PC 별 .venv 는 git 비추적)
 python3 -m venv .venv
@@ -94,7 +100,9 @@ bash infra/nssf/codegen/regenerate.sh --check
 
 ## 3. NSSF 구현 진행 상태 — Phase 1 wave 1 다음 단계
 
-### 3.1 현재 위치 (pr-slicing-plan.yaml 기준)
+### 3.1 현재 위치 (pr-slicing-plan.yaml 기준 + multi-spec follow-up)
+
+`dev/nssf/pr-slicing-plan.yaml` 의 *등록된* slice 8 종 + `infra/nssf/codegen/type-overrides.yaml` `multi_spec_strategy.next_pr` 의 *follow-up 후보* 1 종 (별표).
 
 | PR slice | 상태 | 비고 |
 |---|---|---|
@@ -104,7 +112,6 @@ bash infra/nssf/codegen/regenerate.sh --check
 | `PR-drift-validator` | ✓ merged (#90) | execution-control drift |
 | `PR-ci-dependency-prep` | ✓ merged (#91) | apt install + sanity |
 | `PR-phase1-wave1-codegen-bootstrap` | ✓ merged (#92) | openapi-generator + 32 schema |
-| `PR-codegen-nssaiavailability-extension` | not_started | NSSAIAvailability spec codegen (multi-spec strategy 2단계) |
 | `PR-phase1-wave1-nftype-wrapper` | not_started | NFType anyOf passthrough wrapper (G-09) |
 | `PR-phase1-wave1-problem-details-wrapper` | not_started | RFC 7807 + 18 cause factory + header rule |
 | `PR-phase1-wave1-schema-bootstrap` | not_started | PostgreSQL schema.sql + 3 table + retry_queue |
@@ -112,18 +119,19 @@ bash infra/nssf/codegen/regenerate.sh --check
 | `PR-phase1-wave1-availability-repo` | not_started | libpq backend + in-memory mock |
 | `PR-phase1-wave1-selection-engine` | not_started | Registration / PDUSession / UEConfigUpdate engine |
 | `PR-phase1-wave1-nsselection-handler` | not_started | NSSelectionGet route + golden path. Boundary stub 교체. |
+| **`PR-codegen-nssaiavailability-extension`** ⚠ | not_started, **pr-slicing-plan.yaml 미등록** | type-overrides.yaml `multi_spec_strategy.next_pr` 의 follow-up 후보. 본 PR 진입 시 `pr-slicing-plan.yaml` 에 slice 추가 필요 (execution-control drift validator 의 `pr_slice_consistency` 충족 위해). |
 
 ### 3.2 권장 다음 PR 순서
 
-`pr-slicing-plan.yaml` 의 `depends_on` 그래프 따라:
+`pr-slicing-plan.yaml` 의 `depends_on` 그래프 + multi-spec follow-up:
 
-1. **`PR-codegen-nssaiavailability-extension`** — NSSAIAvailability spec emit + verifier deferred → expected 승격. 의존 0 (PR #92 머지 후 즉시 진입).
-2. **`PR-phase1-wave1-nftype-wrapper`** — NFType wrapper (depends_on: PR #92). G-09 정책 구현.
-3. **`PR-phase1-wave1-problem-details-wrapper`** — 18 cause factory (depends_on: PR #92). `error-cause-catalog.yaml` 의 entry 와 1:1.
-4. **`PR-phase1-wave1-schema-bootstrap`** — PostgreSQL schema.sql (depends_on: PR #92). M001-bootstrap migration.
-5. **`PR-phase1-wave1-tls-bootstrap`** — TLS / OAuth2 (depends_on: PR #92). libzlog source build 가 필요할 수 있음.
+1. **`PR-phase1-wave1-nftype-wrapper`** — NFType wrapper (depends_on: PR #92). G-09 정책 구현. `pr-slicing-plan.yaml` 등록.
+2. **`PR-phase1-wave1-problem-details-wrapper`** — 18 cause factory (depends_on: PR #92). `error-cause-catalog.yaml` 의 entry 와 1:1. `pr-slicing-plan.yaml` 등록.
+3. **`PR-phase1-wave1-schema-bootstrap`** — PostgreSQL schema.sql (depends_on: PR #92). M001-bootstrap migration. `pr-slicing-plan.yaml` 등록.
+4. **`PR-phase1-wave1-tls-bootstrap`** — TLS / OAuth2 (depends_on: PR #92). libzlog source build 가 필요할 수 있음. `pr-slicing-plan.yaml` 등록.
+5. **`PR-codegen-nssaiavailability-extension`** ⚠ — NSSAIAvailability spec emit + verifier deferred → expected 승격. 의존 0 (PR #92 머지 후 즉시 진입 가능). *주의* — 본 PR 진입 시 첫 작업은 `dev/nssf/pr-slicing-plan.yaml` 에 신규 slice 추가 (id / scope_files / depends_on / required_checks / estimated_loc). drift validator 의 `pr_slice_consistency` + `wi_consistency` 모두 충족.
 
-2~5 는 *parallel* 가능 (의존 모두 PR #92 만). 1 은 codegen pipeline 확장.
+1~4 는 *parallel* 가능 (의존 모두 PR #92 만). 5 는 multi-spec follow-up — codegen pipeline 확장 + slice 등록.
 
 ### 3.3 사전 결정 필요 사항 (다음 PR 진입 전 확정)
 
@@ -193,9 +201,11 @@ openapi-generator-cli 단일 -i input 한계. NSSelection + NSSAIAvailability �
 ### 4.5 Pane 간 작업 분리
 
 본 세션 (Pane 1) = NSSF 구현 / CI / planning 산출.
-Pane 2 = docs / README / CONTEXT / ONBOARDING / lifecycle-artifacts.md / kb README WIP.
+Pane 2 = docs / README / CONTEXT / ONBOARDING / lifecycle-artifacts.md / kb README / workflow-lifecycle-diagrams 등 docs.
 
-Pane 1 은 main 의 unstaged docs 변경 *건드리지 않음*. Pane 2 가 별도 PR 처리 예정.
+본 PR (#94) base 시점에 *Pane 2 docs PR #93 (workflow-lifecycle-diagrams) 은 이미 main 에 머지됨* (`34b263a`). 추가 Pane 2 docs PR 이 본 PR 머지 시점에 더 있을 수 있으므로 새 세션 진입 시 *현재 origin/main* 기준 확인.
+
+Pane 1 은 Pane 2 의 docs WIP / 머지된 docs 산출을 *수정하지 않음* — docs lane 은 Pane 2 책임. 본 PR (#94) 의 handoff doc 도 Pane 2 가 review 만 (comment-only).
 
 ### 4.6 Worktree 격리 패턴
 
@@ -211,9 +221,9 @@ Pane 2 가 main 에 docs WIP 보유 시 본 pane (Pane 1) 작업은 `git worktre
 
 ## 5. 남은 follow-ups
 
-### 5.1 Phase 1 wave 1 잔여 (pr-slicing-plan.yaml 의 not_started)
+### 5.1 Phase 1 wave 1 잔여
 
-- NSSAIAvailability codegen extension (multi-spec 2단계)
+`pr-slicing-plan.yaml` 등록된 not_started:
 - NFType wrapper (anyOf passthrough)
 - ProblemDetails wrapper (RFC 7807 factory)
 - PatchDocument wrapper (RFC 6902 validator)
@@ -222,6 +232,9 @@ Pane 2 가 main 에 docs WIP 보유 시 본 pane (Pane 1) 작업은 `git worktre
 - availability-repo (libpq + in-memory mock)
 - selection-engine (Registration / PDUSession / UEConfigUpdate)
 - nsselection-handler (route + golden path + boundary stub 교체)
+
+`type-overrides.yaml` follow-up — `pr-slicing-plan.yaml` 미등록:
+- NSSAIAvailability codegen extension (multi-spec 2단계) — 진입 시 첫 작업 = `pr-slicing-plan.yaml` 에 slice 추가, drift validator `pr_slice_consistency` 충족.
 
 ### 5.2 Wave 1 종료 → Wave 2~5 (Phase 2~5)
 
