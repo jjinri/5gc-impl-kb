@@ -42,6 +42,7 @@ specs/29.531/<29.531 docx>
 ```
 
 필수 source file 과 generated/cache file 구분은 [`docs/artifact-management.md`](./docs/artifact-management.md) 를 따른다.
+전체 파일 관계도와 lifecycle diagram 은 [`docs/workflow-diagrams.md`](./docs/workflow-diagrams.md) 를 먼저 보면 빠르게 파악할 수 있다.
 
 ## 3. `/nf-readiness` 내부 흐름
 
@@ -60,6 +61,7 @@ specs/29.531/<29.531 docx>
 | 8 | `/nf-eng-design` | library/DB/runtime/tool 결정 freeze | `engineering/<nf>/engineering-design.md` | - |
 | 9 | `/nf-eng-status` | engineering freeze 검사 | `engineering/<nf>/_engineering_status.yaml` | `eng_frozen` |
 | 10 | `nf-readiness-status.py` | aggregate readiness 계산 | `dev/<nf>/_readiness_status.yaml` | `readiness_pack_ready` |
+| 10.5 | reviewed PR / `/nf-implement` preflight | 자율 구현 제어·dependency/config/codegen/test 준비 | execution-control + autonomous-prep pack | drift/preflight evidence |
 
 `readiness_pack_ready` 가 PASS 해야 `/nf-implement` 가 시작된다.
 
@@ -69,13 +71,19 @@ specs/29.531/<29.531 docx>
 
 ### 구현 agent
 
-1. `dev/<nf>/codegen-work-items.yaml` — 작업 그래프와 파일 단위 구현 queue.
-2. `dev/<nf>/api-implementation-matrix.md` — operation/handler/test/persistence mapping.
-3. `dev/<nf>/data-model-implementation-map.md` — generated/wrapper/handwritten classification.
-4. `engineering/<nf>/engineering-design.md` — library/DB/runtime/tool/operator boundary 결정.
-5. `design/<nf>/architecture/**`, `module-decomposition/**` — flow/state/error/module 책임.
-6. `dev/<nf>/verification-plan.md` — gate 별 verification evidence.
-7. `dev/<nf>/open-gaps-and-assumptions.md` — blocker 0 확인, non-blocker 조건 확인.
+1. `dev/<nf>/agent-execution-plan.yaml` — agent lane, write scope, resume rule.
+2. `dev/<nf>/pr-slicing-plan.yaml` — PR 단위 작업 순서와 review boundary.
+3. `dev/<nf>/verification-matrix.yaml` — work item 별 required evidence.
+4. `dev/<nf>/codegen-work-items.yaml` — 작업 그래프와 파일 단위 구현 queue.
+5. `dev/<nf>/api-implementation-matrix.md` — operation/handler/test/persistence mapping.
+6. `dev/<nf>/data-model-implementation-map.md` — generated/wrapper/handwritten classification.
+7. `engineering/<nf>/engineering-design.md`, `dependency-decisions.yaml` — library/DB/runtime/tool/operator boundary 결정.
+8. `dev/<nf>/cmake-dependencies.yaml`, `conf/*.yaml|*.ini`, `operator-inputs.yaml` — build dependency, runtime config, operator-provided values.
+9. `infra/<nf>/codegen/*.yaml`, `src/<nf>/generated/GENERATION_MANIFEST.yaml` — generator config, drift allowlist, generated boundary.
+10. `tests/<nf>/fixtures/manifest.yaml`, `tests/<nf>/golden/*.json`, `dev/<nf>/error-cause-catalog.yaml` — test data와 error mapping.
+11. `design/<nf>/architecture/**`, `module-decomposition/**` — flow/state/error/module 책임.
+12. `dev/<nf>/verification-plan.md`, `failure-recovery.md` — gate 별 evidence 와 실패 복구.
+13. `dev/<nf>/open-gaps-and-assumptions.md` — blocker 0 확인, non-blocker 조건 확인.
 
 ### 사람 reviewer
 
@@ -85,9 +93,36 @@ specs/29.531/<29.531 docx>
 4. `dev/<nf>/open-gaps-and-assumptions.md` — 운영 입력/assumption/deferred/test-gap 분류.
 5. Status cache (`_*_status.yaml`) 는 참고용이며 source of truth 가 아니다.
 
-## 5. `/nf-implement` 입력과 금지사항
+## 5. `/nf-implement` 입력, 내부 cycle, 금지사항
 
-`/nf-implement <nf>` 는 Phase 0 에서 `readiness_pack_ready PASS` 를 다시 확인한다. 이후 `dev/<nf>/codegen-work-items.yaml` 를 기준으로 Phase 1~5 를 진행한다.
+`/nf-implement <nf>` 는 Phase 0 에서 `readiness_pack_ready PASS` 를 다시 확인한다. 이후 `dev/<nf>/codegen-work-items.yaml` 를 기준으로 Phase 1~5 를 진행하되, 실제 자율 코드 작업은 execution-control pack 과 autonomous-prep pack 을 함께 읽어 PR slicing, dependency/config, codegen drift, test fixture, failure recovery 를 결정한다.
+
+`/nf-readiness` 가 내부 lifecycle skill pipeline 이라면, `/nf-implement` 는 **Phase → Work Item(WI) → PR slice → verification evidence** cycle 이다.
+
+```mermaid
+flowchart TD
+  A["User: /nf-implement &lt;nf&gt;"] --> B["Phase 0<br/>readiness preflight"]
+  B --> C["Internal: select next WI<br/>codegen-work-items.yaml"]
+  C --> D["Internal: choose PR slice<br/>pr-slicing-plan.yaml"]
+  D --> E["Internal: implement narrow diff"]
+  E --> F["Internal: run verification matrix"]
+  F --> G{PASS?}
+  G -->|yes| H["User/reviewer: review + merge PR"]
+  H --> C
+  G -->|recoverable fail| E
+  G -->|readiness blocker| I["User: reopen /nf-readiness"]
+```
+
+대표 Phase/WI 예시.
+
+| Phase | 내부 단위 예시 | 성격 |
+|---|---|---|
+| Phase 0 | readiness preflight | `readiness_pack_ready` 재확인 |
+| Phase 1 | `WI-tracer-bullet-toolchain`, dependency prep, `WI-codegen-bootstrap` | toolchain, generated model, first vertical slice |
+| Phase 2 | availability repository/API WIs | NSSAI Availability flow |
+| Phase 3 | subscription store/notification WIs | subscription + callback + persistence |
+| Phase 4 | TLS/OAuth2/NRF/integration WIs | production-capable integration |
+| Phase 5 | observability/perf/hardening WIs | 운영성/품질 강화 |
 
 금지.
 
@@ -106,5 +141,6 @@ specs/29.531/<29.531 docx>
 
 - `specs/` 원본과 tracked KB 산출은 보존한다.
 - `design/<nf>/_*.yaml`, `design/<nf>/contract/**`, `handoff/<nf>/contract.yaml`, `_*_status.yaml` 는 재생성 가능한 local cache 다.
-- `dev/<nf>/` 의 readiness pack 은 NF 구현 KB 이며 git 추적 대상이다.
+- `dev/<nf>/` 의 readiness pack, execution-control pack, autonomous-prep pack 은 NF 구현 KB 이며 git 추적 대상이다.
+- `infra/<nf>/codegen/**`, `infra/<nf>/migrations/**`, `src/<nf>/generated/GENERATION_MANIFEST.yaml`, `tests/<nf>/fixtures/**`, `tests/<nf>/golden/**` 는 `/nf-implement` 가 소비하는 tracked prep/implementation-support 산출물이다.
 - `docs/plans/**`, `docs/retros/**` 는 history 이며 현재 workflow source of truth 가 아니다.

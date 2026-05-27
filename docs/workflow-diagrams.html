@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>workflow-diagrams — 5gc-impl-kb</title>
+<style>
+:root {
+  --fg: #1f2328;
+  --fg-muted: #57606a;
+  --bg: #ffffff;
+  --bg-alt: #f6f8fa;
+  --border: #d8dee4;
+  --border-muted: #eaeef2;
+  --accent: #0969da;
+  --accent-emphasis: #0550ae;
+  --hover-bg: #ddf4ff;
+  --success: #1a7f37;
+  --danger: #cf222e;
+  --neutral: #59636e;
+  --shadow-sm: 0 1px 0 rgba(31,35,40,.04);
+  --radius: 6px;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans KR",
+    "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Code", "Roboto Mono",
+    "D2Coding", monospace;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 1rem; }
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--fg);
+  background: var(--bg);
+}
+
+.wrap {
+  max-width: 1400px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 280px minmax(0, 1fr);
+  gap: 3rem;
+  padding: 2rem 1.5rem 4rem;
+}
+
+aside.toc {
+  position: sticky;
+  top: 1rem;
+  align-self: start;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+  padding-right: 1.5rem;
+  border-right: 1px solid var(--border-muted);
+  font-size: .87rem;
+}
+aside.toc::before {
+  content: "Contents";
+  display: block;
+  font-size: .72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--fg-muted);
+  margin-bottom: .65rem;
+  padding-bottom: .5rem;
+  border-bottom: 1px solid var(--border-muted);
+}
+aside.toc ul { list-style: none; padding-left: 0; margin: 0; }
+aside.toc ul ul { padding-left: 1rem; margin-top: .15rem; }
+aside.toc li { margin: .1rem 0; }
+aside.toc a {
+  display: block;
+  padding: .18rem .4rem;
+  color: var(--fg-muted);
+  text-decoration: none;
+  border-radius: 4px;
+  transition: background .1s, color .1s;
+}
+aside.toc a:hover { background: var(--bg-alt); color: var(--fg); }
+
+main { max-width: 980px; min-width: 0; }
+
+h1, h2, h3, h4, h5, h6 {
+  position: relative;
+  margin: 2rem 0 .65rem;
+  font-weight: 700;
+  scroll-margin-top: 1rem;
+}
+h1 {
+  font-size: 2rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: .35rem;
+  margin-top: 0;
+}
+h2 {
+  font-size: 1.45rem;
+  border-bottom: 1px solid var(--border-muted);
+  padding-bottom: .3rem;
+  margin-top: 2.5rem;
+}
+h3 { font-size: 1.18rem; margin-top: 1.75rem; }
+h4 {
+  font-size: .94rem;
+  margin-top: 1.25rem;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+
+/* Anchor link on heading hover */
+h1 .headerlink, h2 .headerlink, h3 .headerlink, h4 .headerlink {
+  position: absolute;
+  left: -1.4em;
+  width: 1.25em;
+  text-align: center;
+  color: var(--accent);
+  opacity: 0;
+  text-decoration: none;
+  font-weight: 400;
+  transition: opacity .1s;
+}
+h1:hover .headerlink, h2:hover .headerlink, h3:hover .headerlink,
+h4:hover .headerlink { opacity: 1; }
+.headerlink::before { content: "#"; }
+
+p { margin: .65rem 0; }
+ul, ol { padding-left: 1.5rem; margin: .5rem 0; }
+li { margin: .2rem 0; }
+li > p { margin: .25rem 0; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+code {
+  font-family: var(--font-mono);
+  font-size: .87em;
+  background: var(--bg-alt);
+  padding: .12em .35em;
+  border-radius: 3px;
+}
+pre {
+  background: var(--bg-alt);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius);
+  padding: .95rem 1.1rem;
+  overflow-x: auto;
+  font-size: .86rem;
+  line-height: 1.5;
+  margin: .8rem 0;
+  box-shadow: var(--shadow-sm);
+}
+pre code {
+  background: none;
+  padding: 0;
+  font-size: inherit;
+  border-radius: 0;
+}
+.codehilite pre { margin: 0; border: none; box-shadow: none; }
+.codehilite {
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius);
+  overflow: hidden;
+  margin: .8rem 0;
+  box-shadow: var(--shadow-sm);
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1rem 0 1.5rem;
+  font-size: .9rem;
+  background: var(--bg);
+  border: 1px solid var(--border-muted);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+thead { background: var(--bg-alt); }
+thead th {
+  text-align: left;
+  padding: .55rem .8rem;
+  border-bottom: 2px solid var(--border);
+  font-weight: 600;
+  font-size: .8rem;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: .03em;
+  white-space: nowrap;
+}
+tbody td {
+  padding: .55rem .8rem;
+  border-bottom: 1px solid var(--border-muted);
+  vertical-align: top;
+}
+tbody tr:last-child td { border-bottom: none; }
+tbody tr:hover td { background: var(--hover-bg); transition: background .1s; }
+td code { font-size: .82em; }
+
+blockquote {
+  border-left: 4px solid var(--accent);
+  margin: 1rem 0;
+  padding: .35rem 1rem;
+  background: var(--bg-alt);
+  color: var(--fg-muted);
+}
+blockquote p:first-child { margin-top: 0; }
+blockquote p:last-child { margin-bottom: 0; }
+
+hr {
+  border: none;
+  border-top: 1px solid var(--border-muted);
+  margin: 2.5rem 0;
+}
+
+strong { font-weight: 600; }
+em { font-style: italic; color: var(--fg-muted); }
+
+/* Generated by render-doc.py footer */
+.render-footer {
+  margin-top: 4rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-muted);
+  font-size: .78rem;
+  color: var(--fg-muted);
+  text-align: center;
+}
+.render-footer code { font-size: .85em; }
+
+@media (max-width: 920px) {
+  .wrap {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+    padding: 1rem 1rem 2.5rem;
+  }
+  aside.toc {
+    position: static;
+    max-height: none;
+    border-right: none;
+    border-bottom: 1px solid var(--border-muted);
+    padding-right: 0;
+    padding-bottom: 1rem;
+  }
+  main { max-width: 100%; }
+  table { font-size: .82rem; }
+}
+
+@media print {
+  aside.toc { display: none; }
+  .wrap { display: block; max-width: 100%; padding: 0; }
+  main { max-width: 100%; }
+  pre, table, .codehilite { box-shadow: none; border-color: #ccc; }
+  a { color: var(--fg); text-decoration: none; }
+  h1, h2 { page-break-after: avoid; }
+  table, pre, blockquote { page-break-inside: avoid; }
+}
+
+.badge-blocking {
+  display: inline-block;
+  padding: .05em .5em;
+  font-size: .78em;
+  font-weight: 600;
+  color: var(--danger);
+  background: #ffebe9;
+  border: 1px solid #ffc1ba;
+  border-radius: 999px;
+  font-style: normal;
+  letter-spacing: .02em;
+}
+
+pre { line-height: 125%; }
+td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+span.linenos { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
+td.linenos .special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 5px; padding-right: 5px; }
+.codehilite .hll { background-color: #ffffcc }
+.codehilite { background: #f8f8f8; }
+.codehilite .c { color: #3D7B7B; font-style: italic } /* Comment */
+.codehilite .err { border: 1px solid #F00 } /* Error */
+.codehilite .k { color: #008000; font-weight: bold } /* Keyword */
+.codehilite .o { color: #666 } /* Operator */
+.codehilite .ch { color: #3D7B7B; font-style: italic } /* Comment.Hashbang */
+.codehilite .cm { color: #3D7B7B; font-style: italic } /* Comment.Multiline */
+.codehilite .cp { color: #9C6500 } /* Comment.Preproc */
+.codehilite .cpf { color: #3D7B7B; font-style: italic } /* Comment.PreprocFile */
+.codehilite .c1 { color: #3D7B7B; font-style: italic } /* Comment.Single */
+.codehilite .cs { color: #3D7B7B; font-style: italic } /* Comment.Special */
+.codehilite .gd { color: #A00000 } /* Generic.Deleted */
+.codehilite .ge { font-style: italic } /* Generic.Emph */
+.codehilite .ges { font-weight: bold; font-style: italic } /* Generic.EmphStrong */
+.codehilite .gr { color: #E40000 } /* Generic.Error */
+.codehilite .gh { color: #000080; font-weight: bold } /* Generic.Heading */
+.codehilite .gi { color: #008400 } /* Generic.Inserted */
+.codehilite .go { color: #717171 } /* Generic.Output */
+.codehilite .gp { color: #000080; font-weight: bold } /* Generic.Prompt */
+.codehilite .gs { font-weight: bold } /* Generic.Strong */
+.codehilite .gu { color: #800080; font-weight: bold } /* Generic.Subheading */
+.codehilite .gt { color: #04D } /* Generic.Traceback */
+.codehilite .kc { color: #008000; font-weight: bold } /* Keyword.Constant */
+.codehilite .kd { color: #008000; font-weight: bold } /* Keyword.Declaration */
+.codehilite .kn { color: #008000; font-weight: bold } /* Keyword.Namespace */
+.codehilite .kp { color: #008000 } /* Keyword.Pseudo */
+.codehilite .kr { color: #008000; font-weight: bold } /* Keyword.Reserved */
+.codehilite .kt { color: #B00040 } /* Keyword.Type */
+.codehilite .m { color: #666 } /* Literal.Number */
+.codehilite .s { color: #BA2121 } /* Literal.String */
+.codehilite .na { color: #687822 } /* Name.Attribute */
+.codehilite .nb { color: #008000 } /* Name.Builtin */
+.codehilite .nc { color: #00F; font-weight: bold } /* Name.Class */
+.codehilite .no { color: #800 } /* Name.Constant */
+.codehilite .nd { color: #A2F } /* Name.Decorator */
+.codehilite .ni { color: #717171; font-weight: bold } /* Name.Entity */
+.codehilite .ne { color: #CB3F38; font-weight: bold } /* Name.Exception */
+.codehilite .nf { color: #00F } /* Name.Function */
+.codehilite .nl { color: #767600 } /* Name.Label */
+.codehilite .nn { color: #00F; font-weight: bold } /* Name.Namespace */
+.codehilite .nt { color: #008000; font-weight: bold } /* Name.Tag */
+.codehilite .nv { color: #19177C } /* Name.Variable */
+.codehilite .ow { color: #A2F; font-weight: bold } /* Operator.Word */
+.codehilite .w { color: #BBB } /* Text.Whitespace */
+.codehilite .mb { color: #666 } /* Literal.Number.Bin */
+.codehilite .mf { color: #666 } /* Literal.Number.Float */
+.codehilite .mh { color: #666 } /* Literal.Number.Hex */
+.codehilite .mi { color: #666 } /* Literal.Number.Integer */
+.codehilite .mo { color: #666 } /* Literal.Number.Oct */
+.codehilite .sa { color: #BA2121 } /* Literal.String.Affix */
+.codehilite .sb { color: #BA2121 } /* Literal.String.Backtick */
+.codehilite .sc { color: #BA2121 } /* Literal.String.Char */
+.codehilite .dl { color: #BA2121 } /* Literal.String.Delimiter */
+.codehilite .sd { color: #BA2121; font-style: italic } /* Literal.String.Doc */
+.codehilite .s2 { color: #BA2121 } /* Literal.String.Double */
+.codehilite .se { color: #AA5D1F; font-weight: bold } /* Literal.String.Escape */
+.codehilite .sh { color: #BA2121 } /* Literal.String.Heredoc */
+.codehilite .si { color: #A45A77; font-weight: bold } /* Literal.String.Interpol */
+.codehilite .sx { color: #008000 } /* Literal.String.Other */
+.codehilite .sr { color: #A45A77 } /* Literal.String.Regex */
+.codehilite .s1 { color: #BA2121 } /* Literal.String.Single */
+.codehilite .ss { color: #19177C } /* Literal.String.Symbol */
+.codehilite .bp { color: #008000 } /* Name.Builtin.Pseudo */
+.codehilite .fm { color: #00F } /* Name.Function.Magic */
+.codehilite .vc { color: #19177C } /* Name.Variable.Class */
+.codehilite .vg { color: #19177C } /* Name.Variable.Global */
+.codehilite .vi { color: #19177C } /* Name.Variable.Instance */
+.codehilite .vm { color: #19177C } /* Name.Variable.Magic */
+.codehilite .il { color: #666 } /* Literal.Number.Integer.Long */
+</style>
+</head>
+<body>
+<div class="wrap">
+<aside class="toc" aria-label="목차">
+<div class="toc">
+<ul>
+<li><a href="#workflow-diagrams">Workflow diagrams</a><ul>
+<li><a href="#1-end-to-end-lifecycle">1. End-to-end lifecycle</a></li>
+<li><a href="#2-file-relationship-map">2. File relationship map</a></li>
+<li><a href="#3-public-workflow">3. Public workflow</a></li>
+<li><a href="#4-user-action-vs-internal-cycle">4. User action vs internal cycle</a></li>
+<li><a href="#5-nf-readiness-vs-nf-implement-internal-structure">5. /nf-readiness vs /nf-implement internal structure</a></li>
+<li><a href="#6-nf-implement-consumption-flow">6. /nf-implement consumption flow</a></li>
+<li><a href="#7-nf-implement-phase-wi-pr-slice-loop">7. /nf-implement Phase / WI / PR slice loop</a></li>
+<li><a href="#8-stage-105-artifact-split">8. Stage 10.5 artifact split</a></li>
+</ul>
+</li>
+</ul>
+</div>
+
+</aside>
+<main>
+<h1 id="workflow-diagrams">Workflow diagrams<a class="headerlink" href="#workflow-diagrams" title="Link to this section">&para;</a></h1>
+<p>이 문서는 5gc-impl-kb 의 파일 관계, lifecycle, 자율 구현 workflow 를 Mermaid 로 요약한다. GitHub markdown 에서는 diagram 으로 렌더링되고, offline HTML mirror 에서는 Mermaid source block 으로 확인한다.</p>
+<p>관련 상세 문서:</p>
+<ul>
+<li><a href="./lifecycle-artifacts.md"><code>lifecycle-artifacts.md</code></a> — 단계별 산출물 catalog.</li>
+<li><a href="./artifact-management.md"><code>artifact-management.md</code></a> — 파일 class, git 정책, placement rule.</li>
+<li><a href="./kb/README.md"><code>kb/README.md</code></a> — implementation agent / human reviewer 독해 순서.</li>
+</ul>
+<hr />
+<h2 id="1-end-to-end-lifecycle">1. End-to-end lifecycle<a class="headerlink" href="#1-end-to-end-lifecycle" title="Link to this section">&para;</a></h2>
+<div class="codehilite"><pre><span></span><code>flowchart TD
+  A[&quot;Source Input&lt;br/&gt;specs/&amp;lt;spec&amp;gt;/*.docx|*.yaml&quot;] --&gt; B[&quot;Stage 0&lt;br/&gt;Registry resolve&quot;]
+  B --&gt; C[&quot;Stage 1&lt;br/&gt;Spec discovery&quot;]
+  C --&gt; D[&quot;Stage 2&lt;br/&gt;Contract build&quot;]
+  D --&gt; E[&quot;Stage 3&lt;br/&gt;Contract check&quot;]
+  E --&gt;|handoff_ready + contract_implementable| F[&quot;Stage 4&lt;br/&gt;Architecture design&quot;]
+  F --&gt; G[&quot;Stage 5&lt;br/&gt;Architecture check&quot;]
+  G --&gt;|arch_consistent| H[&quot;Stage 6&lt;br/&gt;Implementation plan&quot;]
+  H --&gt; I[&quot;Stage 7&lt;br/&gt;Implementation check&quot;]
+  I --&gt;|impl_ready_for_codegen| J[&quot;Stage 8&lt;br/&gt;Engineering design&quot;]
+  J --&gt; K[&quot;Stage 9&lt;br/&gt;Engineering check&quot;]
+  K --&gt;|eng_frozen| L[&quot;Stage 10&lt;br/&gt;Readiness aggregate&quot;]
+  L --&gt;|readiness_pack_ready PASS| M[&quot;Stage 10.5&lt;br/&gt;Autonomous implementation prep&quot;]
+  M --&gt; N[&quot;Stage 11&lt;br/&gt;/nf-implement&quot;]
+  N --&gt; O[&quot;Implementation output&lt;br/&gt;src/ + tests/ + CI + runtime artifacts&quot;]
+</code></pre></div>
+
+<p>핵심 해석:</p>
+<ul>
+<li>Stage 10 <code>readiness_pack_ready</code> 가 <code>/nf-implement</code> 의 유일한 GO 신호다.</li>
+<li>Stage 10.5 는 GO 신호가 아니라, 이미 PASS 된 readiness pack 을 실제 장기 자율 코드 작업용으로 좁히는 보강 단계다.</li>
+<li>Stage 11 부터 실제 source/test/CI 산출이 증가한다.</li>
+</ul>
+<hr />
+<h2 id="2-file-relationship-map">2. File relationship map<a class="headerlink" href="#2-file-relationship-map" title="Link to this section">&para;</a></h2>
+<div class="codehilite"><pre><span></span><code>flowchart LR
+  subgraph Input[&quot;Source input&quot;]
+    Specs[&quot;specs/&amp;lt;spec&amp;gt;/*.docx|*.yaml&quot;]
+    Registry[&quot;design/nf-registry.yaml&quot;]
+  end
+
+  subgraph LocalCache[&quot;Local reproducible cache&lt;br/&gt;(git ignored / regen)&quot;]
+    Manifest[&quot;design/&amp;lt;nf&amp;gt;/_manifest.yaml&quot;]
+    Seed[&quot;design/&amp;lt;nf&amp;gt;/_contract_seed.yaml&quot;]
+    Contract[&quot;design/&amp;lt;nf&amp;gt;/contract/**&quot;]
+    Handoff[&quot;handoff/&amp;lt;nf&amp;gt;/contract.yaml&quot;]
+    Status[&quot;_*_status.yaml&quot;]
+  end
+
+  subgraph ReviewedKB[&quot;Reviewed KB&lt;br/&gt;(git tracked)&quot;]
+    Arch[&quot;design/&amp;lt;nf&amp;gt;/architecture/**&quot;]
+    Modules[&quot;design/&amp;lt;nf&amp;gt;/module-decomposition/**&quot;]
+    Eng[&quot;engineering/&amp;lt;nf&amp;gt;/engineering-design.md&quot;]
+    Dep[&quot;engineering/&amp;lt;nf&amp;gt;/dependency-decisions.yaml&quot;]
+    Dev[&quot;dev/&amp;lt;nf&amp;gt;/readiness pack&quot;]
+    Exec[&quot;dev/&amp;lt;nf&amp;gt;/execution-control pack&quot;]
+    Prep[&quot;dev/&amp;lt;nf&amp;gt;/autonomous-prep pack&quot;]
+  end
+
+  subgraph PrepConfig[&quot;Tracked prep/config&quot;]
+    CodegenCfg[&quot;infra/&amp;lt;nf&amp;gt;/codegen/*.yaml&quot;]
+    Migration[&quot;infra/&amp;lt;nf&amp;gt;/migrations/manifest.yaml&quot;]
+    GenManifest[&quot;src/&amp;lt;nf&amp;gt;/generated/GENERATION_MANIFEST.yaml&quot;]
+    Fixtures[&quot;tests/&amp;lt;nf&amp;gt;/fixtures + golden&quot;]
+  end
+
+  subgraph Impl[&quot;Implementation output&quot;]
+    Src[&quot;src/&amp;lt;nf&amp;gt;/**&quot;]
+    Tests[&quot;tests/&amp;lt;nf&amp;gt;/**&quot;]
+    CI[&quot;.github/workflows/**&quot;]
+    RunState[&quot;dev/&amp;lt;nf&amp;gt;/_implementation_run_state.yaml&quot;]
+  end
+
+  Specs --&gt; Manifest --&gt; Seed --&gt; Contract --&gt; Handoff
+  Registry --&gt; Manifest
+  Handoff --&gt; Arch --&gt; Modules --&gt; Dev
+  Handoff --&gt; Dev
+  Arch --&gt; Eng --&gt; Dep
+  Dev --&gt; Exec
+  Dev --&gt; Prep
+  Dep --&gt; Prep
+  Prep --&gt; CodegenCfg
+  Prep --&gt; Migration
+  Prep --&gt; GenManifest
+  Prep --&gt; Fixtures
+  Exec --&gt; Impl
+  PrepConfig --&gt; Impl
+  Dev --&gt; Impl
+  Status -. gate evidence .-&gt; Dev
+</code></pre></div>
+
+<p>핵심 해석:</p>
+<ul>
+<li><code>design/&lt;nf&gt;/contract/**</code>, <code>handoff/&lt;nf&gt;/contract.yaml</code>, <code>_*_status.yaml</code> 은 중요하지만 source of truth 가 아닌 재생성 cache/status 다.</li>
+<li><code>dev/&lt;nf&gt;/</code> 는 코드 디렉터리가 아니라 구현 KB 디렉터리다.</li>
+<li><code>infra/&lt;nf&gt;/codegen/**</code>, <code>src/&lt;nf&gt;/generated/GENERATION_MANIFEST.yaml</code>, <code>tests/&lt;nf&gt;/fixtures/**</code>, <code>tests/&lt;nf&gt;/golden/**</code> 는 Stage 10.5 이후 <code>/nf-implement</code> 가 소비하는 tracked prep/config/test data 다.</li>
+</ul>
+<hr />
+<h2 id="3-public-workflow">3. Public workflow<a class="headerlink" href="#3-public-workflow" title="Link to this section">&para;</a></h2>
+<div class="codehilite"><pre><span></span><code>sequenceDiagram
+  actor Human
+  participant Readiness as /nf-readiness &lt;nf&gt;
+  participant KB as Tracked KB + local status
+  participant Implement as /nf-implement &lt;nf&gt;
+  participant CI as Verification / CI
+
+  Human-&gt;&gt;Readiness: Provide specs/ then run readiness
+  Readiness-&gt;&gt;KB: Generate/validate contract, arch, dev, engineering artifacts
+  KB--&gt;&gt;Readiness: readiness_pack_ready PASS/FAIL
+  alt PASS
+    Human-&gt;&gt;Implement: Start autonomous implementation
+    Implement-&gt;&gt;KB: Read readiness + execution-control + prep pack
+    Implement-&gt;&gt;CI: Build/test/validate each PR slice
+    CI--&gt;&gt;Implement: Evidence or failure
+    Implement-&gt;&gt;KB: Update implementation run state / add source-test-CI outputs
+  else FAIL
+    Readiness--&gt;&gt;Human: Report first blocker + to_pass
+    Human-&gt;&gt;Readiness: Fix missing source/decision/artifact and rerun
+  end
+</code></pre></div>
+
+<p>핵심 해석:</p>
+<ul>
+<li>사람의 평상시 public workflow 는 <code>/nf-readiness &lt;nf&gt;</code> → <code>/nf-implement &lt;nf&gt;</code> 두 단계다.</li>
+<li>내부 skill 은 새 계약/override/debug 상황이 아니면 직접 호출하지 않는다.</li>
+<li>구현 중 실패는 readiness 재개가 필요한 blocker 인지, Stage 11 복구 가능한 build/test 실패인지 구분한다.</li>
+</ul>
+<hr />
+<h2 id="4-user-action-vs-internal-cycle">4. User action vs internal cycle<a class="headerlink" href="#4-user-action-vs-internal-cycle" title="Link to this section">&para;</a></h2>
+<div class="codehilite"><pre><span></span><code>flowchart TD
+  subgraph User[&quot;User-facing actions&quot;]
+    U0[&quot;Prepare specs/&quot;]
+    U1[&quot;Run /nf-readiness &amp;lt;nf&amp;gt;&quot;]
+    U2[&quot;Ratify engineering/open decisions&quot;]
+    U3[&quot;Run /nf-implement &amp;lt;nf&amp;gt;&quot;]
+    U4[&quot;Review/merge PR slices&quot;]
+  end
+
+  subgraph ReadinessCycle[&quot;/nf-readiness internal lifecycle&quot;]
+    R0[&quot;resolve NF route&quot;]
+    R1[&quot;spec discovery&quot;]
+    R2[&quot;contract build/check&quot;]
+    R3[&quot;architecture design/check&quot;]
+    R4[&quot;implementation plan/check&quot;]
+    R5[&quot;engineering design/check&quot;]
+    R6[&quot;readiness aggregate&quot;]
+  end
+
+  subgraph ImplementCycle[&quot;/nf-implement internal execution cycle&quot;]
+    I0[&quot;Phase 0&lt;br/&gt;readiness preflight&quot;]
+    I1[&quot;select next WI&lt;br/&gt;codegen-work-items.yaml&quot;]
+    I2[&quot;map WI to PR slice&lt;br/&gt;pr-slicing-plan.yaml&quot;]
+    I3[&quot;implement narrow diff&quot;]
+    I4[&quot;run verification matrix&quot;]
+    I5[&quot;record evidence / update run state&quot;]
+  end
+
+  U0 --&gt; U1 --&gt; R0 --&gt; R1 --&gt; R2 --&gt; R3 --&gt; R4 --&gt; R5 --&gt; R6
+  R5 -. missing ratify .-&gt; U2
+  U2 --&gt; R5
+  R6 --&gt;|readiness_pack_ready PASS| U3
+  U3 --&gt; I0 --&gt; I1 --&gt; I2 --&gt; I3 --&gt; I4
+  I4 --&gt;|PASS| I5 --&gt; U4
+  U4 --&gt; I1
+  I4 --&gt;|recoverable fail| I3
+  I4 --&gt;|readiness blocker| U1
+</code></pre></div>
+
+<p>해석:</p>
+<ul>
+<li><code>/nf-readiness</code> 는 compiler-like 내부 lifecycle 이다. 내부 skill 이 순차 산출물을 만들고 status gate 로 멈춘다.</li>
+<li><code>/nf-implement</code> 는 execution loop 다. 내부 skill 이름보다 <strong>Phase → WI → PR slice → verification</strong> 이 제어 단위다.</li>
+<li>사람이 평소 직접 하는 action 은 source input 준비, public skill 실행, ratify/review/merge 다.</li>
+</ul>
+<hr />
+<h2 id="5-nf-readiness-vs-nf-implement-internal-structure">5. <code>/nf-readiness</code> vs <code>/nf-implement</code> internal structure<a class="headerlink" href="#5-nf-readiness-vs-nf-implement-internal-structure" title="Link to this section">&para;</a></h2>
+<div class="codehilite"><pre><span></span><code>flowchart LR
+  subgraph Readiness[&quot;/nf-readiness&quot;]
+    RA[&quot;internal skills&lt;br/&gt;nf-spec-discover&lt;br/&gt;nf-contract-build&lt;br/&gt;nf-arch-design&lt;br/&gt;nf-impl-plan&lt;br/&gt;nf-eng-design&quot;]
+    RB[&quot;status gates&lt;br/&gt;handoff_ready&lt;br/&gt;arch_consistent&lt;br/&gt;impl_ready_for_codegen&lt;br/&gt;eng_frozen&quot;]
+    RC[&quot;aggregate&lt;br/&gt;readiness_pack_ready&quot;]
+    RA --&gt; RB --&gt; RC
+  end
+
+  subgraph Implement[&quot;/nf-implement&quot;]
+    IA[&quot;Phase policy&lt;br/&gt;Phase 0~5&quot;]
+    IB[&quot;Work items&lt;br/&gt;WI-tracer-bullet-toolchain&lt;br/&gt;WI-codegen-bootstrap&lt;br/&gt;WI-selection-engine&lt;br/&gt;...&quot;]
+    IC[&quot;PR slices&lt;br/&gt;minimal reviewed diffs&quot;]
+    ID[&quot;verification evidence&lt;br/&gt;cmake/ctest/drift/catalog/readiness&quot;]
+    IA --&gt; IB --&gt; IC --&gt; ID
+    ID --&gt; IB
+  end
+
+  RC --&gt;|GO signal| IA
+</code></pre></div>
+
+<table>
+<thead>
+<tr>
+<th>구분</th>
+<th><code>/nf-readiness</code></th>
+<th><code>/nf-implement</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>사람 호출</td>
+<td><code>/nf-readiness &lt;nf&gt;</code></td>
+<td><code>/nf-implement &lt;nf&gt;</code></td>
+</tr>
+<tr>
+<td>내부 단위</td>
+<td>lifecycle skill + status gate</td>
+<td>phase + work item + PR slice + verification matrix</td>
+</tr>
+<tr>
+<td>주요 입력</td>
+<td><code>specs/</code>, registry, prior KB</td>
+<td>readiness pack + execution-control + prep pack</td>
+</tr>
+<tr>
+<td>주요 산출</td>
+<td>contract/design/engineering/dev KB</td>
+<td><code>src/</code>, <code>tests/</code>, <code>infra/</code>, CI/runtime artifacts</td>
+</tr>
+<tr>
+<td>실패 처리</td>
+<td>첫 blocking gate 의 <code>to_pass</code> 보고</td>
+<td>recoverable build/test fail 은 같은 WI에서 수정, readiness blocker 는 <code>/nf-readiness</code> 재개</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="6-nf-implement-consumption-flow">6. <code>/nf-implement</code> consumption flow<a class="headerlink" href="#6-nf-implement-consumption-flow" title="Link to this section">&para;</a></h2>
+<div class="codehilite"><pre><span></span><code>flowchart TD
+  R[&quot;readiness_pack_ready PASS&quot;] --&gt; A[&quot;Read execution-control pack&lt;br/&gt;agent-execution-plan&lt;br/&gt;verification-matrix&lt;br/&gt;pr-slicing-plan&quot;]
+  A --&gt; B[&quot;Read work queue&lt;br/&gt;codegen-work-items + api/data-model matrix&quot;]
+  B --&gt; C[&quot;Read dependency/config prep&lt;br/&gt;dependency-decisions + cmake-dependencies + conf + operator-inputs&quot;]
+  C --&gt; D[&quot;Read codegen/test prep&lt;br/&gt;openapi-generator config + drift allowlist + generation manifest + fixtures/golden&quot;]
+  D --&gt; E[&quot;Select next PR slice&quot;]
+  E --&gt; F[&quot;Implement narrow source/test/CI change&quot;]
+  F --&gt; G[&quot;Run required verification evidence&quot;]
+  G --&gt; H{Evidence PASS?}
+  H --&gt;|yes| I[&quot;Commit/PR slice&lt;br/&gt;record evidence&quot;]
+  I --&gt; E
+  H --&gt;|no| J[&quot;Use failure-recovery.md&lt;br/&gt;or reopen readiness if blocker&quot;]
+  J --&gt; E
+</code></pre></div>
+
+<p>Stop 조건:</p>
+<ul>
+<li>readiness pack 에 <code>category: blocker</code> 가 발견됨.</li>
+<li>work item input 이 누락됨.</li>
+<li>원본 spec 의미 재발견이 필요해짐.</li>
+<li>verification evidence 가 반복 실패하고 <code>failure-recovery.md</code> 로도 복구 불가.</li>
+</ul>
+<hr />
+<h2 id="7-nf-implement-phase-wi-pr-slice-loop">7. <code>/nf-implement</code> Phase / WI / PR slice loop<a class="headerlink" href="#7-nf-implement-phase-wi-pr-slice-loop" title="Link to this section">&para;</a></h2>
+<div class="codehilite"><pre><span></span><code>stateDiagram-v2
+  [*] --&gt; Phase0
+  Phase0: Phase 0 readiness preflight
+  Phase0 --&gt; Phase1: readiness_pack_ready PASS
+  Phase1: Phase 1 toolchain + codegen + first vertical slice
+  Phase1 --&gt; Phase2: generated/model/API base stable
+  Phase2: Phase 2 availability API + repository
+  Phase2 --&gt; Phase3: availability flows pass
+  Phase3: Phase 3 subscription + notification + persistence
+  Phase3 --&gt; Phase4: subscription flows pass
+  Phase4: Phase 4 security/NRF/integration
+  Phase4 --&gt; Phase5: integration gates pass
+  Phase5: Phase 5 observability/perf/hardening
+  Phase5 --&gt; Done: full_nf_done
+
+  state Phase1 {
+    [*] --&gt; WITracer
+    WITracer: WI-tracer-bullet-toolchain
+    WITracer --&gt; WIDeps
+    WIDeps: dependency prep
+    WIDeps --&gt; WICodegen
+    WICodegen: WI-codegen-bootstrap
+    WICodegen --&gt; WIWrappers
+    WIWrappers: wrapper/validator WIs
+    WIWrappers --&gt; WISelection
+    WISelection: selection engine/API slice
+    WISelection --&gt; [*]
+  }
+</code></pre></div>
+
+<p>PR slice loop:</p>
+<div class="codehilite"><pre><span></span><code>flowchart LR
+  WI[&quot;Work item&quot;] --&gt; Slice[&quot;PR slice&quot;]
+  Slice --&gt; Diff[&quot;narrow code/test/CI diff&quot;]
+  Diff --&gt; Verify[&quot;verification-matrix evidence&quot;]
+  Verify --&gt; Review[&quot;review + merge&quot;]
+  Review --&gt; Next[&quot;next WI&quot;]
+  Verify --&gt;|fail| Fix[&quot;fix same slice&quot;]
+  Fix --&gt; Verify
+</code></pre></div>
+
+<p>해석:</p>
+<ul>
+<li>Phase 는 큰 구현 파도다.</li>
+<li>WI 는 agent 가 실제로 집을 수 있는 작업 단위다.</li>
+<li>PR slice 는 review/merge 가능한 최소 diff 단위다.</li>
+<li>verification matrix 는 각 slice 가 제출해야 하는 증거 목록이다.</li>
+</ul>
+<hr />
+<h2 id="8-stage-105-artifact-split">8. Stage 10.5 artifact split<a class="headerlink" href="#8-stage-105-artifact-split" title="Link to this section">&para;</a></h2>
+<div class="codehilite"><pre><span></span><code>flowchart LR
+  Ready[&quot;readiness_pack_ready PASS&quot;] --&gt; Control[&quot;Execution Control Pack&quot;]
+  Ready --&gt; Prep[&quot;Autonomous Implementation Prep Pack&quot;]
+
+  Control --&gt; C1[&quot;dev/&amp;lt;nf&amp;gt;/agent-execution-plan.yaml&quot;]
+  Control --&gt; C2[&quot;dev/&amp;lt;nf&amp;gt;/verification-matrix.yaml&quot;]
+  Control --&gt; C3[&quot;dev/&amp;lt;nf&amp;gt;/pr-slicing-plan.yaml&quot;]
+
+  Prep --&gt; P1[&quot;engineering/&amp;lt;nf&amp;gt;/dependency-decisions.yaml&quot;]
+  Prep --&gt; P2[&quot;dev/&amp;lt;nf&amp;gt;/cmake-dependencies.yaml&quot;]
+  Prep --&gt; P3[&quot;dev/&amp;lt;nf&amp;gt;/conf/*&quot;]
+  Prep --&gt; P4[&quot;dev/&amp;lt;nf&amp;gt;/operator-inputs.yaml&quot;]
+  Prep --&gt; P5[&quot;infra/&amp;lt;nf&amp;gt;/codegen/*&quot;]
+  Prep --&gt; P6[&quot;src/&amp;lt;nf&amp;gt;/generated/GENERATION_MANIFEST.yaml&quot;]
+  Prep --&gt; P7[&quot;tests/&amp;lt;nf&amp;gt;/fixtures + golden&quot;]
+  Prep --&gt; P8[&quot;dev/&amp;lt;nf&amp;gt;/error-cause-catalog.yaml&quot;]
+  Prep --&gt; P9[&quot;infra/&amp;lt;nf&amp;gt;/migrations/manifest.yaml&quot;]
+  Prep --&gt; P10[&quot;dev/&amp;lt;nf&amp;gt;/failure-recovery.md&quot;]
+
+  Control --&gt; Implement[&quot;/nf-implement Phase 1~5&quot;]
+  Prep --&gt; Implement
+</code></pre></div>
+
+<p>권장 생성 시점:</p>
+<ol>
+<li>Stage 10 readiness PASS.</li>
+<li>Phase 1 tracer-bullet 또는 최소 toolchain PR.</li>
+<li>Stage 10.5 execution-control/prep artifacts.</li>
+<li>Phase 1 wave 1 codegen bootstrap.</li>
+<li>Phase 2~5 feature/persistence/security/observability/hardening.</li>
+</ol>
+<footer class="render-footer">
+Generated from <code>/home/jjinri/AI/5gc-impl-kb/docs/workflow-diagrams.md</code> by <code>design/scripts/render-doc.py</code>. Source MD 가 진실 출처 — 본 HTML 은 build artifact, 직접 편집 금지.
+</footer>
+</main>
+</div>
+</body>
+</html>

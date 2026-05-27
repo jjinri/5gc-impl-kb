@@ -2,6 +2,8 @@
 
 이 문서는 구현 agent 와 사람 reviewer 가 5gc-impl-kb 를 어떻게 읽어야 하는지 설명한다. `docs/plans/**` 와 `docs/retros/**` 는 history 이며 현재 KB 독해 순서에 포함하지 않는다.
 
+전체 lifecycle/workflow 그림은 [`../workflow-diagrams.md`](../workflow-diagrams.md) 를 참고한다.
+
 ## 1. KB 목적
 
 5gc-impl-kb 의 KB 는 두 독자를 동시에 지원한다.
@@ -33,6 +35,7 @@ fresh clone 에서 새 NF KB 를 만들 때 사람이 준비해야 하는 필수
 | `design/<nf>/architecture/**` | `/nf-arch-design` | 추적 KB | implementation agent, human reviewer |
 | `design/<nf>/module-decomposition/**` | `/nf-arch-design` | 추적 KB | implementation agent |
 | `engineering/<nf>/engineering-design.md` | `/nf-eng-design` + 사람 ratify | 추적 KB | implementation agent, reviewer |
+| `engineering/<nf>/dependency-decisions.yaml` | Stage 10.5 reviewed PR | 추적 KB | implementation agent, reviewer |
 | `dev/<nf>/implementation-plan.md` | `/nf-impl-plan` | 추적 KB | implementation agent |
 | `dev/<nf>/tasks.yaml` | `/nf-impl-plan` | 추적 KB | implementation agent |
 | `dev/<nf>/test-matrix.md` | `/nf-impl-plan` | 추적 KB | tester/reviewer |
@@ -42,6 +45,18 @@ fresh clone 에서 새 NF KB 를 만들 때 사람이 준비해야 하는 필수
 | `dev/<nf>/codegen-work-items.yaml` | `/nf-impl-plan` | 추적 KB | orchestrator/code lane |
 | `dev/<nf>/team-execution-plan.md` | `/nf-impl-plan` | 추적 KB | orchestrator/team lanes |
 | `dev/<nf>/verification-plan.md` | `/nf-impl-plan` | 추적 KB | tester/verifier |
+| `dev/<nf>/agent-execution-plan.yaml` | Stage 10.5 reviewed PR | 추적 KB | `/nf-implement`, team runtime |
+| `dev/<nf>/verification-matrix.yaml` | Stage 10.5 reviewed PR | 추적 KB | tester/verifier |
+| `dev/<nf>/pr-slicing-plan.yaml` | Stage 10.5 reviewed PR | 추적 KB | orchestrator/reviewer |
+| `dev/<nf>/cmake-dependencies.yaml` | Stage 10.5 reviewed PR | 추적 KB | build lane |
+| `dev/<nf>/conf/*.yaml|*.ini` | Stage 10.5 reviewed PR | 추적 KB | runtime/config lane |
+| `dev/<nf>/operator-inputs.yaml` | Stage 10.5 reviewed PR | 추적 KB | config/security lanes |
+| `infra/<nf>/codegen/*.yaml` | Stage 10.5 reviewed PR | 추적 config | codegen/drift gate |
+| `src/<nf>/generated/GENERATION_MANIFEST.yaml` | Stage 10.5 reviewed PR | 추적 manifest | codegen/drift gate |
+| `tests/<nf>/fixtures/manifest.yaml`, `tests/<nf>/golden/*.json` | Stage 10.5 reviewed PR | 추적 test data | tester/verifier |
+| `dev/<nf>/error-cause-catalog.yaml` | Stage 10.5 reviewed PR | 추적 KB | API/error/test lanes |
+| `infra/<nf>/migrations/manifest.yaml` | Stage 10.5 reviewed PR | 추적 config | DB/persistence lane |
+| `dev/<nf>/failure-recovery.md` | Stage 10.5 reviewed PR | 추적 KB | implementation agent, verifier |
 | `dev/<nf>/implementation-readiness-review.md` | `/nf-impl-plan` | 추적 KB | human reviewer |
 | `dev/<nf>/design-adequacy-checklist.md` | `/nf-impl-plan` | 추적 KB | human reviewer |
 | `dev/<nf>/spec-to-design-coverage.md` | `/nf-impl-plan` | 추적 KB | human reviewer, verifier |
@@ -50,13 +65,29 @@ fresh clone 에서 새 NF KB 를 만들 때 사람이 준비해야 하는 필수
 
 ## 4. 구현 agent 독해 순서
 
-1. `dev/<nf>/codegen-work-items.yaml` — phase/work item queue.
-2. `dev/<nf>/api-implementation-matrix.md` — operation 단위 handler, model, security, persistence, tests.
-3. `dev/<nf>/data-model-implementation-map.md` — generated/wrapper/handwritten boundary.
-4. `engineering/<nf>/engineering-design.md` — chosen libraries, DB, runtime, config boundary.
-5. `design/<nf>/architecture/**` and `module-decomposition/**` — flow/state/error/module details.
-6. `dev/<nf>/verification-plan.md` — gate evidence.
-7. `dev/<nf>/open-gaps-and-assumptions.md` — non-blocker assumptions and operator inputs.
+```mermaid
+flowchart TD
+  A["execution-control pack"] --> B["codegen work items + matrices"]
+  B --> C["engineering + dependency decisions"]
+  C --> D["config/operator/codegen/test prep"]
+  D --> E["architecture + module decomposition"]
+  E --> F["verification + failure recovery"]
+  F --> G["next implementation PR slice"]
+```
+
+1. `dev/<nf>/agent-execution-plan.yaml` — lane/write-scope/resume policy.
+2. `dev/<nf>/pr-slicing-plan.yaml` — PR slicing and dependency order.
+3. `dev/<nf>/verification-matrix.yaml` — work item 별 evidence.
+4. `dev/<nf>/codegen-work-items.yaml` — phase/work item queue.
+5. `dev/<nf>/api-implementation-matrix.md` — operation 단위 handler, model, security, persistence, tests.
+6. `dev/<nf>/data-model-implementation-map.md` — generated/wrapper/handwritten boundary.
+7. `engineering/<nf>/engineering-design.md`, `dependency-decisions.yaml` — chosen libraries, DB, runtime, config boundary.
+8. `dev/<nf>/cmake-dependencies.yaml`, `conf/*`, `operator-inputs.yaml` — build/runtime/operator inputs.
+9. `infra/<nf>/codegen/*`, `src/<nf>/generated/GENERATION_MANIFEST.yaml` — generator and drift boundary.
+10. `tests/<nf>/fixtures/*`, `tests/<nf>/golden/*`, `dev/<nf>/error-cause-catalog.yaml` — fixture/golden/error mapping.
+11. `design/<nf>/architecture/**` and `module-decomposition/**` — flow/state/error/module details.
+12. `dev/<nf>/verification-plan.md`, `failure-recovery.md` — gate evidence and recovery.
+13. `dev/<nf>/open-gaps-and-assumptions.md` — non-blocker assumptions and operator inputs.
 
 Stop condition: any item marked `category: blocker`, any `spec reread needed? = yes`, or missing work item input means `/nf-readiness` must be reopened before implementation.
 
@@ -66,8 +97,9 @@ Stop condition: any item marked `category: blocker`, any `spec reread needed? = 
 2. `dev/<nf>/design-adequacy-checklist.md` — reviewer checklist.
 3. `dev/<nf>/spec-to-design-coverage.md` — spec→design→task trace and no-spec-reread audit.
 4. `dev/<nf>/open-gaps-and-assumptions.md` — blocker 0 and non-blocker handling.
-5. `engineering/<nf>/engineering-design.md` — library/DB/security/runtime decisions.
-6. `docs/adr/ADR-0004-project-security-baseline.md` — project-wide security obligations.
+5. `engineering/<nf>/engineering-design.md`, `dependency-decisions.yaml` — library/DB/security/runtime decisions.
+6. `dev/<nf>/agent-execution-plan.yaml`, `verification-matrix.yaml`, `pr-slicing-plan.yaml` — autonomous execution control.
+7. `docs/adr/ADR-0004-project-security-baseline.md` — project-wide security obligations.
 
 ## 6. Public vs internal skills
 
@@ -77,9 +109,21 @@ Stop condition: any item marked `category: blocker`, any `spec reread needed? = 
 | Public | `/nf-implement <nf>` | 예, `readiness_pack_ready PASS` 후 |
 | Internal | `/nf-spec-discover`, `/nf-contract-build`, `/nf-contract-check`, `/nf-arch-design`, `/nf-arch-status`, `/nf-impl-plan`, `/nf-impl-status`, `/nf-eng-design`, `/nf-eng-status` | 보통 아니오. 새 계약/override/debug 상황에서만 |
 
+`/nf-implement` 의 내부 구조는 별도 internal skill 목록이라기보다 Phase/WI/PR slice cycle 로 관리한다.
+
+```mermaid
+flowchart LR
+  Phase["Phase 0~5"] --> WI["Work item<br/>codegen-work-items.yaml"]
+  WI --> Slice["PR slice<br/>pr-slicing-plan.yaml"]
+  Slice --> Evidence["Verification evidence<br/>verification-matrix.yaml"]
+  Evidence --> WI
+```
+
+사용자는 `/nf-implement <nf>` 시작과 PR review/merge 를 담당하고, agent 는 다음 WI 선택·diff 작성·검증 증거 수집을 반복한다.
+
 ## 7. NSSF 기준
 
-`dev/nssf/` 는 현재 NSSF implementation KB 다. `/nf-implement nssf` 는 이 pack 을 읽어 Phase 1 NSSelectionGet tracer-bullet 부터 시작한다.
+`dev/nssf/` 는 현재 NSSF implementation KB 다. `/nf-implement nssf` 는 readiness pack + execution-control pack + autonomous-prep pack 을 읽어 Phase 1 이후 codegen/bootstrap feature work 로 확장한다.
 
 ## 8. Follow-up design notes
 

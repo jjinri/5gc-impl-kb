@@ -399,6 +399,7 @@ design/&lt;nf&gt;/              # spec-derived contract/architecture 영역
 handoff/&lt;nf&gt;/contract.yaml # local machine-readable contract cache, 비추적
 
 engineering/&lt;nf&gt;/engineering-design.md  # library/DB/runtime/tool 결정 freeze, git 추적
+engineering/&lt;nf&gt;/dependency-decisions.yaml # ratified dependency stack, git 추적
 
 dev/&lt;nf&gt;/                 # NF별 implementation KB/readiness pack, git 추적
   implementation-plan.md
@@ -410,13 +411,29 @@ dev/&lt;nf&gt;/                 # NF별 implementation KB/readiness pack, git �
   codegen-work-items.yaml
   team-execution-plan.md
   verification-plan.md
+  agent-execution-plan.yaml
+  verification-matrix.yaml
+  pr-slicing-plan.yaml
+  cmake-dependencies.yaml
+  conf/&lt;nf&gt;-config.schema.yaml
+  conf/&lt;nf&gt;.example.ini
+  operator-inputs.yaml
+  error-cause-catalog.yaml
+  failure-recovery.md
   implementation-readiness-review.md
   design-adequacy-checklist.md
   spec-to-design-coverage.md
   open-gaps-and-assumptions.md
+
+infra/&lt;nf&gt;/codegen/       # codegen bootstrap config/drift allowlist, git 추적
+infra/&lt;nf&gt;/migrations/    # DB migration manifest, git 추적
+src/&lt;nf&gt;/generated/GENERATION_MANIFEST.yaml # generated boundary manifest, git 추적
+tests/&lt;nf&gt;/fixtures/      # test fixture manifest, git 추적
+tests/&lt;nf&gt;/golden/        # contract/golden response fixtures, git 추적
 </code></pre></div>
 
 <p>자세한 파일 분류와 fresh clone 재생성 순서는 <a href="./docs/artifact-management.md"><code>docs/artifact-management.md</code></a> 를 따른다. KB 독해 순서는 <a href="./docs/kb/README.md"><code>docs/kb/README.md</code></a> 를 따른다.</p>
+<p>파일 관계도와 lifecycle/workflow Mermaid diagram 은 <a href="./docs/workflow-diagrams.md"><code>docs/workflow-diagrams.md</code></a> 에서 한눈에 볼 수 있다.</p>
 <h2 id="public-workflow-skills">Public workflow skills<a class="headerlink" href="#public-workflow-skills" title="Link to this section">&para;</a></h2>
 <table>
 <thead>
@@ -436,12 +453,13 @@ dev/&lt;nf&gt;/                 # NF별 implementation KB/readiness pack, git �
 </tr>
 <tr>
 <td><code>/nf-implement &lt;nf&gt;</code></td>
-<td>readiness pack 을 입력으로 장기 autonomous 구현</td>
+<td>readiness + execution-control + prep pack 을 입력으로 장기 autonomous 구현</td>
 <td><code>tracer_bullet_passed</code> → <code>full_nf_done</code></td>
 <td><code>src/</code>, generated code, SQL, tests, CI/runtime 산출</td>
 </tr>
 </tbody>
 </table>
+<p><code>/nf-readiness</code> 는 내부 lifecycle skill pipeline 이고, <code>/nf-implement</code> 는 Phase/WI/PR-slice/verification cycle 이다. 사용자 action 과 내부 cycle 구분은 <a href="./docs/workflow-diagrams.md"><code>docs/workflow-diagrams.md</code></a> 를 참고한다.</p>
 <p><code>readiness_pack_ready</code> 는 다음 gate 의 AND 다.</p>
 <div class="codehilite"><pre><span></span><code>handoff_ready
 ∧ contract_implementable
@@ -510,6 +528,12 @@ dev/&lt;nf&gt;/                 # NF별 implementation KB/readiness pack, git �
 <td>최종 readiness gate 계산</td>
 <td>local status cache</td>
 </tr>
+<tr>
+<td>Autonomous prep</td>
+<td>reviewed PR / <code>/nf-implement</code> preflight</td>
+<td>agent lane·verification·PR slicing·dependency/config/codegen/test prep 확정</td>
+<td>tracked execution-control + prep artifacts</td>
+</tr>
 </tbody>
 </table>
 <h2 id="_1">원칙<a class="headerlink" href="#_1" title="Link to this section">&para;</a></h2>
@@ -523,6 +547,7 @@ dev/&lt;nf&gt;/                 # NF별 implementation KB/readiness pack, git �
 <li><a href="./ONBOARDING.md"><code>ONBOARDING.md</code></a> — 사람/agent 사용 가이드.</li>
 <li><a href="./CONTEXT.md"><code>CONTEXT.md</code></a> — canonical 용어집.</li>
 <li><a href="./docs/lifecycle-artifacts.md"><code>docs/lifecycle-artifacts.md</code></a> — 단계별 산출물 single-glance catalog (HTML mirror: <a href="./docs/lifecycle-artifacts.html"><code>lifecycle-artifacts.html</code></a>).</li>
+<li><a href="./docs/workflow-diagrams.md"><code>docs/workflow-diagrams.md</code></a> — 파일 관계도, lifecycle, <code>/nf-readiness</code>→<code>/nf-implement</code> Mermaid diagram.</li>
 <li><a href="./docs/kb/README.md"><code>docs/kb/README.md</code></a> — KB 독해 순서와 agent/human review 관점.</li>
 <li><a href="./docs/artifact-management.md"><code>docs/artifact-management.md</code></a> — 파일 class, git 정책, 재생성 순서.</li>
 <li><a href="./docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md"><code>docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md</code></a> — lifecycle vocabulary.</li>

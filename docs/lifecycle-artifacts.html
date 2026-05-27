@@ -366,6 +366,11 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <li><a href="#stage-8-engineering-design">Stage 8 — Engineering design</a></li>
 <li><a href="#stage-9-engineering-check">Stage 9 — Engineering check</a></li>
 <li><a href="#stage-10-readiness-aggregate">Stage 10 — Readiness aggregate</a></li>
+<li><a href="#stage-105-autonomous-implementation-prep-post-readiness">Stage 10.5 — Autonomous implementation prep (post-readiness)</a><ul>
+<li><a href="#execution-control-pack">Execution Control Pack</a></li>
+<li><a href="#autonomous-implementation-prep-pack">Autonomous Implementation Prep Pack</a></li>
+</ul>
+</li>
 <li><a href="#stage-11-implementation-post-readiness">Stage 11 — Implementation (post-readiness)</a></li>
 </ul>
 </li>
@@ -392,9 +397,20 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <li><strong>File index</strong> — 파일명으로 단계 역추적.</li>
 <li><strong>Reader perspective</strong> — agent / human / orchestrator 별 읽기 순서.</li>
 </ul>
-<p>관련 문서 — git 추적 정책은 <a href="./artifact-management.md"><code>artifact-management.md</code></a>, KB 독해 가이드는 <a href="./kb/README.md"><code>kb/README.md</code></a>, lifecycle 어휘는 <a href="./adr/ADR-0001-nf-lifecycle-and-vocabulary.md"><code>adr/ADR-0001-nf-lifecycle-and-vocabulary.md</code></a> 가 진실 출처.</p>
+<p>관련 문서 — git 추적 정책은 <a href="./artifact-management.md"><code>artifact-management.md</code></a>, KB 독해 가이드는 <a href="./kb/README.md"><code>kb/README.md</code></a>, lifecycle diagram 은 <a href="./workflow-diagrams.md"><code>workflow-diagrams.md</code></a>, lifecycle 어휘는 <a href="./adr/ADR-0001-nf-lifecycle-and-vocabulary.md"><code>adr/ADR-0001-nf-lifecycle-and-vocabulary.md</code></a> 가 진실 출처.</p>
 <hr />
 <h2 id="1-single-glance-summary">1. Single-glance summary<a class="headerlink" href="#1-single-glance-summary" title="Link to this section">&para;</a></h2>
+<div class="codehilite"><pre><span></span><code>flowchart TD
+  S[&quot;specs/ source input&quot;] --&gt; D[&quot;Spec discovery&quot;]
+  D --&gt; C[&quot;Contract build/check&quot;]
+  C --&gt; A[&quot;Architecture design/check&quot;]
+  A --&gt; P[&quot;Implementation plan/check&quot;]
+  P --&gt; E[&quot;Engineering design/check&quot;]
+  E --&gt; R[&quot;Readiness aggregate&quot;]
+  R --&gt;|readiness_pack_ready PASS| X[&quot;Stage 10.5&lt;br/&gt;execution-control + autonomous-prep&quot;]
+  X --&gt; I[&quot;/nf-implement&lt;br/&gt;source + tests + CI&quot;]
+</code></pre></div>
+
 <table>
 <thead>
 <tr>
@@ -494,6 +510,14 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <td>validation state (yaml)</td>
 <td><code>readiness_pack_ready</code></td>
 <td>wrapper, human</td>
+</tr>
+<tr>
+<td>10.5</td>
+<td>Autonomous implementation prep</td>
+<td>reviewed PR / <code>/nf-implement</code> preflight</td>
+<td>reviewed KB/config (yaml + fixtures)</td>
+<td>drift/preflight evidence</td>
+<td><code>/nf-implement</code>, team/runtime</td>
 </tr>
 <tr>
 <td>11</td>
@@ -989,11 +1013,189 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </code></pre></div>
 
 <p><code>/nf-implement &lt;nf&gt;</code> 의 <em>유일한 GO 신호</em>.</p>
+<h3 id="stage-105-autonomous-implementation-prep-post-readiness">Stage 10.5 — Autonomous implementation prep (post-readiness)<a class="headerlink" href="#stage-105-autonomous-implementation-prep-post-readiness" title="Link to this section">&para;</a></h3>
+<p><code>readiness_pack_ready PASS</code> 이후, 실제 자율 코드 작업이 질문 없이 재현 가능하게 진행되도록 tracked 보강 산출물을 만든다. 보통 Phase 1 tracer-bullet 직후 또는 feature codegen 진입 직전에 reviewed PR 로 추가한다.</p>
+<h4 id="execution-control-pack">Execution Control Pack<a class="headerlink" href="#execution-control-pack" title="Link to this section">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Output</th>
+<th>형식</th>
+<th>추적</th>
+<th>목적</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dev/&lt;nf&gt;/agent-execution-plan.yaml</code></td>
+<td>yaml</td>
+<td><strong>추적 KB</strong></td>
+<td>agent lane, write scope, resume/checkpoint rule</td>
+</tr>
+<tr>
+<td><code>dev/&lt;nf&gt;/verification-matrix.yaml</code></td>
+<td>yaml</td>
+<td><strong>추적 KB</strong></td>
+<td>work item 별 required evidence, command, acceptance</td>
+</tr>
+<tr>
+<td><code>dev/&lt;nf&gt;/pr-slicing-plan.yaml</code></td>
+<td>yaml</td>
+<td><strong>추적 KB</strong></td>
+<td>PR 단위 slicing, dependency order, review boundary</td>
+</tr>
+</tbody>
+</table>
+<h4 id="autonomous-implementation-prep-pack">Autonomous Implementation Prep Pack<a class="headerlink" href="#autonomous-implementation-prep-pack" title="Link to this section">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>Output</th>
+<th>형식</th>
+<th>추적</th>
+<th>목적</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>engineering/&lt;nf&gt;/dependency-decisions.yaml</code></td>
+<td>yaml</td>
+<td><strong>추적 KB</strong></td>
+<td>engineering design 을 machine-readable dependency stack 으로 보강</td>
+</tr>
+<tr>
+<td><code>dev/&lt;nf&gt;/cmake-dependencies.yaml</code></td>
+<td>yaml</td>
+<td><strong>추적 KB</strong></td>
+<td>CMake package/vendored dependency wiring 계획</td>
+</tr>
+<tr>
+<td><code>dev/&lt;nf&gt;/conf/&lt;nf&gt;-config.schema.yaml</code></td>
+<td>yaml</td>
+<td><strong>추적 KB</strong></td>
+<td>runtime config schema 와 validation boundary</td>
+</tr>
+<tr>
+<td><code>dev/&lt;nf&gt;/conf/&lt;nf&gt;.example.ini</code></td>
+<td>ini</td>
+<td><strong>추적 KB</strong></td>
+<td>local/dev 기본 config 예시</td>
+</tr>
+<tr>
+<td><code>dev/&lt;nf&gt;/operator-inputs.yaml</code></td>
+<td>yaml</td>
+<td><strong>추적 KB</strong></td>
+<td>cert, DSN, NRF endpoint 등 operator-provided 값 registry</td>
+</tr>
+<tr>
+<td><code>infra/&lt;nf&gt;/codegen/openapi-generator-cli.config.yaml</code></td>
+<td>yaml</td>
+<td><strong>추적 config</strong></td>
+<td>generator bootstrap 설정</td>
+</tr>
+<tr>
+<td><code>infra/&lt;nf&gt;/codegen/drift-allowlist.yaml</code></td>
+<td>yaml</td>
+<td><strong>추적 config</strong></td>
+<td>hand-written stub / generator drift 예외</td>
+</tr>
+<tr>
+<td><code>src/&lt;nf&gt;/generated/GENERATION_MANIFEST.yaml</code></td>
+<td>yaml</td>
+<td><strong>추적 manifest</strong></td>
+<td>generated boundary, source OpenAPI, stub marker 추적</td>
+</tr>
+<tr>
+<td><code>tests/&lt;nf&gt;/fixtures/manifest.yaml</code></td>
+<td>yaml</td>
+<td><strong>추적 test data</strong></td>
+<td>fixture set registry</td>
+</tr>
+<tr>
+<td><code>tests/&lt;nf&gt;/golden/*.json</code></td>
+<td>json</td>
+<td><strong>추적 test data</strong></td>
+<td>contract/golden response body</td>
+</tr>
+<tr>
+<td><code>dev/&lt;nf&gt;/error-cause-catalog.yaml</code></td>
+<td>yaml</td>
+<td><strong>추적 KB</strong></td>
+<td>ProblemDetails / SBI error cause mapping</td>
+</tr>
+<tr>
+<td><code>infra/&lt;nf&gt;/migrations/manifest.yaml</code></td>
+<td>yaml</td>
+<td><strong>추적 config</strong></td>
+<td>DB migration inventory and order</td>
+</tr>
+<tr>
+<td><code>dev/&lt;nf&gt;/failure-recovery.md</code></td>
+<td>md</td>
+<td><strong>추적 KB</strong></td>
+<td>CI/build/codegen/runtime failure recovery runbook</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>생성 시점</strong> — readiness aggregate PASS 후, <code>/nf-implement</code> Phase 1 wave 0/1 경계에서 추가하는 것이 기본. library/stack 재결정이 필요한 경우 Stage 8 로 되돌려 <code>engineering-design.md</code> 를 먼저 보정한다.</li>
+<li><strong>소비 시점</strong> — <code>/nf-implement</code> Phase 1~5, team runtime, reviewer/verifier lanes.</li>
+<li><strong>관계</strong> — readiness gate 의 대체물이 아니라, 이미 PASS 한 readiness pack 을 실제 autonomous execution contract 로 구체화하는 보강 layer 다.</li>
+</ul>
 <h3 id="stage-11-implementation-post-readiness">Stage 11 — Implementation (post-readiness)<a class="headerlink" href="#stage-11-implementation-post-readiness" title="Link to this section">&para;</a></h3>
 <div class="codehilite"><pre><span></span><code>/nf-implement &lt;nf&gt;
 </code></pre></div>
 
-<p><code>readiness_pack_ready PASS</code> 확인 후 Phase 1 tracer-bullet → Phase 5 hardening.</p>
+<p><code>readiness_pack_ready PASS</code> 확인 후 execution-control + autonomous-prep pack 을 함께 읽어 Phase 1 tracer-bullet → Phase 5 hardening 을 진행한다.</p>
+<p><code>/nf-readiness</code> 의 내부 단위가 lifecycle skill + status gate 라면, Stage 11 의 내부 단위는 <strong>Phase + Work Item(WI) + PR slice + verification evidence</strong> 다.</p>
+<div class="codehilite"><pre><span></span><code>flowchart TD
+  A[&quot;Phase 0&lt;br/&gt;readiness preflight&quot;] --&gt; B[&quot;Select next WI&lt;br/&gt;dev/&amp;lt;nf&amp;gt;/codegen-work-items.yaml&quot;]
+  B --&gt; C[&quot;Map to PR slice&lt;br/&gt;dev/&amp;lt;nf&amp;gt;/pr-slicing-plan.yaml&quot;]
+  C --&gt; D[&quot;Implement narrow source/test/CI diff&quot;]
+  D --&gt; E[&quot;Run required evidence&lt;br/&gt;dev/&amp;lt;nf&amp;gt;/verification-matrix.yaml&quot;]
+  E --&gt; F{PASS?}
+  F --&gt;|yes| G[&quot;Review/merge slice&lt;br/&gt;record evidence&quot;]
+  G --&gt; B
+  F --&gt;|recoverable fail| D
+  F --&gt;|readiness blocker| H[&quot;Return to /nf-readiness&lt;br/&gt;or update reviewed KB&quot;]
+</code></pre></div>
+
+<table>
+<thead>
+<tr>
+<th><code>/nf-implement</code> control level</th>
+<th>Source of truth</th>
+<th>역할</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Phase</td>
+<td><code>dev/&lt;nf&gt;/codegen-work-items.yaml</code>, execution plan</td>
+<td>큰 구현 파도: toolchain/codegen, availability, subscription, security, hardening</td>
+</tr>
+<tr>
+<td>Work Item</td>
+<td><code>items[].id</code> in <code>codegen-work-items.yaml</code></td>
+<td>agent 가 집을 수 있는 독립 구현 단위</td>
+</tr>
+<tr>
+<td>PR slice</td>
+<td><code>dev/&lt;nf&gt;/pr-slicing-plan.yaml</code></td>
+<td>review/merge 가능한 최소 diff 경계</td>
+</tr>
+<tr>
+<td>Verification evidence</td>
+<td><code>dev/&lt;nf&gt;/verification-matrix.yaml</code>, <code>verification-plan.md</code></td>
+<td>해당 slice 가 제출해야 하는 command/result</td>
+</tr>
+<tr>
+<td>Runtime resume state</td>
+<td><code>dev/&lt;nf&gt;/_implementation_run_state.yaml</code></td>
+<td>비추적 진행 상태/checkpoint</td>
+</tr>
+</tbody>
+</table>
 <table>
 <thead>
 <tr>
@@ -1218,6 +1420,13 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <td>wrapper, human</td>
 </tr>
 <tr>
+<td><code>dev/&lt;nf&gt;/agent-execution-plan.yaml</code></td>
+<td>10.5</td>
+<td>reviewed KB</td>
+<td>✓</td>
+<td><code>/nf-implement</code>, team runtime</td>
+</tr>
+<tr>
 <td><code>dev/&lt;nf&gt;/api-implementation-matrix.md</code></td>
 <td>6</td>
 <td>reviewed KB</td>
@@ -1225,11 +1434,32 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <td>agent (Agent Execution Pack)</td>
 </tr>
 <tr>
+<td><code>dev/&lt;nf&gt;/cmake-dependencies.yaml</code></td>
+<td>10.5</td>
+<td>reviewed KB</td>
+<td>✓</td>
+<td>build/code lane</td>
+</tr>
+<tr>
 <td><code>dev/&lt;nf&gt;/codegen-work-items.yaml</code></td>
 <td>6</td>
 <td>reviewed KB</td>
 <td>✓</td>
 <td>orchestrator (Agent Execution Pack)</td>
+</tr>
+<tr>
+<td><code>dev/&lt;nf&gt;/conf/&lt;nf&gt;-config.schema.yaml</code></td>
+<td>10.5</td>
+<td>reviewed KB</td>
+<td>✓</td>
+<td>runtime/config lane</td>
+</tr>
+<tr>
+<td><code>dev/&lt;nf&gt;/conf/&lt;nf&gt;.example.ini</code></td>
+<td>10.5</td>
+<td>reviewed KB</td>
+<td>✓</td>
+<td>runtime/config lane</td>
 </tr>
 <tr>
 <td><code>dev/&lt;nf&gt;/data-model-implementation-map.md</code></td>
@@ -1244,6 +1474,20 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <td>reviewed KB</td>
 <td>✓</td>
 <td>human reviewer (Human Review Pack)</td>
+</tr>
+<tr>
+<td><code>dev/&lt;nf&gt;/error-cause-catalog.yaml</code></td>
+<td>10.5</td>
+<td>reviewed KB</td>
+<td>✓</td>
+<td>API/error/test lanes</td>
+</tr>
+<tr>
+<td><code>dev/&lt;nf&gt;/failure-recovery.md</code></td>
+<td>10.5</td>
+<td>reviewed KB</td>
+<td>✓</td>
+<td>agent, verifier</td>
 </tr>
 <tr>
 <td><code>dev/&lt;nf&gt;/implementation-plan.md</code></td>
@@ -1265,6 +1509,20 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <td>reviewed KB</td>
 <td>✓</td>
 <td>all lanes (Human Review Pack)</td>
+</tr>
+<tr>
+<td><code>dev/&lt;nf&gt;/operator-inputs.yaml</code></td>
+<td>10.5</td>
+<td>reviewed KB</td>
+<td>✓</td>
+<td>runtime/config/security lanes</td>
+</tr>
+<tr>
+<td><code>dev/&lt;nf&gt;/pr-slicing-plan.yaml</code></td>
+<td>10.5</td>
+<td>reviewed KB</td>
+<td>✓</td>
+<td>orchestrator, reviewer</td>
 </tr>
 <tr>
 <td><code>dev/&lt;nf&gt;/spec-to-design-coverage.md</code></td>
@@ -1302,6 +1560,13 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <td>reviewer</td>
 </tr>
 <tr>
+<td><code>dev/&lt;nf&gt;/verification-matrix.yaml</code></td>
+<td>10.5</td>
+<td>reviewed KB</td>
+<td>✓</td>
+<td>tester, verifier</td>
+</tr>
+<tr>
 <td><code>dev/&lt;nf&gt;/verification-plan.md</code></td>
 <td>6</td>
 <td>reviewed KB</td>
@@ -1314,6 +1579,13 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <td>validation</td>
 <td>—</td>
 <td>wrapper</td>
+</tr>
+<tr>
+<td><code>engineering/&lt;nf&gt;/dependency-decisions.yaml</code></td>
+<td>10.5</td>
+<td>reviewed KB</td>
+<td>✓</td>
+<td>agent, human</td>
 </tr>
 <tr>
 <td><code>engineering/&lt;nf&gt;/engineering-design.md</code></td>
@@ -1330,6 +1602,34 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <td>downstream skills, codegen</td>
 </tr>
 <tr>
+<td><code>infra/&lt;nf&gt;/codegen/drift-allowlist.yaml</code></td>
+<td>10.5</td>
+<td>tracked config</td>
+<td>✓</td>
+<td>codegen/drift gate</td>
+</tr>
+<tr>
+<td><code>infra/&lt;nf&gt;/codegen/openapi-generator-cli.config.yaml</code></td>
+<td>10.5</td>
+<td>tracked config</td>
+<td>✓</td>
+<td>codegen lane</td>
+</tr>
+<tr>
+<td><code>infra/&lt;nf&gt;/migrations/manifest.yaml</code></td>
+<td>10.5</td>
+<td>tracked config</td>
+<td>✓</td>
+<td>DB/persistence lane</td>
+</tr>
+<tr>
+<td><code>src/&lt;nf&gt;/generated/GENERATION_MANIFEST.yaml</code></td>
+<td>10.5</td>
+<td>tracked manifest</td>
+<td>✓</td>
+<td>codegen/drift gate</td>
+</tr>
+<tr>
 <td><code>specs/&lt;spec&gt;/*.docx</code></td>
 <td>input</td>
 <td>source input</td>
@@ -1343,20 +1643,40 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <td>✓</td>
 <td>spec discovery, contract build</td>
 </tr>
+<tr>
+<td><code>tests/&lt;nf&gt;/fixtures/manifest.yaml</code></td>
+<td>10.5</td>
+<td>tracked test data</td>
+<td>✓</td>
+<td>tester</td>
+</tr>
+<tr>
+<td><code>tests/&lt;nf&gt;/golden/*.json</code></td>
+<td>10.5</td>
+<td>tracked test data</td>
+<td>✓</td>
+<td>tester, verifier</td>
+</tr>
 </tbody>
 </table>
 <hr />
 <h2 id="4-reader-perspective">4. Reader perspective<a class="headerlink" href="#4-reader-perspective" title="Link to this section">&para;</a></h2>
 <h3 id="41-ai-implementation-agent-nf-implement-phase-15">4.1 AI implementation agent (<code>/nf-implement</code> Phase 1~5)<a class="headerlink" href="#41-ai-implementation-agent-nf-implement-phase-15" title="Link to this section">&para;</a></h3>
-<div class="codehilite"><pre><span></span><code>1. dev/&lt;nf&gt;/codegen-work-items.yaml        # phase / wave / work item queue
-2. dev/&lt;nf&gt;/api-implementation-matrix.md   # operation → handler / model / security / test
-3. dev/&lt;nf&gt;/data-model-implementation-map.md  # generated / wrapper / handwritten 분류
-4. engineering/&lt;nf&gt;/engineering-design.md  # library / DB / runtime / operator boundary
-5. design/&lt;nf&gt;/architecture/**             # flow / state / error / observability
-6. design/&lt;nf&gt;/module-decomposition/**     # 모듈별 responsibility
-7. dev/&lt;nf&gt;/verification-plan.md           # gate 별 evidence 요구사항
-8. handoff/&lt;nf&gt;/contract.yaml              # canonical API/data-model schema (drift trace 용)
-9. dev/&lt;nf&gt;/open-gaps-and-assumptions.md   # blocker 0 확인, non-blocker 조건
+<div class="codehilite"><pre><span></span><code>1. dev/&lt;nf&gt;/agent-execution-plan.yaml      # lane / write scope / resume rule
+2. dev/&lt;nf&gt;/pr-slicing-plan.yaml           # PR slicing / dependency order
+3. dev/&lt;nf&gt;/verification-matrix.yaml       # work item 별 evidence
+4. dev/&lt;nf&gt;/codegen-work-items.yaml        # phase / wave / work item queue
+5. dev/&lt;nf&gt;/api-implementation-matrix.md   # operation → handler / model / security / test
+6. dev/&lt;nf&gt;/data-model-implementation-map.md  # generated / wrapper / handwritten 분류
+7. engineering/&lt;nf&gt;/engineering-design.md, dependency-decisions.yaml  # dependency boundary
+8. dev/&lt;nf&gt;/cmake-dependencies.yaml, conf/*, operator-inputs.yaml     # build/runtime inputs
+9. infra/&lt;nf&gt;/codegen/*, src/&lt;nf&gt;/generated/GENERATION_MANIFEST.yaml  # codegen boundary
+10. tests/&lt;nf&gt;/fixtures/*, tests/&lt;nf&gt;/golden/*, error-cause-catalog.yaml  # test/error data
+11. design/&lt;nf&gt;/architecture/**            # flow / state / error / observability
+12. design/&lt;nf&gt;/module-decomposition/**    # 모듈별 responsibility
+13. dev/&lt;nf&gt;/verification-plan.md, failure-recovery.md  # gate evidence / recovery
+14. handoff/&lt;nf&gt;/contract.yaml             # canonical API/data-model schema (drift trace 용)
+15. dev/&lt;nf&gt;/open-gaps-and-assumptions.md  # blocker 0 확인, non-blocker 조건
 </code></pre></div>
 
 <p><strong>금지</strong>.
@@ -1374,9 +1694,11 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 3. dev/&lt;nf&gt;/spec-to-design-coverage.md          # spec 재독 금지 audit
 4. dev/&lt;nf&gt;/open-gaps-and-assumptions.md        # blocker / non-blocker 분류
 5. engineering/&lt;nf&gt;/engineering-design.md       # library/DB/security 결정
-6. design/&lt;nf&gt;/architecture/decisions/ADR-0001-architecture-baseline.md  # Open choices ratify
-7. design/&lt;nf&gt;/architecture/**                  # 9-area 의사결정 검토
-8. docs/adr/ADR-0004-project-security-baseline.md  # security 의무 검증
+6. engineering/&lt;nf&gt;/dependency-decisions.yaml   # stack ratify machine-readable 보강
+7. dev/&lt;nf&gt;/agent-execution-plan.yaml, verification-matrix.yaml, pr-slicing-plan.yaml
+8. design/&lt;nf&gt;/architecture/decisions/ADR-0001-architecture-baseline.md  # Open choices ratify
+9. design/&lt;nf&gt;/architecture/**                  # 9-area 의사결정 검토
+10. docs/adr/ADR-0004-project-security-baseline.md  # security 의무 검증
 </code></pre></div>
 
 <p><strong>Gate evidence 확인</strong> — <code>_*_status.yaml</code> 은 <em>참고용</em>. 본 review 의 GO/NO-GO 판단은 사람 책임.</p>
@@ -1420,23 +1742,23 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <td><code>design/&lt;nf&gt;/_arch_status.yaml</code></td>
 </tr>
 <tr>
-<td><code>engineering/&lt;nf&gt;/engineering-design.md</code></td>
+<td><code>engineering/&lt;nf&gt;/engineering-design.md</code>, <code>dependency-decisions.yaml</code></td>
 <td><code>design/&lt;nf&gt;/contract/**</code></td>
 </tr>
 <tr>
-<td><code>dev/&lt;nf&gt;/&lt;readiness pack md/yaml&gt;</code></td>
+<td><code>dev/&lt;nf&gt;/&lt;readiness/execution/prep pack md/yaml/ini&gt;</code></td>
 <td><code>handoff/&lt;nf&gt;/contract.yaml</code></td>
 </tr>
 <tr>
-<td></td>
+<td><code>infra/&lt;nf&gt;/codegen/**</code>, <code>infra/&lt;nf&gt;/migrations/**</code></td>
 <td><code>dev/&lt;nf&gt;/_impl_status.yaml</code></td>
 </tr>
 <tr>
-<td></td>
+<td><code>src/&lt;nf&gt;/generated/GENERATION_MANIFEST.yaml</code></td>
 <td><code>dev/&lt;nf&gt;/_readiness_status.yaml</code></td>
 </tr>
 <tr>
-<td></td>
+<td><code>tests/&lt;nf&gt;/fixtures/**</code>, <code>tests/&lt;nf&gt;/golden/**</code></td>
 <td><code>dev/&lt;nf&gt;/_implementation_run_state.yaml</code></td>
 </tr>
 <tr>
