@@ -15,10 +15,47 @@ generated_date: 2026-05-22
 #   - all_work_items_have_verification_commands (verification_commands 비어있지 않음)
 
 items:
-  # ===== Phase 1 wave A (tracer-bullet, PR G) =====
-  - id: WI-codegen-bootstrap
+  # ===== Phase 1 wave 0 (tracer-bullet toolchain skeleton, PR #87) =====
+  - id: WI-tracer-bullet-toolchain
     owner_lane: code
     depends_on: []
+    inputs:
+      - engineering/nssf/engineering-design.md (build_system=CMake, language=C11, test=Unity, sanitizer=ASan/UBSan slots)
+      - docs/sessions/2026-05-27-handoff.md §3.2 (Phase 1 file layout)
+      - dev/nssf/team-execution-plan.md (lane H2 — code lane 산출 위치)
+    expected_files:
+      - "CMakeLists.txt (root — cmake_minimum_required VERSION 3.22, CMAKE_C_STANDARD 11, nssf_sanitizers INTERFACE ASan+UBSan with NSSF_ENABLE_SANITIZERS option, nssf_warnings INTERFACE -Wall -Wextra -Werror, enable_testing, CMAKE_EXPORT_COMPILE_COMMANDS ON)"
+      - "src/nssf/CMakeLists.txt (nssf_transport static library target)"
+      - "src/nssf/transport/nsselection_handler.{h,c} (501 ProblemDetails hardcoded JSON stub — cJSON encoding deferred to WI-codegen-bootstrap)"
+      - "src/nssf/generated/api/NSSelectionGet.h (hand-written generator boundary stub with NSSF_GENERATED_BOUNDARY_STUB marker — replace during WI-codegen-bootstrap)"
+      - "tests/nssf/CMakeLists.txt (Unity static target + test executable + add_test)"
+      - "tests/nssf/vendor/Unity/{unity.h,unity.c,unity_internals.h,LICENSE.txt} (Unity 2.6.0 vendored, MIT, -w warning 제외)"
+      - "tests/nssf/unit/test_nsselection_handler.c (5 smoke assertions — status 501, body contains type/status/detail, NULL body safe)"
+      - ".github/workflows/readiness-check.yml (paths 에 src/** + CMakeLists.txt 추가, cmake configure/build/ctest 4-step CI)"
+      - ".gitignore (/build/, compile_commands.json 추가)"
+      - "dev/nssf/_implementation_run_state.yaml (gitignored evidence — tracer_bullet_passed true, completed_phases 1, spec_reread_audit empty)"
+    acceptance:
+      - "본 WI 는 SKILL.md /nf-implement Phase 1 (가장 작은 vertical slice) 정의의 NSSF 산출 — readiness-config phase_policy 의 phase1 wave 0 으로 grouping."
+      - "cmake -S . -B build -G Unix Makefiles -DCMAKE_BUILD_TYPE=Debug — configure OK."
+      - "cmake --build build --parallel — ASan/UBSan 활성 빌드 OK."
+      - "ctest --test-dir build --output-on-failure — 1/1 PASS (nsselection_handler_smoke)."
+      - "nsselection_get_handle() 가 501 + application/problem+json body (type, title, status 501, detail) 반환 (Phase 1 stub, cJSON encoding 부재)."
+      - "src/nssf/generated/api/NSSelectionGet.h 가 빈 헤더 + NSSF_GENERATED_BOUNDARY_STUB marker 보유 — WI-codegen-bootstrap 진입 시 generator output 으로 교체 + marker 제거 의무."
+      - "4 arch module dir (selection_engine, availability_engine, subscription_store, notification_dispatcher) 은 본 WI 에서 미생성 — Phase 3 feature wave 의 후속 WI 가 생성."
+      - "spec_reread_audit 가 비어있음 — specs/29.531 의 OpenAPI / docx 를 semantic decision 목적으로 재독하지 않음 (501 body 는 contract-derived 가 아니라 명시적 placeholder)."
+    tests:
+      - "tests/nssf/unit/test_nsselection_handler.c — Unity 2.6.0 5 assertion (returns 501, body contains status 501, body contains problem type, body contains Phase 1 tracer-bullet stub detail, NULL body does not crash)"
+    verification_commands:
+      - "cmake -S . -B build -G Unix Makefiles -DCMAKE_BUILD_TYPE=Debug"
+      - "cmake --build build --parallel"
+      - "ctest --test-dir build --output-on-failure"
+      - "sudo apt-get install -y cmake build-essential  # CI prerequisite"
+
+  # ===== Phase 1 wave 1 (NSSelectionGet full feature wiring, PR G) =====
+  - id: WI-codegen-bootstrap
+    owner_lane: code
+    depends_on:
+      - WI-tracer-bullet-toolchain
     inputs:
       - engineering/nssf/engineering-design.md (schema_codegen slot freeze)
       - handoff/nssf/contract.yaml (api topics + data-model topics)
