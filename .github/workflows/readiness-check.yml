@@ -82,6 +82,9 @@ jobs:
       - name: validate-artifact-catalog (drift guard for docs/lifecycle-artifacts.md §3)
         run: python3 design/scripts/validate-artifact-catalog.py
 
+      - name: validate-execution-control-drift (drift guard for execution-control pack)
+        run: python3 design/scripts/validate-execution-control-drift.py nssf
+
       # Phase 1 tracer-bullet — CMake configure / build / ctest (NSSelectionGet 501 stub).
       # Sanitizer (ASan/UBSan) 활성 Debug build. Phase 3 codegen 진입 시
       # WI-codegen-bootstrap 가 본 step 의 generated/ 디렉터리 stub 을 교체한다.
