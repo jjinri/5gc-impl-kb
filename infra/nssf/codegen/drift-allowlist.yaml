@@ -28,7 +28,12 @@ entries:
       NSSF_GENERATED_BOUNDARY_STUB marker 제거.
     expected_remove_phase: phase1_wave1
     introduced_pr: '#87'
-    expected_remove_pr: 'PR-phase1-wave1-codegen-bootstrap'
+    expected_remove_pr: 'PR-phase1-wave1-nsselection-handler'
+    pr15_status: |
+      PR #15 (WI-codegen-bootstrap, 본 PR) 은 generator 의 api/ (HTTP client)
+      를 commit 하지 않음 — NSSF runtime 이 nghttp2 server + handwritten
+      transport 사용. 따라서 본 boundary stub 은 PR #15 머지 후에도 유지.
+      실 handler 로 교체는 PR-phase1-wave1-nsselection-handler 에서.
 
 # ─── Policy ───────────────────────────────────────────────────────────
 policy:

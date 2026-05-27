@@ -25,5 +25,6 @@ target_compile_options(nssf_warnings INTERFACE
 
 enable_testing()
 
+add_subdirectory(src/nssf/generated)
 add_subdirectory(src/nssf)
 add_subdirectory(tests/nssf)

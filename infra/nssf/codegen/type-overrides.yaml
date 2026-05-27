@@ -1,0 +1,151 @@
+# NSSF Type Override / Wrapper Plan
+#
+# 본 yaml 은 openapi-generator(C) 의 *raw model emission* 만으로 의미가 정합하지
+# 않은 schema 에 대해 *어디서 보정* 할지의 단일 plan. Pane 2 권고 (2026-05-27)
+# 의 보정 순서를 codify.
+#
+# 보정 순서 (위에서 아래로):
+#   1. bundle/preprocess  — TS29571 / TS29510 external $ref 해결을 위한 spec
+#                           flat dir 구성 (infra/nssf/codegen/regenerate.sh).
+#   2. generator config mappings — additional-properties 로 type/name/header
+#                           명시 (openapi-generator-cli.config.yaml).
+#   3. template override  — generator template 의 한정 부분만 차환 (필요시).
+#   4. wrapper/adapter    — generated model 의 *호출 측에서* 의미 보정. RFC
+#                           validator, factory function, anyOf passthrough.
+#   5. verifier gate      — verify-generated-models.py 가 expected vs wrapper-
+#                           expected vs unexpected 3 분류 검증.
+#
+# 본 PR (#15 WI-codegen-bootstrap) 은 raw model emission + wrapper plan 까지.
+# wrapper *구현 본체* (NFType passthrough / ProblemDetails factory / RFC 6902
+# validator) 는 후속 WI PR 에서 진행.
+schema_version: type-overrides-v1
+nf: nssf
+stage: implementation-planning
+source_engineering_design: engineering/nssf/engineering-design.md
+source_generation_manifest: src/nssf/generated/GENERATION_MANIFEST.yaml
+source_dependency_decisions: engineering/nssf/dependency-decisions.yaml
+generated_date: 2026-05-27
+
+# ─── 1. Type aliases (string alias 후보) ─────────────────────────────
+type_aliases:
+  - schema: NfInstanceId
+    emit_kind: generator_emits_string_or_struct
+    wrapper_required: false
+    classification: expected_string_alias
+    rationale: |
+      NfInstanceId 는 TS29571 에서 UUID format string. openapi-generator 가
+      string field 만 가진 model 로 emit. 추가 wrapper 불필요 — UUID format
+      검증은 사용 시점에 1회 (전역 wrapper 아니라 callsite policy).
+
+  - schema: SupportedFeatures
+    emit_kind: generator_emits_string
+    wrapper_required: false
+    classification: expected_string_alias
+    rationale: |
+      SupportedFeatures 는 hex string. raw emit 으로 충분. feature bit
+      parsing 은 callsite 의무.
+
+# ─── 2. anyOf / extensible enum (wrapper expected) ────────────────────
+anyof_wrappers:
+  - schema: NFType
+    emit_kind: generator_emits_string_or_enum
+    wrapper_required: true
+    wrapper_target_file: src/nssf/wrappers/nf_type_wrapper.{h,c}
+    wrapper_pr: PR-phase1-wave1-nftype-wrapper
+    classification: wrapper_expected
+    policy_source: open-gaps-and-assumptions.md G-09
+    rationale: |
+      NFType 는 anyOf [enum, string] (TS29571 extensible enum 패턴). known
+      enum probe → unknown 값 passthrough + log warn 의 G-09 정책. generator
+      raw emit 만으로는 forward-compat 불완전. wrapper 가 fallback 보장.
+
+# ─── 3. RFC 7807 ProblemDetails (factory wrapper expected) ────────────
+problem_details_wrappers:
+  - schema: ProblemDetails
+    emit_kind: generator_emits_struct
+    wrapper_required: true
+    wrapper_target_file: src/nssf/wrappers/nf_problem_details_wrapper.{h,c}
+    wrapper_pr: PR-phase1-wave1-problem-details-wrapper
+    classification: wrapper_expected
+    factory_naming_source: dev/nssf/error-cause-catalog.yaml
+    rationale: |
+      generator 가 ProblemDetails struct 자체는 emit 하지만 *status-code 별
+      factory function* + *mandatory header 자동 부착* (Retry-After /
+      WWW-Authenticate / Accept-Patch / Allow) 은 비범위. 18 cause type
+      (error-cause-catalog.yaml) 별 factory + header rule = wrapper layer.
+
+# ─── 4. RFC 6902 JSON Patch (validator wrapper expected) ──────────────
+patch_document_wrappers:
+  - schema: PatchDocument
+    emit_kind: generator_emits_array
+    wrapper_required: true
+    wrapper_target_file: src/nssf/wrappers/patch_document_wrapper.{h,c}
+    wrapper_pr: PR-phase1-wave1-problem-details-wrapper  # 또는 별도 RFC6902 PR
+    classification: wrapper_expected
+    rationale: |
+      PatchDocument 는 TS29571 의 PatchItem array. RFC 6902 op/path/value/
+      from 의 *semantic validation* (path 형식, op enum, atomic apply) 은
+      generator 외 책임. 415 reject (non-application/json-patch+json
+      content-type) 도 wrapper layer.
+
+# ─── 5. External refs (bundle / preprocess) ──────────────────────────
+external_ref_strategy:
+  ts29571_common_data:
+    spec_path: specs/29.571/TS29571_CommonData.yaml
+    handling: bundle_to_flat_dir
+    rationale: |
+      TS29531 NSSelection 의 *대부분* schema 가 TS29571 CommonData 의
+      Snssai / PlmnId / Tai / NfType 등을 $ref. openapi-generator 의 relative
+      $ref 해석을 위해 regenerate.sh 가 specs/29.531 / specs/29.571 /
+      specs/29.510 의 yaml 을 단일 tmp 디렉터리로 cp 후 generate.
+    drift_check: regenerate.sh --check (generator output deterministic 확인)
+
+  ts29510_nrf_management:
+    spec_path: specs/29.510/TS29510_Nnrf_NFManagement.yaml
+    handling: bundle_to_flat_dir
+    rationale: TS29531 의 sbi flows 가 NRF NFManagement 의 NfProfile 등을 reference. 동일 bundle 처리.
+
+# ─── 6. Multi-spec strategy ──────────────────────────────────────────
+multi_spec_strategy:
+  current_pr_scope: nsselection_only
+  current_pr_pr: '#15'
+  rationale: |
+    openapi-generator-cli 는 단일 -i input 만 받는다. NSSF 의 2 spec
+    (NSSelection + NSSAIAvailability) 는 *각각 generate 후 통합* 또는
+    *통합 spec build → 단일 generate* 전략 필요. 본 PR (#15) 은 *NSSelection
+    only* — tracer-bullet operation 의 schema chain 확보 + pipeline 증명.
+    NSSAIAvailability schema 추가는 별도 PR 에서.
+  next_pr: PR-codegen-nssaiavailability-extension
+  next_pr_scope: |
+    1) regenerate.sh 가 NSSAIAvailability 추가 generate
+    2) shared schema (Snssai, PlmnId, Tai 등) byte-level identity 확인 (드물게 drift 시점에 별도 alert)
+    3) NSSAIAvailability-specific schema (NssaiAvailabilityInfo, NssfEventSubscriptionCreateData/CreatedData 등) 추가 commit
+    4) verify-generated-models.py 의 deferred_schemas 에서 expected 로 이동
+  deferred_schemas:
+    # 본 PR (#15) scope 외 — NSSAIAvailability spec 으로부터 emit. PR-codegen-
+    # nssaiavailability-extension 에서 expected 로 승격.
+    - AuthorizedNssaiAvailabilityInfo
+    - NssaiAvailabilityInfo
+    - NssfEventSubscriptionCreateData
+    - NssfEventSubscriptionCreatedData
+
+# ─── 7. Wrapper PR sequence (post-PR #15) ────────────────────────────
+wrapper_pr_sequence:
+  - PR: PR-phase1-wave1-nftype-wrapper
+    delivers:
+      - src/nssf/wrappers/nf_type_wrapper.{h,c}
+      - tests/nssf/unit/test_nftype_wrapper.c
+    dependency_of: '#15'
+  - PR: PR-phase1-wave1-problem-details-wrapper
+    delivers:
+      - src/nssf/wrappers/nf_problem_details_wrapper.{h,c}
+      - tests/nssf/unit/test_problem_details_factory.c
+      - tests/nssf/unit/test_problem_details_headers.c
+    dependency_of: '#15'
+    notes: 18 cause factory + mandatory header 자동 부착. error-cause-catalog.yaml 의 entry 와 1:1.
+  - PR: PR-codegen-nssaiavailability-extension
+    delivers:
+      - regenerate.sh NSSAIAvailability 추가
+      - src/nssf/generated/model 추가 schema (NssaiAvailabilityInfo 등)
+      - verify-generated-models.py expected_schemas 확장
+    dependency_of: '#15'
