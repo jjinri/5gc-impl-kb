@@ -2,6 +2,42 @@
 
 이 repo 는 3GPP spec 을 NF 구현용 **knowledge base** 로 변환한다. 사람은 원본 spec 을 준비하고, `/nf-readiness <nf>` 로 KB 를 만들고, `/nf-implement <nf>` 로 구현을 시작한다.
 
+
+## 0. 처음 읽는 순서
+
+프로젝트 전체를 빠르게 이해하려면 아래 순서로 읽는다. 현재 구현 진행 상태를 확인하려면 아래 “NSSF 현재 구현 상태” 표의 문서를 이어서 읽는다.
+
+| 순서 | 문서 | 읽는 이유 |
+|---:|---|---|
+| 1 | `README.md` | repo 목적, public workflow, 전체 구조 |
+| 2 | `ONBOARDING.md` | 사람/agent가 실제로 어떻게 쓰는지 |
+| 3 | `docs/workflow-diagrams.md` | Mermaid 기반 파일 관계도, lifecycle, `/nf-readiness` ↔ `/nf-implement` 흐름 |
+| 4 | `docs/lifecycle-artifacts.md` | 단계별 산출물: 누가 만들고 누가 읽는지 |
+| 5 | `docs/artifact-management.md` | tracked KB, local cache, status 파일 구분과 재생성 정책 |
+| 6 | `docs/kb/README.md` | agent/human 별 KB 독해 순서 |
+| 7 | `CONTEXT.md` | canonical 용어집 |
+| 8 | `docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md` | lifecycle vocabulary 결정 |
+| 9 | `docs/adr/ADR-0002-engineering-design-freeze.md` | `eng_frozen` 의미 |
+| 10 | `docs/adr/ADR-0003-engineering-dependency-closure.md` | dependency 결정 방식 |
+| 11 | `docs/adr/ADR-0004-project-security-baseline.md` | TLS/mTLS/OAuth2/JWT 보안 baseline |
+
+NSSF 현재 구현 상태를 이어서 파악할 때는 다음 순서가 빠르다.
+
+| 순서 | 문서/파일 | 읽는 이유 |
+|---:|---|---|
+| 1 | `docs/sessions/2026-05-27-evening-handoff.md` | 현재 세션/PR 진행 상황 요약 |
+| 2 | `engineering/nssf/engineering-design.md` | NSSF engineering freeze |
+| 3 | `engineering/nssf/dependency-decisions.yaml` | 확정 library stack |
+| 4 | `dev/nssf/implementation-readiness-review.md` | GO/NO-GO 요약 |
+| 5 | `dev/nssf/agent-execution-plan.yaml` | agent lane, write scope, resume rule |
+| 6 | `dev/nssf/pr-slicing-plan.yaml` | 다음 PR 순서 |
+| 7 | `dev/nssf/verification-matrix.yaml` | WI별 검증 명령/evidence |
+| 8 | `dev/nssf/codegen-work-items.yaml` | 실제 구현 work queue |
+| 9 | `dev/nssf/api-implementation-matrix.md` | API handler/test/persistence mapping |
+| 10 | `dev/nssf/data-model-implementation-map.md` | generated/wrapper/handwritten model 구분 |
+| 11 | `infra/nssf/codegen/*.yaml` | codegen config/drift allowlist |
+| 12 | `src/nssf/generated/GENERATION_MANIFEST.yaml` | generated boundary 정책 |
+
 ## 1. 사람 workflow
 
 ```text
