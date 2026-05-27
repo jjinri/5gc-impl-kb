@@ -88,8 +88,76 @@ jobs:
       # Phase 1 tracer-bullet — CMake configure / build / ctest (NSSelectionGet 501 stub).
       # Sanitizer (ASan/UBSan) 활성 Debug build. Phase 3 codegen 진입 시
       # WI-codegen-bootstrap 가 본 step 의 generated/ 디렉터리 stub 을 교체한다.
-      - name: Install CMake + build-essential
-        run: sudo apt-get update && sudo apt-get install -y cmake build-essential
+      #
+      # Phase 1 wave 1 dependency prep (본 PR — CI dep prep) — Phase 1 wave 1
+      # 진입 시 (WI-codegen-bootstrap / WI-tls-bootstrap / WI-availability-repo
+      # / WI-notification-dispatcher) 필요한 system library + build-time tool
+      # (JRE for openapi-generator-cli) 을 미리 install. ratified stack 은
+      # engineering/nssf/dependency-decisions.yaml + dev/nssf/cmake-dependencies.yaml.
+      - name: Install build prerequisites (Phase 1 wave 0 + wave 1 prep)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cmake \
+            build-essential \
+            pkg-config \
+            libnghttp2-dev \
+            libcurl4-openssl-dev \
+            libuv1-dev \
+            libssl-dev \
+            libjwt-dev \
+            libpq-dev \
+            valgrind \
+            clang-tidy \
+            default-jre
+
+      # libzlog-dev 는 Ubuntu 22.04 universe 에 부재할 수 있어 별도 step + soft-fail.
+      # Phase 1 wave 1 진입 (WI-tls-bootstrap 부터) 시점에 source build PR 별도 진행.
+      - name: Install libzlog-dev (best effort)
+        run: |
+          if sudo apt-get install -y libzlog-dev; then
+            echo "libzlog-dev installed via apt"
+          else
+            echo "libzlog-dev not available in apt universe — source build PR pending"
+            echo "Phase 1 wave 1 (WI-tls-bootstrap) 진입 직전 install"
+          fi
+
+      # Verify Phase 1 wave 1 library availability via pkg-config + which.
+      # CMakeLists 가 아직 본 라이브러리들을 사용하지 않으므로 CMake find_package
+      # 가 아니라 직접 pkg-config 로 sanity probe. Phase 1 wave 1 진입 시 실제
+      # cmake find_package / pkg_check_modules 호출이 본 step 이후 성공해야 함.
+      - name: Verify Phase 1 wave 1 library availability (sanity probe)
+        run: |
+          echo "=== pkg-config availability ==="
+          for pkg in libnghttp2 libcurl libuv openssl libjwt libpq; do
+            if pkg-config --exists "$pkg"; then
+              version=$(pkg-config --modversion "$pkg")
+              echo "OK $pkg version=$version"
+            else
+              echo "FAIL $pkg not found via pkg-config"
+              exit 1
+            fi
+          done
+
+          echo "=== zlog availability (best effort) ==="
+          if pkg-config --exists zlog; then
+            echo "OK zlog version=$(pkg-config --modversion zlog)"
+          else
+            echo "WARN zlog not via pkg-config — source build expected before WI-tls-bootstrap"
+          fi
+
+          echo "=== build-time tool availability ==="
+          for tool in cmake make pkg-config valgrind clang-tidy java; do
+            if command -v "$tool" >/dev/null 2>&1; then
+              echo "OK $tool path=$(command -v "$tool")"
+            else
+              echo "FAIL $tool not found in PATH"
+              exit 1
+            fi
+          done
+
+          echo "=== Java runtime version (for openapi-generator-cli) ==="
+          java -version
 
       - name: CMake configure (Unix Makefiles, Debug, sanitizers ON)
         run: cmake -S . -B build -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug
