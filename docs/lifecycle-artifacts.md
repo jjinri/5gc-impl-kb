@@ -6,11 +6,23 @@
 - **File index** — 파일명으로 단계 역추적.
 - **Reader perspective** — agent / human / orchestrator 별 읽기 순서.
 
-관련 문서 — git 추적 정책은 [`artifact-management.md`](./artifact-management.md), KB 독해 가이드는 [`kb/README.md`](./kb/README.md), lifecycle 어휘는 [`adr/ADR-0001-nf-lifecycle-and-vocabulary.md`](./adr/ADR-0001-nf-lifecycle-and-vocabulary.md) 가 진실 출처.
+관련 문서 — git 추적 정책은 [`artifact-management.md`](./artifact-management.md), KB 독해 가이드는 [`kb/README.md`](./kb/README.md), lifecycle diagram 은 [`workflow-diagrams.md`](./workflow-diagrams.md), lifecycle 어휘는 [`adr/ADR-0001-nf-lifecycle-and-vocabulary.md`](./adr/ADR-0001-nf-lifecycle-and-vocabulary.md) 가 진실 출처.
 
 ---
 
 ## 1. Single-glance summary
+
+```mermaid
+flowchart TD
+  S["specs/ source input"] --> D["Spec discovery"]
+  D --> C["Contract build/check"]
+  C --> A["Architecture design/check"]
+  A --> P["Implementation plan/check"]
+  P --> E["Engineering design/check"]
+  E --> R["Readiness aggregate"]
+  R -->|readiness_pack_ready PASS| X["Stage 10.5<br/>execution-control + autonomous-prep"]
+  X --> I["/nf-implement<br/>source + tests + CI"]
+```
 
 | # | Stage | Skill / Script | Output class | Gate produced | Primary readers |
 |---|---|---|---|---|---|
@@ -25,6 +37,7 @@
 | 8 | Engineering design | `/nf-eng-design` | reviewed KB (md, human ratify) | — | agent, human |
 | 9 | Engineering check | `/nf-eng-status` | validation state (yaml) | `eng_frozen` | wrapper |
 | 10 | Readiness aggregate | `nf-readiness-status.py` | validation state (yaml) | `readiness_pack_ready` | wrapper, human |
+| 10.5 | Autonomous implementation prep | reviewed PR / `/nf-implement` preflight | reviewed KB/config (yaml + fixtures) | drift/preflight evidence | `/nf-implement`, team/runtime |
 | 11 | Implementation | `/nf-implement <nf>` (post-readiness) | source/test/CI | `tracer_bullet_passed` → `full_nf_done` | runtime |
 
 **Output class** — 본 repo 의 [artifact-management.md §1](./artifact-management.md) 분류.
@@ -228,13 +241,70 @@ handoff_ready ∧ contract_implementable ∧ arch_consistent
 
 `/nf-implement <nf>` 의 *유일한 GO 신호*.
 
+### Stage 10.5 — Autonomous implementation prep (post-readiness)
+
+`readiness_pack_ready PASS` 이후, 실제 자율 코드 작업이 질문 없이 재현 가능하게 진행되도록 tracked 보강 산출물을 만든다. 보통 Phase 1 tracer-bullet 직후 또는 feature codegen 진입 직전에 reviewed PR 로 추가한다.
+
+#### Execution Control Pack
+
+| Output | 형식 | 추적 | 목적 |
+|---|---|---|---|
+| `dev/<nf>/agent-execution-plan.yaml` | yaml | **추적 KB** | agent lane, write scope, resume/checkpoint rule |
+| `dev/<nf>/verification-matrix.yaml` | yaml | **추적 KB** | work item 별 required evidence, command, acceptance |
+| `dev/<nf>/pr-slicing-plan.yaml` | yaml | **추적 KB** | PR 단위 slicing, dependency order, review boundary |
+
+#### Autonomous Implementation Prep Pack
+
+| Output | 형식 | 추적 | 목적 |
+|---|---|---|---|
+| `engineering/<nf>/dependency-decisions.yaml` | yaml | **추적 KB** | engineering design 을 machine-readable dependency stack 으로 보강 |
+| `dev/<nf>/cmake-dependencies.yaml` | yaml | **추적 KB** | CMake package/vendored dependency wiring 계획 |
+| `dev/<nf>/conf/<nf>-config.schema.yaml` | yaml | **추적 KB** | runtime config schema 와 validation boundary |
+| `dev/<nf>/conf/<nf>.example.ini` | ini | **추적 KB** | local/dev 기본 config 예시 |
+| `dev/<nf>/operator-inputs.yaml` | yaml | **추적 KB** | cert, DSN, NRF endpoint 등 operator-provided 값 registry |
+| `infra/<nf>/codegen/openapi-generator-cli.config.yaml` | yaml | **추적 config** | generator bootstrap 설정 |
+| `infra/<nf>/codegen/drift-allowlist.yaml` | yaml | **추적 config** | hand-written stub / generator drift 예외 |
+| `src/<nf>/generated/GENERATION_MANIFEST.yaml` | yaml | **추적 manifest** | generated boundary, source OpenAPI, stub marker 추적 |
+| `tests/<nf>/fixtures/manifest.yaml` | yaml | **추적 test data** | fixture set registry |
+| `tests/<nf>/golden/*.json` | json | **추적 test data** | contract/golden response body |
+| `dev/<nf>/error-cause-catalog.yaml` | yaml | **추적 KB** | ProblemDetails / SBI error cause mapping |
+| `infra/<nf>/migrations/manifest.yaml` | yaml | **추적 config** | DB migration inventory and order |
+| `dev/<nf>/failure-recovery.md` | md | **추적 KB** | CI/build/codegen/runtime failure recovery runbook |
+
+- **생성 시점** — readiness aggregate PASS 후, `/nf-implement` Phase 1 wave 0/1 경계에서 추가하는 것이 기본. library/stack 재결정이 필요한 경우 Stage 8 로 되돌려 `engineering-design.md` 를 먼저 보정한다.
+- **소비 시점** — `/nf-implement` Phase 1~5, team runtime, reviewer/verifier lanes.
+- **관계** — readiness gate 의 대체물이 아니라, 이미 PASS 한 readiness pack 을 실제 autonomous execution contract 로 구체화하는 보강 layer 다.
+
 ### Stage 11 — Implementation (post-readiness)
 
 ```
 /nf-implement <nf>
 ```
 
-`readiness_pack_ready PASS` 확인 후 Phase 1 tracer-bullet → Phase 5 hardening.
+`readiness_pack_ready PASS` 확인 후 execution-control + autonomous-prep pack 을 함께 읽어 Phase 1 tracer-bullet → Phase 5 hardening 을 진행한다.
+
+`/nf-readiness` 의 내부 단위가 lifecycle skill + status gate 라면, Stage 11 의 내부 단위는 **Phase + Work Item(WI) + PR slice + verification evidence** 다.
+
+```mermaid
+flowchart TD
+  A["Phase 0<br/>readiness preflight"] --> B["Select next WI<br/>dev/&lt;nf&gt;/codegen-work-items.yaml"]
+  B --> C["Map to PR slice<br/>dev/&lt;nf&gt;/pr-slicing-plan.yaml"]
+  C --> D["Implement narrow source/test/CI diff"]
+  D --> E["Run required evidence<br/>dev/&lt;nf&gt;/verification-matrix.yaml"]
+  E --> F{PASS?}
+  F -->|yes| G["Review/merge slice<br/>record evidence"]
+  G --> B
+  F -->|recoverable fail| D
+  F -->|readiness blocker| H["Return to /nf-readiness<br/>or update reviewed KB"]
+```
+
+| `/nf-implement` control level | Source of truth | 역할 |
+|---|---|---|
+| Phase | `dev/<nf>/codegen-work-items.yaml`, execution plan | 큰 구현 파도: toolchain/codegen, availability, subscription, security, hardening |
+| Work Item | `items[].id` in `codegen-work-items.yaml` | agent 가 집을 수 있는 독립 구현 단위 |
+| PR slice | `dev/<nf>/pr-slicing-plan.yaml` | review/merge 가능한 최소 diff 경계 |
+| Verification evidence | `dev/<nf>/verification-matrix.yaml`, `verification-plan.md` | 해당 slice 가 제출해야 하는 command/result |
+| Runtime resume state | `dev/<nf>/_implementation_run_state.yaml` | 비추적 진행 상태/checkpoint |
 
 | Output | 형식 | 추적 | 목적 |
 |---|---|---|---|
@@ -274,24 +344,40 @@ handoff_ready ∧ contract_implementable ∧ arch_consistent
 | `dev/<nf>/_impl_status.yaml` | 7 | validation | — | wrapper |
 | `dev/<nf>/_implementation_run_state.yaml` | 11 | runtime state | — | `/nf-implement` |
 | `dev/<nf>/_readiness_status.yaml` | 10 | validation | — | wrapper, human |
+| `dev/<nf>/agent-execution-plan.yaml` | 10.5 | reviewed KB | ✓ | `/nf-implement`, team runtime |
 | `dev/<nf>/api-implementation-matrix.md` | 6 | reviewed KB | ✓ | agent (Agent Execution Pack) |
+| `dev/<nf>/cmake-dependencies.yaml` | 10.5 | reviewed KB | ✓ | build/code lane |
 | `dev/<nf>/codegen-work-items.yaml` | 6 | reviewed KB | ✓ | orchestrator (Agent Execution Pack) |
+| `dev/<nf>/conf/<nf>-config.schema.yaml` | 10.5 | reviewed KB | ✓ | runtime/config lane |
+| `dev/<nf>/conf/<nf>.example.ini` | 10.5 | reviewed KB | ✓ | runtime/config lane |
 | `dev/<nf>/data-model-implementation-map.md` | 6 | reviewed KB | ✓ | agent (Agent Execution Pack) |
 | `dev/<nf>/design-adequacy-checklist.md` | 6 | reviewed KB | ✓ | human reviewer (Human Review Pack) |
+| `dev/<nf>/error-cause-catalog.yaml` | 10.5 | reviewed KB | ✓ | API/error/test lanes |
+| `dev/<nf>/failure-recovery.md` | 10.5 | reviewed KB | ✓ | agent, verifier |
 | `dev/<nf>/implementation-plan.md` | 6 | reviewed KB | ✓ | agent |
 | `dev/<nf>/implementation-readiness-review.md` | 6 | reviewed KB | ✓ | human reviewer (Human Review Pack) |
 | `dev/<nf>/open-gaps-and-assumptions.md` | 6 | reviewed KB | ✓ | all lanes (Human Review Pack) |
+| `dev/<nf>/operator-inputs.yaml` | 10.5 | reviewed KB | ✓ | runtime/config/security lanes |
+| `dev/<nf>/pr-slicing-plan.yaml` | 10.5 | reviewed KB | ✓ | orchestrator, reviewer |
 | `dev/<nf>/spec-to-design-coverage.md` | 6 | reviewed KB | ✓ | reviewer, verifier (Human Review Pack) |
 | `dev/<nf>/tasks.yaml` | 6 | reviewed KB | ✓ | agent |
 | `dev/<nf>/team-execution-plan.md` | 6 | reviewed KB | ✓ | orchestrator (Agent Execution Pack) |
 | `dev/<nf>/test-matrix.md` | 6 | reviewed KB | ✓ | tester, reviewer |
 | `dev/<nf>/traceability.md` | 6 | reviewed KB | ✓ | reviewer |
+| `dev/<nf>/verification-matrix.yaml` | 10.5 | reviewed KB | ✓ | tester, verifier |
 | `dev/<nf>/verification-plan.md` | 6 | reviewed KB | ✓ | tester, verifier (Agent Execution Pack) |
 | `engineering/<nf>/_engineering_status.yaml` | 9 | validation | — | wrapper |
+| `engineering/<nf>/dependency-decisions.yaml` | 10.5 | reviewed KB | ✓ | agent, human |
 | `engineering/<nf>/engineering-design.md` | 8 | reviewed KB | ✓ | agent, human (사람 ratify 필수) |
 | `handoff/<nf>/contract.yaml` | 2 | local cache | — | downstream skills, codegen |
+| `infra/<nf>/codegen/drift-allowlist.yaml` | 10.5 | tracked config | ✓ | codegen/drift gate |
+| `infra/<nf>/codegen/openapi-generator-cli.config.yaml` | 10.5 | tracked config | ✓ | codegen lane |
+| `infra/<nf>/migrations/manifest.yaml` | 10.5 | tracked config | ✓ | DB/persistence lane |
+| `src/<nf>/generated/GENERATION_MANIFEST.yaml` | 10.5 | tracked manifest | ✓ | codegen/drift gate |
 | `specs/<spec>/*.docx` | input | source input | ✓ | spec discovery, contract build |
 | `specs/<spec>/*.yaml` | input | source input | ✓ | spec discovery, contract build |
+| `tests/<nf>/fixtures/manifest.yaml` | 10.5 | tracked test data | ✓ | tester |
+| `tests/<nf>/golden/*.json` | 10.5 | tracked test data | ✓ | tester, verifier |
 
 ---
 
@@ -300,15 +386,21 @@ handoff_ready ∧ contract_implementable ∧ arch_consistent
 ### 4.1 AI implementation agent (`/nf-implement` Phase 1~5)
 
 ```text
-1. dev/<nf>/codegen-work-items.yaml        # phase / wave / work item queue
-2. dev/<nf>/api-implementation-matrix.md   # operation → handler / model / security / test
-3. dev/<nf>/data-model-implementation-map.md  # generated / wrapper / handwritten 분류
-4. engineering/<nf>/engineering-design.md  # library / DB / runtime / operator boundary
-5. design/<nf>/architecture/**             # flow / state / error / observability
-6. design/<nf>/module-decomposition/**     # 모듈별 responsibility
-7. dev/<nf>/verification-plan.md           # gate 별 evidence 요구사항
-8. handoff/<nf>/contract.yaml              # canonical API/data-model schema (drift trace 용)
-9. dev/<nf>/open-gaps-and-assumptions.md   # blocker 0 확인, non-blocker 조건
+1. dev/<nf>/agent-execution-plan.yaml      # lane / write scope / resume rule
+2. dev/<nf>/pr-slicing-plan.yaml           # PR slicing / dependency order
+3. dev/<nf>/verification-matrix.yaml       # work item 별 evidence
+4. dev/<nf>/codegen-work-items.yaml        # phase / wave / work item queue
+5. dev/<nf>/api-implementation-matrix.md   # operation → handler / model / security / test
+6. dev/<nf>/data-model-implementation-map.md  # generated / wrapper / handwritten 분류
+7. engineering/<nf>/engineering-design.md, dependency-decisions.yaml  # dependency boundary
+8. dev/<nf>/cmake-dependencies.yaml, conf/*, operator-inputs.yaml     # build/runtime inputs
+9. infra/<nf>/codegen/*, src/<nf>/generated/GENERATION_MANIFEST.yaml  # codegen boundary
+10. tests/<nf>/fixtures/*, tests/<nf>/golden/*, error-cause-catalog.yaml  # test/error data
+11. design/<nf>/architecture/**            # flow / state / error / observability
+12. design/<nf>/module-decomposition/**    # 모듈별 responsibility
+13. dev/<nf>/verification-plan.md, failure-recovery.md  # gate evidence / recovery
+14. handoff/<nf>/contract.yaml             # canonical API/data-model schema (drift trace 용)
+15. dev/<nf>/open-gaps-and-assumptions.md  # blocker 0 확인, non-blocker 조건
 ```
 
 **금지**.
@@ -330,9 +422,11 @@ handoff_ready ∧ contract_implementable ∧ arch_consistent
 3. dev/<nf>/spec-to-design-coverage.md          # spec 재독 금지 audit
 4. dev/<nf>/open-gaps-and-assumptions.md        # blocker / non-blocker 분류
 5. engineering/<nf>/engineering-design.md       # library/DB/security 결정
-6. design/<nf>/architecture/decisions/ADR-0001-architecture-baseline.md  # Open choices ratify
-7. design/<nf>/architecture/**                  # 9-area 의사결정 검토
-8. docs/adr/ADR-0004-project-security-baseline.md  # security 의무 검증
+6. engineering/<nf>/dependency-decisions.yaml   # stack ratify machine-readable 보강
+7. dev/<nf>/agent-execution-plan.yaml, verification-matrix.yaml, pr-slicing-plan.yaml
+8. design/<nf>/architecture/decisions/ADR-0001-architecture-baseline.md  # Open choices ratify
+9. design/<nf>/architecture/**                  # 9-area 의사결정 검토
+10. docs/adr/ADR-0004-project-security-baseline.md  # security 의무 검증
 ```
 
 **Gate evidence 확인** — `_*_status.yaml` 은 *참고용*. 본 review 의 GO/NO-GO 판단은 사람 책임.
@@ -365,11 +459,11 @@ handoff_ready ∧ contract_implementable ∧ arch_consistent
 | `design/nf-registry.yaml` | `design/<nf>/_contract_seed.yaml` |
 | `design/<nf>/architecture/**` | `design/<nf>/_contract_status.yaml` |
 | `design/<nf>/module-decomposition/**` | `design/<nf>/_arch_status.yaml` |
-| `engineering/<nf>/engineering-design.md` | `design/<nf>/contract/**` |
-| `dev/<nf>/<readiness pack md/yaml>` | `handoff/<nf>/contract.yaml` |
-| | `dev/<nf>/_impl_status.yaml` |
-| | `dev/<nf>/_readiness_status.yaml` |
-| | `dev/<nf>/_implementation_run_state.yaml` |
+| `engineering/<nf>/engineering-design.md`, `dependency-decisions.yaml` | `design/<nf>/contract/**` |
+| `dev/<nf>/<readiness/execution/prep pack md/yaml/ini>` | `handoff/<nf>/contract.yaml` |
+| `infra/<nf>/codegen/**`, `infra/<nf>/migrations/**` | `dev/<nf>/_impl_status.yaml` |
+| `src/<nf>/generated/GENERATION_MANIFEST.yaml` | `dev/<nf>/_readiness_status.yaml` |
+| `tests/<nf>/fixtures/**`, `tests/<nf>/golden/**` | `dev/<nf>/_implementation_run_state.yaml` |
 | | `engineering/<nf>/_engineering_status.yaml` |
 
 ---

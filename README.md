@@ -41,6 +41,7 @@ design/<nf>/              # spec-derived contract/architecture 영역
 handoff/<nf>/contract.yaml # local machine-readable contract cache, 비추적
 
 engineering/<nf>/engineering-design.md  # library/DB/runtime/tool 결정 freeze, git 추적
+engineering/<nf>/dependency-decisions.yaml # ratified dependency stack, git 추적
 
 dev/<nf>/                 # NF별 implementation KB/readiness pack, git 추적
   implementation-plan.md
@@ -52,20 +53,39 @@ dev/<nf>/                 # NF별 implementation KB/readiness pack, git 추적
   codegen-work-items.yaml
   team-execution-plan.md
   verification-plan.md
+  agent-execution-plan.yaml
+  verification-matrix.yaml
+  pr-slicing-plan.yaml
+  cmake-dependencies.yaml
+  conf/<nf>-config.schema.yaml
+  conf/<nf>.example.ini
+  operator-inputs.yaml
+  error-cause-catalog.yaml
+  failure-recovery.md
   implementation-readiness-review.md
   design-adequacy-checklist.md
   spec-to-design-coverage.md
   open-gaps-and-assumptions.md
+
+infra/<nf>/codegen/       # codegen bootstrap config/drift allowlist, git 추적
+infra/<nf>/migrations/    # DB migration manifest, git 추적
+src/<nf>/generated/GENERATION_MANIFEST.yaml # generated boundary manifest, git 추적
+tests/<nf>/fixtures/      # test fixture manifest, git 추적
+tests/<nf>/golden/        # contract/golden response fixtures, git 추적
 ```
 
 자세한 파일 분류와 fresh clone 재생성 순서는 [`docs/artifact-management.md`](./docs/artifact-management.md) 를 따른다. KB 독해 순서는 [`docs/kb/README.md`](./docs/kb/README.md) 를 따른다.
+
+파일 관계도와 lifecycle/workflow Mermaid diagram 은 [`docs/workflow-diagrams.md`](./docs/workflow-diagrams.md) 에서 한눈에 볼 수 있다.
 
 ## Public workflow skills
 
 | 사람 호출 | 목적 | 성공 gate | 주요 산출 |
 |---|---|---|---|
 | `/nf-readiness <nf>` | spec 에서 implementation-ready KB 생성·검증 | `readiness_pack_ready` | `design/<nf>/`, `engineering/<nf>/`, `dev/<nf>/` readiness pack |
-| `/nf-implement <nf>` | readiness pack 을 입력으로 장기 autonomous 구현 | `tracer_bullet_passed` → `full_nf_done` | `src/`, generated code, SQL, tests, CI/runtime 산출 |
+| `/nf-implement <nf>` | readiness + execution-control + prep pack 을 입력으로 장기 autonomous 구현 | `tracer_bullet_passed` → `full_nf_done` | `src/`, generated code, SQL, tests, CI/runtime 산출 |
+
+`/nf-readiness` 는 내부 lifecycle skill pipeline 이고, `/nf-implement` 는 Phase/WI/PR-slice/verification cycle 이다. 사용자 action 과 내부 cycle 구분은 [`docs/workflow-diagrams.md`](./docs/workflow-diagrams.md) 를 참고한다.
 
 `readiness_pack_ready` 는 다음 gate 의 AND 다.
 
@@ -91,6 +111,7 @@ handoff_ready
 | Implementation planning | `/nf-impl-plan` / `/nf-impl-status` | readiness pack 생성·검증 | tracked `dev/<nf>/` KB + local status |
 | Engineering freeze | `/nf-eng-design` / `/nf-eng-status` | library/DB/runtime/tool 결정 freeze | tracked engineering design + local status |
 | Aggregate | `nf-readiness-status.py` | 최종 readiness gate 계산 | local status cache |
+| Autonomous prep | reviewed PR / `/nf-implement` preflight | agent lane·verification·PR slicing·dependency/config/codegen/test prep 확정 | tracked execution-control + prep artifacts |
 
 ## 원칙
 
@@ -103,6 +124,7 @@ handoff_ready
 - [`ONBOARDING.md`](./ONBOARDING.md) — 사람/agent 사용 가이드.
 - [`CONTEXT.md`](./CONTEXT.md) — canonical 용어집.
 - [`docs/lifecycle-artifacts.md`](./docs/lifecycle-artifacts.md) — 단계별 산출물 single-glance catalog (HTML mirror: [`lifecycle-artifacts.html`](./docs/lifecycle-artifacts.html)).
+- [`docs/workflow-diagrams.md`](./docs/workflow-diagrams.md) — 파일 관계도, lifecycle, `/nf-readiness`→`/nf-implement` Mermaid diagram.
 - [`docs/kb/README.md`](./docs/kb/README.md) — KB 독해 순서와 agent/human review 관점.
 - [`docs/artifact-management.md`](./docs/artifact-management.md) — 파일 class, git 정책, 재생성 순서.
 - [`docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`](./docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md) — lifecycle vocabulary.

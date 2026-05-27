@@ -361,7 +361,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <li><a href="#reviewer">사람 reviewer</a></li>
 </ul>
 </li>
-<li><a href="#5-nf-implement">5. /nf-implement 입력과 금지사항</a></li>
+<li><a href="#5-nf-implement-cycle">5. /nf-implement 입력, 내부 cycle, 금지사항</a></li>
 <li><a href="#6">6. 파일 관리 핵심</a></li>
 </ul>
 </li>
@@ -418,7 +418,8 @@ specs/29.531/TS29531_Nnssf_NSSAIAvailability.yaml
 specs/29.531/&lt;29.531 docx&gt;
 </code></pre></div>
 
-<p>필수 source file 과 generated/cache file 구분은 <a href="./docs/artifact-management.md"><code>docs/artifact-management.md</code></a> 를 따른다.</p>
+<p>필수 source file 과 generated/cache file 구분은 <a href="./docs/artifact-management.md"><code>docs/artifact-management.md</code></a> 를 따른다.
+전체 파일 관계도와 lifecycle diagram 은 <a href="./docs/workflow-diagrams.md"><code>docs/workflow-diagrams.md</code></a> 를 먼저 보면 빠르게 파악할 수 있다.</p>
 <h2 id="3-nf-readiness">3. <code>/nf-readiness</code> 내부 흐름<a class="headerlink" href="#3-nf-readiness" title="Link to this section">&para;</a></h2>
 <p><code>/nf-readiness &lt;nf&gt;</code> 는 아래 subroutine 을 순차 실행한다. 실패하면 첫 blocking gate 에서 멈추고 <code>to_pass</code> 를 보고한다.</p>
 <table>
@@ -509,6 +510,13 @@ specs/29.531/&lt;29.531 docx&gt;
 <td><code>dev/&lt;nf&gt;/_readiness_status.yaml</code></td>
 <td><code>readiness_pack_ready</code></td>
 </tr>
+<tr>
+<td>10.5</td>
+<td>reviewed PR / <code>/nf-implement</code> preflight</td>
+<td>자율 구현 제어·dependency/config/codegen/test 준비</td>
+<td>execution-control + autonomous-prep pack</td>
+<td>drift/preflight evidence</td>
+</tr>
 </tbody>
 </table>
 <p><code>readiness_pack_ready</code> 가 PASS 해야 <code>/nf-implement</code> 가 시작된다.</p>
@@ -516,12 +524,18 @@ specs/29.531/&lt;29.531 docx&gt;
 <h2 id="4-kb">4. KB 산출물 독해 순서<a class="headerlink" href="#4-kb" title="Link to this section">&para;</a></h2>
 <h3 id="agent">구현 agent<a class="headerlink" href="#agent" title="Link to this section">&para;</a></h3>
 <ol>
+<li><code>dev/&lt;nf&gt;/agent-execution-plan.yaml</code> — agent lane, write scope, resume rule.</li>
+<li><code>dev/&lt;nf&gt;/pr-slicing-plan.yaml</code> — PR 단위 작업 순서와 review boundary.</li>
+<li><code>dev/&lt;nf&gt;/verification-matrix.yaml</code> — work item 별 required evidence.</li>
 <li><code>dev/&lt;nf&gt;/codegen-work-items.yaml</code> — 작업 그래프와 파일 단위 구현 queue.</li>
 <li><code>dev/&lt;nf&gt;/api-implementation-matrix.md</code> — operation/handler/test/persistence mapping.</li>
 <li><code>dev/&lt;nf&gt;/data-model-implementation-map.md</code> — generated/wrapper/handwritten classification.</li>
-<li><code>engineering/&lt;nf&gt;/engineering-design.md</code> — library/DB/runtime/tool/operator boundary 결정.</li>
+<li><code>engineering/&lt;nf&gt;/engineering-design.md</code>, <code>dependency-decisions.yaml</code> — library/DB/runtime/tool/operator boundary 결정.</li>
+<li><code>dev/&lt;nf&gt;/cmake-dependencies.yaml</code>, <code>conf/*.yaml|*.ini</code>, <code>operator-inputs.yaml</code> — build dependency, runtime config, operator-provided values.</li>
+<li><code>infra/&lt;nf&gt;/codegen/*.yaml</code>, <code>src/&lt;nf&gt;/generated/GENERATION_MANIFEST.yaml</code> — generator config, drift allowlist, generated boundary.</li>
+<li><code>tests/&lt;nf&gt;/fixtures/manifest.yaml</code>, <code>tests/&lt;nf&gt;/golden/*.json</code>, <code>dev/&lt;nf&gt;/error-cause-catalog.yaml</code> — test data와 error mapping.</li>
 <li><code>design/&lt;nf&gt;/architecture/**</code>, <code>module-decomposition/**</code> — flow/state/error/module 책임.</li>
-<li><code>dev/&lt;nf&gt;/verification-plan.md</code> — gate 별 verification evidence.</li>
+<li><code>dev/&lt;nf&gt;/verification-plan.md</code>, <code>failure-recovery.md</code> — gate 별 evidence 와 실패 복구.</li>
 <li><code>dev/&lt;nf&gt;/open-gaps-and-assumptions.md</code> — blocker 0 확인, non-blocker 조건 확인.</li>
 </ol>
 <h3 id="reviewer">사람 reviewer<a class="headerlink" href="#reviewer" title="Link to this section">&para;</a></h3>
@@ -532,8 +546,64 @@ specs/29.531/&lt;29.531 docx&gt;
 <li><code>dev/&lt;nf&gt;/open-gaps-and-assumptions.md</code> — 운영 입력/assumption/deferred/test-gap 분류.</li>
 <li>Status cache (<code>_*_status.yaml</code>) 는 참고용이며 source of truth 가 아니다.</li>
 </ol>
-<h2 id="5-nf-implement">5. <code>/nf-implement</code> 입력과 금지사항<a class="headerlink" href="#5-nf-implement" title="Link to this section">&para;</a></h2>
-<p><code>/nf-implement &lt;nf&gt;</code> 는 Phase 0 에서 <code>readiness_pack_ready PASS</code> 를 다시 확인한다. 이후 <code>dev/&lt;nf&gt;/codegen-work-items.yaml</code> 를 기준으로 Phase 1~5 를 진행한다.</p>
+<h2 id="5-nf-implement-cycle">5. <code>/nf-implement</code> 입력, 내부 cycle, 금지사항<a class="headerlink" href="#5-nf-implement-cycle" title="Link to this section">&para;</a></h2>
+<p><code>/nf-implement &lt;nf&gt;</code> 는 Phase 0 에서 <code>readiness_pack_ready PASS</code> 를 다시 확인한다. 이후 <code>dev/&lt;nf&gt;/codegen-work-items.yaml</code> 를 기준으로 Phase 1~5 를 진행하되, 실제 자율 코드 작업은 execution-control pack 과 autonomous-prep pack 을 함께 읽어 PR slicing, dependency/config, codegen drift, test fixture, failure recovery 를 결정한다.</p>
+<p><code>/nf-readiness</code> 가 내부 lifecycle skill pipeline 이라면, <code>/nf-implement</code> 는 <strong>Phase → Work Item(WI) → PR slice → verification evidence</strong> cycle 이다.</p>
+<div class="codehilite"><pre><span></span><code>flowchart TD
+  A[&quot;User: /nf-implement &amp;lt;nf&amp;gt;&quot;] --&gt; B[&quot;Phase 0&lt;br/&gt;readiness preflight&quot;]
+  B --&gt; C[&quot;Internal: select next WI&lt;br/&gt;codegen-work-items.yaml&quot;]
+  C --&gt; D[&quot;Internal: choose PR slice&lt;br/&gt;pr-slicing-plan.yaml&quot;]
+  D --&gt; E[&quot;Internal: implement narrow diff&quot;]
+  E --&gt; F[&quot;Internal: run verification matrix&quot;]
+  F --&gt; G{PASS?}
+  G --&gt;|yes| H[&quot;User/reviewer: review + merge PR&quot;]
+  H --&gt; C
+  G --&gt;|recoverable fail| E
+  G --&gt;|readiness blocker| I[&quot;User: reopen /nf-readiness&quot;]
+</code></pre></div>
+
+<p>대표 Phase/WI 예시.</p>
+<table>
+<thead>
+<tr>
+<th>Phase</th>
+<th>내부 단위 예시</th>
+<th>성격</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Phase 0</td>
+<td>readiness preflight</td>
+<td><code>readiness_pack_ready</code> 재확인</td>
+</tr>
+<tr>
+<td>Phase 1</td>
+<td><code>WI-tracer-bullet-toolchain</code>, dependency prep, <code>WI-codegen-bootstrap</code></td>
+<td>toolchain, generated model, first vertical slice</td>
+</tr>
+<tr>
+<td>Phase 2</td>
+<td>availability repository/API WIs</td>
+<td>NSSAI Availability flow</td>
+</tr>
+<tr>
+<td>Phase 3</td>
+<td>subscription store/notification WIs</td>
+<td>subscription + callback + persistence</td>
+</tr>
+<tr>
+<td>Phase 4</td>
+<td>TLS/OAuth2/NRF/integration WIs</td>
+<td>production-capable integration</td>
+</tr>
+<tr>
+<td>Phase 5</td>
+<td>observability/perf/hardening WIs</td>
+<td>운영성/품질 강화</td>
+</tr>
+</tbody>
+</table>
 <p>금지.</p>
 <ul>
 <li>원본 OpenAPI/spec 을 구현 의미 재발견 용도로 다시 읽기.</li>
@@ -551,7 +621,8 @@ specs/29.531/&lt;29.531 docx&gt;
 <ul>
 <li><code>specs/</code> 원본과 tracked KB 산출은 보존한다.</li>
 <li><code>design/&lt;nf&gt;/_*.yaml</code>, <code>design/&lt;nf&gt;/contract/**</code>, <code>handoff/&lt;nf&gt;/contract.yaml</code>, <code>_*_status.yaml</code> 는 재생성 가능한 local cache 다.</li>
-<li><code>dev/&lt;nf&gt;/</code> 의 readiness pack 은 NF 구현 KB 이며 git 추적 대상이다.</li>
+<li><code>dev/&lt;nf&gt;/</code> 의 readiness pack, execution-control pack, autonomous-prep pack 은 NF 구현 KB 이며 git 추적 대상이다.</li>
+<li><code>infra/&lt;nf&gt;/codegen/**</code>, <code>infra/&lt;nf&gt;/migrations/**</code>, <code>src/&lt;nf&gt;/generated/GENERATION_MANIFEST.yaml</code>, <code>tests/&lt;nf&gt;/fixtures/**</code>, <code>tests/&lt;nf&gt;/golden/**</code> 는 <code>/nf-implement</code> 가 소비하는 tracked prep/implementation-support 산출물이다.</li>
 <li><code>docs/plans/**</code>, <code>docs/retros/**</code> 는 history 이며 현재 workflow source of truth 가 아니다.</li>
 </ul>
 <footer class="render-footer">

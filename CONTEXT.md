@@ -5,7 +5,7 @@
 ## Canonical terms
 
 **Implementation Knowledge Base (KB)**
-AI agent 가 NF 코드를 작성하고 사람이 설계를 검토하기 위해 읽는 tracked 산출물 집합. NF별 KB 는 주로 `design/<nf>/architecture/**`, `design/<nf>/module-decomposition/**`, `engineering/<nf>/engineering-design.md`, `dev/<nf>/` readiness pack 으로 구성된다.
+AI agent 가 NF 코드를 작성하고 사람이 설계를 검토하기 위해 읽는 tracked 산출물 집합. NF별 KB 는 주로 `design/<nf>/architecture/**`, `design/<nf>/module-decomposition/**`, `engineering/<nf>/engineering-design.md`, `engineering/<nf>/dependency-decisions.yaml`, `dev/<nf>/` readiness/execution/prep pack 으로 구성된다.
 
 **Source Input**
 사람이 외부에서 확보해 `specs/<spec>/` 에 넣는 원본 docx/yaml/pdf. lifecycle 이 새로 시작되는 clean 상태의 필수 입력이다.
@@ -22,11 +22,23 @@ skill 이 생성할 수 있지만 PR review/ratify 후 다음 단계의 source o
 **Agent Execution Pack**
 구현 agent 가 코드 생성을 위해 읽는 readiness pack 부분. 대표 파일: `api-implementation-matrix.md`, `data-model-implementation-map.md`, `codegen-work-items.yaml`, `team-execution-plan.md`, `verification-plan.md`.
 
+**Execution Control Pack**
+`readiness_pack_ready PASS` 이후 장기 자율 구현을 lane/write-scope/검증/PR 단위로 제어하는 tracked `dev/<nf>/` 산출물. 대표 파일: `agent-execution-plan.yaml`, `verification-matrix.yaml`, `pr-slicing-plan.yaml`. `/nf-implement` 와 team/runtime agent 가 work item 을 실제 PR slice 로 나눌 때 읽는다.
+
+**Autonomous Implementation Prep Pack**
+Phase 1 tracer-bullet 이후 또는 feature codegen 진입 직전에 만드는 tracked 준비 산출물. Dependency ratify, CMake dependency mapping, runtime config schema/example, operator input registry, codegen config/drift allowlist, generated boundary manifest, fixture/golden data, error-cause catalog, migration manifest, failure recovery guide 를 포함한다. 목적은 AI agent 가 추가 질문 없이 권장 기본값으로 실제 코드 작업을 진행하게 하는 것이다.
+
 **Human Review Pack**
 사람이 설계 충분성, trace, gap 분류를 검토하기 위해 읽는 readiness pack 부분. 대표 파일: `implementation-readiness-review.md`, `design-adequacy-checklist.md`, `spec-to-design-coverage.md`, `open-gaps-and-assumptions.md`.
 
 **Engineering Design**
 spec 에서 자동 도출할 수 없는 library/DB/runtime/tool/operator-policy 결정. `engineering/<nf>/engineering-design.md` 가 source of truth 다.
+
+**Dependency Decisions**
+Engineering Design 을 machine-readable 형태로 보강하는 ratified dependency stack. `engineering/<nf>/dependency-decisions.yaml` 에 library 선택, version/pinning, usage boundary, deferral 을 기록한다. `engineering-design.md` 와 모순되면 `engineering-design.md` 의 사람 ratify 결정이 우선이고 yaml 을 보정한다.
+
+**Generated Boundary Manifest**
+hand-written boundary stub 과 future openapi-generator 산출의 경계를 추적하는 manifest. 예: `src/<nf>/generated/GENERATION_MANIFEST.yaml`, `infra/<nf>/codegen/drift-allowlist.yaml`. 구현 의미 재발견이 아니라 generator drift/source trace 제어에 쓰인다.
 
 **eng_frozen**
 Engineering Design 의 technology decision freeze gate. 최종 implementation GO 가 아니라 `readiness_pack_ready` 의 구성요소다.
@@ -44,8 +56,9 @@ Engineering Design 의 technology decision freeze gate. 최종 implementation GO
 
 - `specs/` 는 source input 이다.
 - `/nf-readiness <nf>` 는 source input 을 NF별 KB/readiness pack 으로 변환한다.
-- `/nf-implement <nf>` 는 readiness pack 을 읽어 실제 source/test/CI 를 만든다.
+- `/nf-implement <nf>` 는 readiness pack + execution-control pack + autonomous-prep pack 을 읽어 실제 source/test/CI 를 만든다.
 - `eng_frozen` 은 necessary but not sufficient 이다. 최종 GO 는 `readiness_pack_ready` 다.
+- Execution Control Pack 과 Autonomous Implementation Prep Pack 은 `readiness_pack_ready` 이후 자율 구현 속도와 재현성을 높이는 tracked 보강 산출물이다. readiness gate 자체의 대체물이 아니다.
 - Human Review Pack 은 자동 gate 의 대상이 아니라 사람이 audit 하는 표면이다. 단, 파일 존재·frontmatter·traceability 같은 구조는 `nf-impl-status.py` 가 검사한다.
 - Local reproducible artifact 는 중요하지만 git source of truth 가 아니다. 필요하면 skill/script 로 재생성한다.
 
