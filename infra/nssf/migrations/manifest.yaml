@@ -1,0 +1,127 @@
+# NSSF Database Migrations Manifest
+#
+# 본 yaml 은 PostgreSQL schema 의 *순서 + version + idempotency* 카탈로그.
+# WI-schema-bootstrap (Phase 1 wave 1) 진입 시 본 manifest 가 *드라이브
+# input* — schema.sql + 후속 migration script 가 본 order 로 apply.
+#
+# Phase 1 wave 0 (PR #87) — migration 미사용. 본 manifest 는 Phase 1 wave 1
+# 시점의 schema lifecycle 을 미리 freeze.
+schema_version: db-migration-manifest-v1
+nf: nssf
+stage: implementation-planning
+source_codegen_work_items: dev/nssf/codegen-work-items.yaml
+source_failure_recovery: dev/nssf/failure-recovery.md
+source_dependency_decisions: engineering/nssf/dependency-decisions.yaml
+generated_date: 2026-05-27
+
+# ─── 1. Schema versioning policy ──────────────────────────────────────
+versioning:
+  scheme: monotonic_int
+  table: nssf_schema_version
+  bootstrap_version: 1
+  current_planned_version: 1  # WI-schema-bootstrap 도달 시 schema.sql 가 version 1 등재
+  policy: |
+    schema_version 의 increment = migration script 1 개 발행.
+    각 migration 은 *forward only* (rollback script 별도 권고, 동일 PR 산출).
+    schema.sql (bootstrap) 자체는 idempotent (CREATE TABLE IF NOT EXISTS).
+    operator 가 1회 적용 후 후속은 migration script 만 apply.
+
+# ─── 2. Tables (planned at Phase 1 wave 1) ────────────────────────────
+tables:
+  - name: availability
+    work_item: WI-schema-bootstrap
+    columns:
+      - 'id UUID PRIMARY KEY'
+      - 'plmn_id JSONB NOT NULL'
+      - 'tai JSONB NOT NULL'
+      - 'snssais JSONB NOT NULL'
+      - 'amf_set_id TEXT'
+      - 'reallocation_indication BOOLEAN DEFAULT FALSE'
+      - 'created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()'
+      - 'updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()'
+    indexes:
+      - 'CREATE INDEX availability_plmn_tai_idx ON availability USING GIN (plmn_id, tai)'
+    purpose: 'NSSAIAvailability source-of-truth. NSSelectionGet 가 read, NSSAIAvailability Put/Patch/Delete 가 write.'
+
+  - name: subscription
+    work_item: WI-schema-bootstrap
+    columns:
+      - 'id UUID PRIMARY KEY'
+      - 'callback_url TEXT NOT NULL'
+      - 'filter JSONB NOT NULL'
+      - 'expiry_at TIMESTAMPTZ'  # G-10 default 24h
+      - 'tombstone BOOLEAN DEFAULT FALSE'  # cascade delete signal
+      - 'created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()'
+    indexes:
+      - 'CREATE INDEX subscription_expiry_idx ON subscription (expiry_at) WHERE tombstone = FALSE'
+    purpose: 'NSSAIAvailability subscription source-of-truth. WI-subscription-store 가 write.'
+
+  - name: retry_queue
+    work_item: WI-schema-bootstrap
+    columns:
+      - 'id BIGSERIAL PRIMARY KEY'
+      - 'subscription_id UUID NOT NULL REFERENCES subscription(id) ON DELETE CASCADE'
+      - 'payload JSONB NOT NULL'
+      - 'attempt_count INT NOT NULL DEFAULT 0'
+      - 'next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW()'
+      - 'created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()'
+    indexes:
+      - 'CREATE INDEX retry_queue_next_attempt_idx ON retry_queue (next_attempt_at)'
+      # FOR UPDATE SKIP LOCKED 패턴 — explicit index 불필요, query 가 next_attempt_at 기준 정렬
+    purpose: 'NotificationDispatcher 의 retry queue. FOR UPDATE SKIP LOCKED 로 dequeue.'
+
+  - name: nssf_schema_version
+    work_item: WI-schema-bootstrap
+    columns:
+      - 'version INT PRIMARY KEY'
+      - 'applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()'
+      - 'description TEXT'
+    purpose: 'schema lifecycle 추적. bootstrap 시 version=1 row insert.'
+
+# ─── 3. Migration sequence ────────────────────────────────────────────
+migrations:
+  - id: M001-bootstrap
+    work_item: WI-schema-bootstrap
+    file: infra/nssf/schema.sql
+    schema_version_after: 1
+    idempotent: true
+    forward_sql: |
+      -- M001-bootstrap.
+      -- availability + subscription + retry_queue + nssf_schema_version
+      -- CREATE TABLE IF NOT EXISTS … (idempotent).
+      -- 상세 sql 은 WI-schema-bootstrap PR 에서 작성.
+    rollback_sql: |
+      -- M001-bootstrap rollback (test 또는 disaster 용).
+      -- DROP TABLE IF EXISTS retry_queue;
+      -- DROP TABLE IF EXISTS subscription;
+      -- DROP TABLE IF EXISTS availability;
+      -- DROP TABLE IF EXISTS nssf_schema_version;
+    expected_pr: PR-phase1-wave1-schema-bootstrap
+
+# ─── 4. Operator apply procedure ──────────────────────────────────────
+operator_apply:
+  prerequisites:
+    - 'operator-provided db.dsn 이 dev/nssf/operator-inputs.yaml 정책 따라 주입됨'
+    - 'PostgreSQL 14+ 가 endpoint 에서 reachable'
+    - 'libpq sslmode=verify-full 검증 (ADR-0004 baseline)'
+  command_pattern: 'psql -h $POSTGRES_HOST -U $POSTGRES_USER -d $POSTGRES_DB -f infra/nssf/schema.sql'
+  verification:
+    - 'SELECT version FROM nssf_schema_version ORDER BY version DESC LIMIT 1; -- expect 1'
+    - "SELECT to_regclass('public.availability'), to_regclass('public.subscription'), to_regclass('public.retry_queue'); -- expect 3 non-null"
+  rollback_safety: |
+    bootstrap (M001) 의 rollback 은 *data loss* — operator 가 명시적 동의
+    하에만 수행. 운영 환경에서는 표준 disaster recovery 절차 (backup/restore)
+    가 우선.
+
+# ─── 5. CI integration ────────────────────────────────────────────────
+ci_integration:
+  unit_test:
+    name: 'test_schema_bootstrap (Unit, ephemeral PostgreSQL)'
+    expected_test_file: tests/nssf/integration/test_schema_bootstrap.c
+    expected_phase: phase1_wave1
+    work_item: WI-schema-bootstrap
+  integration_test:
+    name: 'test_availability_repo_pg (Integration, real libpq fixture)'
+    expected_test_file: tests/nssf/integration/test_availability_repo_pg.c
+    expected_phase: phase1_wave1
+    work_item: WI-availability-repo

@@ -1,0 +1,175 @@
+# NSSF CMake Dependencies — find_package / pkg-config wiring
+#
+# 본 yaml 은 root CMakeLists.txt + src/<module>/CMakeLists.txt 가 어느 system
+# package 를 find_package / pkg-config 로 lookup 하는지 *기계 표현*. Phase 1
+# wave 1 진입 시 (WI-codegen-bootstrap 부터) 각 CMakeLists 가 본 yaml 의
+# entry 를 참조.
+#
+# 본 yaml 의 entry 추가/삭제는 *별도 decision pass PR* 의무 (engineering-
+# design 의 sbi_*_stack slot 변경 = dependency-decisions.yaml 갱신 = 본
+# yaml 갱신, 3 파일 동시).
+schema_version: cmake-dependencies-v1
+nf: nssf
+stage: implementation-planning
+source_dependency_decisions: engineering/nssf/dependency-decisions.yaml
+generated_date: 2026-05-27
+
+# ─── 1. find_package targets ──────────────────────────────────────────
+# CMake 표준 find_package 로 lookup 가능한 system lib.
+find_package:
+  - name: OpenSSL
+    cmake_target: OpenSSL::SSL OpenSSL::Crypto
+    required: true
+    min_version: '1.1.1'
+    used_by: [WI-tls-bootstrap, WI-notification-dispatcher]
+
+  - name: PostgreSQL
+    cmake_target: PostgreSQL::PostgreSQL
+    required: true
+    min_version: '14'
+    used_by: [WI-schema-bootstrap, WI-availability-repo, WI-subscription-store]
+    notes: 'libpq C client. CMake module FindPostgreSQL.cmake 가 표준.'
+
+  - name: Threads
+    cmake_target: Threads::Threads
+    required: true
+    used_by: [WI-tls-bootstrap, WI-notification-dispatcher]
+    notes: 'pthread — libuv worker pool 의 implicit dep.'
+
+# ─── 2. pkg-config targets ────────────────────────────────────────────
+# pkg-config wrapper 로 lookup (.pc 파일 의존).
+pkg_config:
+  - name: libnghttp2
+    pkg: libnghttp2
+    cmake_imported_target: PkgConfig::libnghttp2
+    required: true
+    min_version: '1.46'
+    used_by: [WI-nsselection-handler, WI-availability-handlers, WI-subscription-handlers]
+
+  - name: libcurl
+    pkg: libcurl
+    cmake_imported_target: PkgConfig::libcurl
+    required: true
+    min_version: '7.81'
+    used_by: [WI-notification-dispatcher, WI-tls-bootstrap]
+    notes: 'OpenSSL backend 로 build (TLS version mismatch 회피).'
+
+  - name: libuv
+    pkg: libuv
+    cmake_imported_target: PkgConfig::libuv
+    required: true
+    min_version: '1.43'
+    used_by: [WI-nsselection-handler, WI-notification-dispatcher]
+
+  - name: libjwt
+    pkg: libjwt
+    cmake_imported_target: PkgConfig::libjwt
+    required: true
+    min_version: '1.16'
+    used_by: [WI-tls-bootstrap]
+    notes: 'JWKS fetch + JWT validation. v3 API 와 v1.x API 가 다름 — version pin 필수.'
+
+  - name: zlog
+    pkg: zlog
+    cmake_imported_target: PkgConfig::zlog
+    required: true
+    min_version: '1.2.16'
+    used_by: [WI-tls-bootstrap, WI-availability-repo, WI-notification-dispatcher, WI-observability-finalize]
+    notes: 'Ubuntu 22.04 에 zlog .pc 가 부재면 source build (별도 PR 또는 CI step).'
+
+# ─── 3. Vendored libraries (no find_package) ──────────────────────────
+# repo 안 source commit. add_library() 로 직접 build.
+vendored:
+  - name: cJSON
+    location: infra/<nf>/codegen/vendor/cJSON/
+    cmake_target: cjson
+    cmake_kind: STATIC
+    add_via: add_library(cjson STATIC ${CMAKE_SOURCE_DIR}/infra/nssf/codegen/vendor/cJSON/cJSON.c)
+    used_by: [WI-codegen-bootstrap, WI-problem-details-wrapper, WI-availability-engine, ALL]
+    notes: 'engineering-design L114-115 의 pinned cJSON. license MIT.'
+
+  - name: uthash
+    location: infra/<nf>/codegen/vendor/uthash/
+    cmake_target: uthash
+    cmake_kind: INTERFACE
+    add_via: 'add_library(uthash INTERFACE) + target_include_directories(uthash INTERFACE ...)'
+    used_by: [WI-availability-repo, WI-subscription-store]
+    notes: 'header-only. license BSD-1-Clause.'
+
+  - name: Unity
+    location: tests/<nf>/vendor/Unity/
+    cmake_target: unity
+    cmake_kind: STATIC
+    add_via: add_library(unity STATIC tests/<nf>/vendor/Unity/unity.c)
+    test_only: true
+    used_by: ['WI-tracer-bullet-toolchain (PR #87)', 'ALL test executables']
+    notes: 'Unity 2.6.0 vendored. license MIT. -w warning 무시.'
+
+# ─── 4. Build-time tools (link 안 함) ─────────────────────────────────
+build_tools:
+  - name: cmake
+    apt_package: cmake
+    min_version: '3.22'
+    notes: 'configure + build orchestration.'
+
+  - name: openapi-generator-cli
+    install: '`docker pull openapitools/openapi-generator-cli:<pinned>` 또는 java -jar JRE 의존'
+    used_by: [WI-codegen-bootstrap]
+    notes: 'Phase 1 wave 1 진입 시 JRE 설치 + version pin (infra/<nf>/codegen/openapi-generator-cli.config.yaml).'
+
+  - name: clang-tidy
+    apt_package: clang-tidy
+    min_version: '14'
+    notes: 'lint + static analyzer. CMAKE_EXPORT_COMPILE_COMMANDS=ON 사용.'
+
+  - name: valgrind
+    apt_package: valgrind
+    used_by: [phase5_observability]
+    notes: 'memory leak / use-after-free 검증. ASan/UBSan 과 별개. OpenSSL/libcurl suppressions 필요할 수 있음.'
+
+# ─── 5. Sanitizer / warning INTERFACE targets ─────────────────────────
+# root CMakeLists.txt 에 정의된 INTERFACE library. PR #87 산출.
+interface_targets:
+  - name: nssf_sanitizers
+    kind: INTERFACE
+    compile_options:
+      - -fsanitize=address,undefined
+      - -fno-omit-frame-pointer
+      - -g
+      - -O1
+    link_options:
+      - -fsanitize=address,undefined
+    enabled_via: 'option(NSSF_ENABLE_SANITIZERS "..." ON)'
+    apply_to: [ALL targets]
+    notes: 'Debug build sanitizer activation. Release 빌드 시 NSSF_ENABLE_SANITIZERS=OFF.'
+
+  - name: nssf_warnings
+    kind: INTERFACE
+    compile_options:
+      - -Wall
+      - -Wextra
+      - -Werror
+    apply_to:
+      include: ['handwritten code']
+      exclude: ['vendored Unity', 'vendored cJSON', 'WI-codegen-bootstrap generated code (Phase 3 진입 시 별도 nssf_generated_warnings target 권고)']
+
+# ─── 6. CI apt-get install ────────────────────────────────────────────
+# .github/workflows/readiness-check.yml 의 build step 에서 apt-get 대상.
+ci_apt_get_install:
+  packages:
+    - cmake
+    - build-essential
+    - libnghttp2-dev
+    - libcurl4-openssl-dev
+    - libuv1-dev
+    - libssl-dev
+    - libjwt-dev
+    - libpq-dev
+    - libzlog-dev  # Ubuntu 22.04 에 부재면 별도 source build PR
+    - valgrind
+    - clang-tidy
+    - default-jre  # openapi-generator-cli (Phase 1 wave 1 진입 시)
+  notes: |
+    Phase 1 wave 0 (PR #87) CI 는 cmake + build-essential 만 사용. 위 list 의
+    나머지는 Phase 1 wave 1 진입 시 활성. PR-library-stack-decision-pass
+    머지 후 readiness-check.yml step 에 추가.

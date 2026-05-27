@@ -1,0 +1,77 @@
+# NSSF Test Fixture Manifest
+#
+# 본 yaml 은 tests/nssf/ 아래 fixture (golden response / mock JWKS / PostgreSQL
+# seed / OpenAPI sample request 등) 의 *카탈로그*. Phase 1 wave 1 진입 시
+# (WI-codegen-bootstrap 부터) integration test 가 본 manifest 를 참조해 fixture
+# 를 load.
+#
+# Phase 1 wave 0 (PR #87) — 501 stub smoke 만 — fixture 미사용. 본 manifest 는
+# Phase 1 wave 1 이후의 fixture 추가를 위한 *카탈로그 시작점*.
+schema_version: test-fixture-manifest-v1
+nf: nssf
+stage: implementation-planning
+source_verification_plan: dev/nssf/verification-plan.md
+source_codegen_work_items: dev/nssf/codegen-work-items.yaml
+generated_date: 2026-05-27
+
+# ─── 1. Fixture categories ────────────────────────────────────────────
+categories:
+  - id: golden_responses
+    description: 'HTTP response body golden (RFC 7807 ProblemDetails / AuthorizedNetworkSliceInfo / 등). byte-level diff 검증.'
+    path_pattern: tests/<nf>/golden/*.json
+    used_by_tests:
+      - test_nsselection_handler.c  # Phase 1 wave 0 의 501 body assertion (현재는 inline string 검증, golden file 미사용)
+      - tests/<nf>/contract/test_nsselection_response_schema.c (Phase 1 wave 1 진입 시)
+
+  - id: mock_jwks
+    description: 'OAuth2 JWKS endpoint mock fixture. libjwt 검증 용 RSA public key set.'
+    path_pattern: tests/<nf>/fixtures/jwks/*.json
+    used_by_tests:
+      - tests/<nf>/integration/test_jwks_fetch.c
+      - tests/<nf>/unit/test_oauth2_scope_check.c
+    status: not_created  # Phase 1 wave 1 (WI-tls-bootstrap) 진입 시 생성
+
+  - id: postgresql_seed
+    description: 'PostgreSQL fixture seed data — availability / subscription / retry_queue 테이블 초기 row.'
+    path_pattern: tests/<nf>/fixtures/sql/*.sql
+    used_by_tests:
+      - tests/<nf>/integration/test_availability_repo_pg.c
+      - tests/<nf>/integration/test_nsselection_get_happy.c
+    status: not_created  # Phase 1 wave 1 (WI-schema-bootstrap) 진입 시 생성
+
+  - id: openapi_sample_requests
+    description: 'OpenAPI operation 별 sample request body — contract test 입력.'
+    path_pattern: tests/<nf>/fixtures/requests/*.json
+    used_by_tests:
+      - tests/<nf>/contract/test_nsselection_response_schema.c
+      - tests/<nf>/contract/test_nssaiavailability_*_schema.c
+    status: not_created  # Phase 4 (WI-contract-tests) 진입 시 생성
+
+  - id: cert_fixtures
+    description: 'mTLS test fixture — self-signed CA + peer cert. *실 secret 아님*, test only.'
+    path_pattern: tests/<nf>/fixtures/certs/*.pem
+    used_by_tests:
+      - tests/<nf>/unit/test_tls_context_handshake.c
+    status: not_created  # Phase 1 wave 1 (WI-tls-bootstrap) 진입 시 생성
+    notes: 'test fixture 의 cert / key 는 ssl-self-signed 로 CI 마다 생성하거나, repo commit 시 *test only* marker 명시.'
+
+# ─── 2. Current fixtures (Phase 1 wave 0) ─────────────────────────────
+current_fixtures:
+  - path: tests/nssf/golden/nsselection_get_501.json
+    category: golden_responses
+    purpose: 'Phase 1 tracer-bullet 의 NSSelectionGet 501 ProblemDetails body. test_nsselection_handler.c 가 inline string 으로 검증 중이지만 향후 golden diff 전환 시 사용.'
+    introduced_pr: 'autonomous-impl-prep-pack (본 PR)'
+    notes: 'Phase 1 wave 0 의 501 stub 응답 본문과 byte-level 일치. WI-codegen-bootstrap 진입 후에는 cJSON encoder 가 같은 본문 emit.'
+
+# ─── 3. Fixture lifecycle ─────────────────────────────────────────────
+lifecycle:
+  creation_policy: |
+    각 fixture 는 *생성 PR 의 work item* 과 1:1 매핑. WI 미진입 시 fixture
+    미생성 (premature optimization 회피).
+  pinning_policy: |
+    fixture 의 byte-level 변경 = 별도 PR. golden response 갱신 시 PR
+    description 에 *변경 이유 (spec update / cause matrix 갱신 / 등)*
+    명시 의무.
+  cleanup_policy: |
+    deprecated fixture (관련 test 삭제됨) = 동일 PR 에서 fixture 도
+    삭제. orphaned fixture 누적 회피.

@@ -1,0 +1,165 @@
+# NSSF Operator-Provided Inputs — placeholder catalog
+#
+# 본 yaml 은 NSSF 배포 시 *operator 가 주입해야 할 입력* 의 단일 목록.
+# 실 secret / DSN / cert / JWKS URL 은 본 파일에 *기록 안 함* (placeholder
+# 또는 ref-only). open-gaps-and-assumptions.md G-01~G-12 의 operator-
+# provided gap 과 1:1 매핑.
+schema_version: operator-inputs-v1
+nf: nssf
+stage: engineering-design
+source_open_gaps: dev/nssf/open-gaps-and-assumptions.md
+source_config_schema: dev/nssf/conf/nssf-config.schema.yaml
+generated_date: 2026-05-27
+
+# ─── 1. Mandatory operator inputs ─────────────────────────────────────
+# 부재 시 NSSF startup 실패 (exit 78). failure-recovery.md §2.4 참조.
+mandatory_inputs:
+  - id: tls_server_cert
+    config_key: 'tls.server_cert_path'
+    description: 'TLS / mTLS server certificate (PEM).'
+    secret_class: cert
+    gap_id: G-01
+    placeholder: '/etc/nssf/tls/server.crt  # operator 가 실 cert 주입'
+    rotation_policy: '6~12 month rotation 권고 (operator policy).'
+
+  - id: tls_server_key
+    config_key: 'tls.server_key_path'
+    description: 'TLS / mTLS server private key (PEM).'
+    secret_class: key
+    gap_id: G-01
+    placeholder: '/etc/nssf/tls/server.key  # chmod 0600 의무'
+    rotation_policy: 'cert 와 동일 주기 rotation.'
+
+  - id: tls_client_ca
+    config_key: 'tls.client_ca_path'
+    description: 'mTLS peer cert verify root CA bundle (PEM).'
+    secret_class: ca
+    gap_id: G-01
+    placeholder: '/etc/nssf/tls/ca-bundle.crt'
+    rotation_policy: 'CA chain 변경 시 갱신.'
+
+  - id: db_dsn
+    config_key: 'db.dsn'
+    description: 'PostgreSQL libpq DSN (host / port / db / user / sslmode). password 는 PGPASSFILE 또는 별도 file 권고.'
+    secret_class: dsn
+    gap_id: G-02
+    placeholder: 'postgresql://nssf@db.example.operator.5gc:5432/nssf?sslmode=verify-full'
+    rotation_policy: 'password rotation operator policy.'
+
+  - id: oauth2_jwks_url
+    config_key: 'oauth2.jwks_url'
+    description: 'OAuth2 JWKS endpoint (NRF 가 제공).'
+    secret_class: endpoint
+    gap_id: G-03
+    placeholder: 'https://example.operator.5gc/nrf/jwks'
+    rotation_policy: 'cache_ttl_seconds 단위로 자동 refresh.'
+
+  - id: oauth2_scopes
+    config_key: 'oauth2.scopes'
+    description: '본 NSSF 가 검증하는 scope 목록. 필수 2 scope.'
+    secret_class: not_secret
+    gap_id: G-03
+    placeholder: '[nnssf-nsselection, nnssf-nssaiavailability]'
+    rotation_policy: 'NSSF API 추가 시 갱신.'
+
+  - id: nf_instance_id
+    config_key: 'nssf.nf_instance_id'
+    description: 'NRF register 시 사용할 NSSF instance UUID.'
+    secret_class: not_secret
+    gap_id: G-01_extension
+    placeholder: '00000000-0000-0000-0000-000000000000  # operator 가 실 UUID 주입'
+    rotation_policy: 'instance 재시작 시 동일 UUID 유지 권고 (NRF dedup).'
+
+# ─── 2. Optional operator inputs (default 적용 가능) ──────────────────
+optional_inputs:
+  - id: server_listen_address
+    config_key: 'server.listen_address'
+    default: '0.0.0.0'
+    description: 'SBI listen interface.'
+
+  - id: server_listen_port
+    config_key: 'server.listen_port'
+    default: 8443
+    description: 'SBI listen port.'
+
+  - id: tls_min_version
+    config_key: 'tls.min_version'
+    default: 'TLSv1.3'
+    description: 'TLS min version. ADR-0004 baseline 위반 시 startup 거부.'
+
+  - id: tls_cipher_suites
+    config_key: 'tls.cipher_suites'
+    default: '(OpenSSL secure defaults)'
+    description: 'engineering-design L300-302 정책 — operator 미명시 시 library default.'
+
+  - id: nf_set_id
+    config_key: 'nssf.nf_set_id'
+    default: '(미설정)'
+    description: 'NSSF set redundancy 시 사용.'
+
+  - id: jwks_cache_ttl
+    config_key: 'oauth2.jwks_cache_ttl_seconds'
+    default: 3600
+    description: 'JWKS cache TTL.'
+
+  - id: db_max_connections
+    config_key: 'db.max_connections'
+    default: 10
+    description: 'libpq connection pool size.'
+
+  - id: db_ssl_mode
+    config_key: 'db.ssl_mode'
+    default: 'verify-full'
+    description: 'libpq sslmode. verify-full 권고 (ADR-0004 baseline).'
+
+  - id: cache_availability_ttl
+    config_key: 'cache.availability_ttl_seconds'
+    default: 60
+    description: 'availability hot cache TTL.'
+
+  - id: cache_subscription_ttl
+    config_key: 'cache.subscription_ttl_seconds'
+    default: 300
+    description: 'subscription hot cache TTL.'
+
+  - id: redirect_config_path
+    config_key: 'redirect.config_path'
+    default: '(미설정)'
+    description: 'G-07 — redirect target table file. 부재 시 redirect 안 함.'
+
+  - id: log_level
+    config_key: 'log.level'
+    default: INFO
+    description: 'zlog level.'
+
+  - id: log_config_path
+    config_key: 'log.config_path'
+    default: '/etc/nssf/zlog.conf'
+    description: 'zlog config file.'
+
+  - id: metric_endpoint
+    config_key: 'metric.endpoint'
+    default: '(미설정)'
+    description: '미명시 시 metric off. Phase 5 활성.'
+
+  - id: trace_sampler_kind
+    config_key: 'trace.sampler_kind'
+    default: parentbased_traceidratio
+    description: 'trace sampler.'
+
+  - id: trace_sampler_ratio
+    config_key: 'trace.sampler_ratio'
+    default: 0.1
+    description: 'sampling ratio. 0.0~1.0.'
+
+# ─── 3. Repository policy ─────────────────────────────────────────────
+repository_policy:
+  no_secret_commit: |
+    본 yaml + .example.ini 의 모든 secret 자리 = placeholder. 실 secret /
+    DSN / cert path 의 값 본문은 repo 에 commit 금지. operator 가 deploy
+    환경 (helm chart secret, vault, sealed-secrets 등) 에서 주입.
+  rotation_audit: |
+    rotation 일정은 operator policy. 본 repo 에 timeline 기록 안 함.
+  pre_commit_check: |
+    PR 진입 시 *cert / key / dsn / token / jwt / api_key / password*
+    keyword 의 실 값 commit 여부를 reviewer 가 grep 검사 권고.

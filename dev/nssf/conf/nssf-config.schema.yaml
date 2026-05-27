@@ -1,0 +1,226 @@
+# NSSF Runtime Config Schema
+#
+# 본 yaml 은 NSSF 바이너리의 *runtime config* 스키마 정의. operator 가
+# 주입하는 .ini / .yaml / env 파일이 본 schema 를 충족해야 startup 진행.
+#
+# Phase 1 wave 0 (PR #87) 의 NSSelectionGet 501 stub 는 config 가 *필요 없음*
+# (handler 가 hardcoded). Phase 1 wave 1 진입 (WI-tls-bootstrap 부터) 부터
+# 실제 의미를 갖는다. 본 schema 는 *operator 와의 contract* 로 미리 freeze.
+schema_version: nssf-config-schema-v1
+nf: nssf
+stage: engineering-design
+source_engineering_design: engineering/nssf/engineering-design.md
+source_adr_baseline: docs/adr/ADR-0004-project-security-baseline.md
+generated_date: 2026-05-27
+
+# ─── 1. Sections ──────────────────────────────────────────────────────
+# 각 section 별 필수 key + type + default + operator-provided 여부.
+sections:
+  - id: nssf
+    description: 'NF identity 와 instance ID.'
+    keys:
+      - key: nf_instance_id
+        type: uuid
+        required: true
+        operator_provided: true
+        description: 'NSSF instance UUID. NRF 에 register 시 사용.'
+      - key: nf_set_id
+        type: string
+        required: false
+        operator_provided: true
+        description: 'NSSF set ID (PLMN-scoped). nssf-set redundancy 용도.'
+
+  - id: server
+    description: 'SBI server (nghttp2) listen 설정.'
+    keys:
+      - key: listen_address
+        type: ipv4_or_ipv6
+        required: true
+        default: '0.0.0.0'
+        operator_provided: true
+      - key: listen_port
+        type: uint16
+        required: true
+        default: 8443
+        operator_provided: true
+      - key: max_concurrent_streams
+        type: uint32
+        required: false
+        default: 100
+        operator_provided: false
+
+  - id: tls
+    description: 'TLS / mTLS context (OpenSSL). ADR-0004 mandate.'
+    keys:
+      - key: enabled
+        type: bool
+        required: true
+        default: true
+        operator_provided: true
+        notes: 'true 외 값은 ADR-0004 위반.'
+      - key: server_cert_path
+        type: path
+        required: true
+        operator_provided: true
+        secret_class: cert
+      - key: server_key_path
+        type: path
+        required: true
+        operator_provided: true
+        secret_class: key
+      - key: client_ca_path
+        type: path
+        required: true
+        operator_provided: true
+        secret_class: ca
+        description: 'mTLS peer cert verify root CA.'
+      - key: min_version
+        type: enum
+        enum: [TLSv1.2, TLSv1.3]
+        required: false
+        default: TLSv1.3
+        operator_provided: true
+      - key: cipher_suites
+        type: string
+        required: false
+        operator_provided: true
+        description: 'OpenSSL cipher suite list. 미명시 시 OpenSSL secure defaults (engineering-design L300-302 정책).'
+
+  - id: oauth2
+    description: 'OAuth2 token validation (libjwt JWKS).'
+    keys:
+      - key: jwks_url
+        type: url
+        required: true
+        operator_provided: true
+        secret_class: endpoint
+      - key: jwks_cache_ttl_seconds
+        type: uint32
+        required: false
+        default: 3600
+        operator_provided: true
+      - key: scopes
+        type: list_string
+        required: true
+        operator_provided: true
+        default_recommendation: [nnssf-nsselection, nnssf-nssaiavailability]
+        description: '본 NSSF 가 검증하는 scope 목록. 2 scope 필수.'
+
+  - id: db
+    description: 'PostgreSQL (libpq) source-of-truth.'
+    keys:
+      - key: dsn
+        type: string
+        required: true
+        operator_provided: true
+        secret_class: dsn
+        description: 'libpq DSN (postgresql://user:pass@host:port/db?sslmode=require). password 는 별도 file 권고.'
+      - key: max_connections
+        type: uint16
+        required: false
+        default: 10
+        operator_provided: true
+      - key: connect_timeout_seconds
+        type: uint16
+        required: false
+        default: 10
+        operator_provided: false
+      - key: ssl_mode
+        type: enum
+        enum: [disable, allow, prefer, require, verify-ca, verify-full]
+        required: false
+        default: 'verify-full'
+        operator_provided: true
+
+  - id: cache
+    description: 'In-memory cache (uthash). source-of-truth 아님 — hot cache only.'
+    keys:
+      - key: availability_ttl_seconds
+        type: uint32
+        required: false
+        default: 60
+        operator_provided: true
+      - key: subscription_ttl_seconds
+        type: uint32
+        required: false
+        default: 300
+        operator_provided: true
+
+  - id: redirect
+    description: 'NSSelectionGet redirect target table (G-07 operator-provided).'
+    keys:
+      - key: config_path
+        type: path
+        required: false
+        operator_provided: true
+        description: 'redirect target table file (yaml). 부재 시 redirect 결정하지 않음.'
+
+  - id: log
+    description: 'zlog logging.'
+    keys:
+      - key: level
+        type: enum
+        enum: [DEBUG, INFO, NOTICE, WARN, ERROR, FATAL]
+        required: false
+        default: INFO
+        operator_provided: true
+      - key: config_path
+        type: path
+        required: false
+        operator_provided: true
+        default: /etc/nssf/zlog.conf
+        description: 'zlog config file. 부재 시 default INFO + stderr.'
+      - key: redaction_enabled
+        type: bool
+        required: false
+        default: true
+        operator_provided: false
+        description: 'Phase 5 phase5_log_redaction 정책 — token / cert / user id redact.'
+
+  - id: metric
+    description: 'metric seam (Phase 5 phase5_metric_seam 활성).'
+    keys:
+      - key: endpoint
+        type: url
+        required: false
+        operator_provided: true
+        description: '미명시 시 metric off. exporter 미선택 (Phase 5 결정).'
+
+  - id: trace
+    description: 'trace sampler (Phase 5 phase5_trace_sampler 활성).'
+    keys:
+      - key: sampler_kind
+        type: enum
+        enum: [parentbased_always_on, parentbased_traceidratio]
+        required: false
+        default: parentbased_traceidratio
+        operator_provided: true
+      - key: sampler_ratio
+        type: float
+        required: false
+        default: 0.1
+        operator_provided: true
+
+# ─── 2. Secret class policy ───────────────────────────────────────────
+# secret_class 별 protection 정책. Phase 5 phase5_log_redaction 의 source.
+secret_classes:
+  - id: cert
+    description: 'TLS / mTLS certificate. file path 만 config 에. 내용은 파일 system 에.'
+    in_log: redact
+    in_metric: forbidden
+  - id: key
+    description: 'TLS / mTLS private key. file path 만 config 에. 내용은 파일 system 에.'
+    in_log: redact
+    in_metric: forbidden
+  - id: ca
+    description: 'CA bundle. 보통 not secret 이나 path 만 config 에.'
+    in_log: allowed
+    in_metric: forbidden
+  - id: dsn
+    description: 'PostgreSQL DSN. password 가 포함된 경우 redact.'
+    in_log: redact_password_only
+    in_metric: forbidden
+  - id: endpoint
+    description: 'JWKS / NRF / metric / trace endpoint URL. PII 미포함.'
+    in_log: allowed
+    in_metric: allowed

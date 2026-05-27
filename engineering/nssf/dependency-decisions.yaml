@@ -1,0 +1,229 @@
+# NSSF Dependency Decisions — library stack ratified by user instruction
+#
+# 본 yaml 은 engineering/nssf/engineering-design.md 의 dependency slot
+# (sbi_server_stack / sbi_client_stack / runtime / persistence / observability
+# 등) 의 *기계 표현 + ratify evidence*. engineering-design.md 가 사람 산문
+# source 이고, 본 yaml 은 *기계 readable* mirror — codegen agent 가 dependency
+# 결정을 직접 참조.
+#
+# 본 ratify 는 사용자 instruction (2026-05-27) 으로 확정. Pane 2 (Codex GPT-5.5)
+# 권고 stack + 기존 NSSF 설계 stack 의 합집합. *별도 decision pass PR* 의
+# normative 산출.
+schema_version: dependency-decisions-v1
+nf: nssf
+stage: engineering-design
+status: ratified
+ratified_by: 'user (2026-05-27 instruction)'
+ratification_source: |
+  사용자 한 줄 instruction — 추천 기본값 (Pane 2 second-opinion 통합 후) 으로
+  진행 결정. library/stack 12종 ratify, valgrind tooling 추가.
+source_engineering_design: engineering/nssf/engineering-design.md
+source_readiness_config: design/nssf/readiness-config.yaml
+generated_date: 2026-05-27
+
+# ─── Stack 결정 12 + 1 (memory check) ─────────────────────────────────
+decisions:
+  - slot: language
+    package: C11
+    rationale: 'engineering-design L26-31 ratified. 수동 메모리, errno/return-code, CMake build, ASan/UBSan 강제.'
+    license: N/A
+    container_externalized: true
+    vendored: false
+
+  - slot: build_system
+    package: CMake
+    version_floor: '3.22'
+    rationale: 'Ubuntu 22.04 LTS 기본, GitHub Actions ubuntu-22.04 = 3.22.1. PR #87 ratify.'
+    license: BSD-3-Clause
+    container_externalized: true
+    vendored: false
+
+  - slot: test_framework
+    package: Unity
+    version: '2.6.0'
+    rationale: 'engineering-design L209-211 ratified. PR #87 ratify. vendored source commit (Unity 가 header + .c 3 파일).'
+    license: MIT
+    container_externalized: false
+    vendored: true
+    vendored_path: tests/<nf>/vendor/Unity/
+
+  - slot: lint_tool
+    package: clang-tidy
+    rationale: 'engineering-design L209-228 ratified. -Werror + clang static analyzer 와 함께. CI step 추가 추후 PR.'
+    license: Apache-2.0
+    container_externalized: true
+    vendored: false
+
+  - slot: memory_check
+    package: valgrind
+    rationale: |
+      사용자 instruction (2026-05-27) ratify — Pane 2 권고. ASan/UBSan 과
+      별개로 memory leak / use-after-free 검증에 유용. OpenSSL/libcurl
+      suppressions 필요할 수 있음 (CI step 진입 시 별도 작성).
+    license: GPL-2.0  # WARNING — link 대상 아님, test runtime tool 만
+    container_externalized: true
+    vendored: false
+    notes: 'valgrind 는 *test runtime tool*. NSSF 바이너리에 link 되지 않음 (GPL contagion 없음).'
+
+  - slot: http_server
+    package: nghttp2
+    rationale: 'engineering-design ratified. HTTP/2 C library, SBI server 에 적합. low-level 이라 server wrapper 작성 필요.'
+    license: MIT
+    container_externalized: true
+    vendored: false
+
+  - slot: http_client
+    package: libcurl
+    rationale: |
+      사용자 instruction (2026-05-27) ratify — Pane 2 권고. outbound 용도
+      (NRF discovery / OAuth2 token endpoint / AMF callback). nghttp2 raw
+      client 보다 개발성 우수. multi interface 가 event 기반 다중 transfer
+      지원. OpenSSL backend 로 build (TLS version mismatch 회피).
+    license: 'curl (MIT-like)'
+    container_externalized: true
+    vendored: false
+    integration_notes: |
+      libcurl multi_socket + libuv 통합 — multi 의 socket / timer callback
+      을 libuv loop 에 연결.
+
+  - slot: event_loop
+    package: libuv
+    rationale: |
+      사용자 instruction (2026-05-27) ratify — Pane 2 권고. libcurl multi
+      socket + nghttp2 server socket readiness + timer + signal 통합.
+      single loop thread + worker pool 모델. DB blocking / CPU-heavy JSON
+      Patch 는 worker pool 에 분리.
+    license: MIT
+    container_externalized: true
+    vendored: false
+
+  - slot: json
+    package: cJSON
+    rationale: |
+      engineering-design L103-115 ratified. SBI application/json +
+      application/problem+json + JSON Patch + PostgreSQL JSONB + openapi-
+      generator 산출 model parse/serialize. vendored source commit (inih/
+      Unity vendoring 패턴 일관). JSON Patch RFC6902 는 cJSON 위에 별도
+      utility 구현.
+    license: MIT
+    container_externalized: false
+    vendored: true
+    vendored_path: infra/<nf>/codegen/vendor/cJSON/
+
+  - slot: tls
+    package: OpenSSL
+    rationale: 'engineering-design ratified. ADR-0004 baseline. libcurl OpenSSL backend 로 build version mismatch 회피.'
+    license: 'OpenSSL (Apache-2.0)'
+    container_externalized: true
+    vendored: false
+
+  - slot: jwt
+    package: libjwt
+    rationale: 'engineering-design ratified. v3 API 변화가 크므로 version pin 필수. JWKS fetch + validation.'
+    license: MPL-2.0
+    container_externalized: true
+    vendored: false
+    version_pin_required: true
+
+  - slot: logging
+    package: zlog
+    rationale: |
+      사용자 instruction (2026-05-27) ratify — Pane 2 권고. config 기반
+      output / rotation / category 지원. category — transport / auth / db /
+      selection / notify. correlation field — 3gpp-Sbi-Correlation-Info /
+      traceparent / request_id. Phase 5 에서 JSON line format 활성.
+    license: LGPL-2.1
+    container_externalized: true
+    vendored: false
+
+  - slot: inmemory_cache
+    package: uthash
+    rationale: |
+      사용자 instruction (2026-05-27) ratify — Pane 2 권고. header-only,
+      C cache 구현 부담 작음. *source of truth 아님, hot cache only*.
+      restart recovery = PostgreSQL 에서 cache warm-up. invalidation =
+      write-through 후 cache update / TTL 만료.
+    license: BSD-1-Clause
+    container_externalized: false
+    vendored: true
+    vendored_path: infra/<nf>/codegen/vendor/uthash/
+    role: 'hot cache (subscription lookup / per-TA NSSAI snapshot / short TTL). source-of-truth 는 PostgreSQL.'
+
+  - slot: database
+    package: PostgreSQL
+    role: 'source-of-truth'
+    rationale: 'engineering-design ratified. availability + subscription + retry_queue 3 table. JSONB filter/payload. FOR UPDATE SKIP LOCKED for retry queue.'
+    license: PostgreSQL (BSD-like)
+    container_externalized: true
+    vendored: false
+
+  - slot: db_client
+    package: libpq
+    rationale: 'engineering-design ratified. PostgreSQL 공식 C API. async mode 를 libuv uv_poll_t 와 결합 가능 (wrapper 필요).'
+    license: PostgreSQL (BSD-like)
+    container_externalized: true
+    vendored: false
+
+  - slot: schema_codegen
+    package: openapi-generator
+    language_target: c
+    rationale: 'engineering-design L103-115 ratified. 14 contract data-model + TS29571 외부 dependency emit. 생성물 repo commit + CI drift gate.'
+    license: Apache-2.0
+    container_externalized: true
+    vendored: false
+    version_pin_required: true
+    version_pin_artifact: infra/<nf>/codegen/openapi-generator-cli.config.yaml
+
+# ─── Dependency aggregate ─────────────────────────────────────────────
+# 본 섹션은 cmake-dependencies.yaml 의 source 다. find_package / pkg-config
+# wrapper 가 본 list 의 system package 를 lookup.
+dependency_aggregate:
+  link_libraries:  # NSSF 바이너리에 link 되는 system lib
+    - nghttp2
+    - libcurl
+    - libuv
+    - OpenSSL  # libssl + libcrypto
+    - libjwt
+    - libpq
+    - zlog
+  link_libraries_vendored:  # repo 안 source commit
+    - cJSON
+    - uthash
+    - Unity  # test only
+  build_tools:  # build 시점 host 에 필요 (link 안 함)
+    - cmake
+    - openapi-generator-cli  # JRE 의존 (build-time tool, runtime 아님)
+    - clang-tidy
+    - valgrind  # CI/test only
+  ci_packages_apt:  # ubuntu-22.04 apt-get install -y 대상
+    - cmake
+    - build-essential
+    - libnghttp2-dev
+    - libcurl4-openssl-dev
+    - libuv1-dev
+    - libssl-dev
+    - libjwt-dev
+    - libpq-dev
+    - libzlog-dev  # Ubuntu 22.04 에 zlog 가 부재면 source build 필요 (별도 PR)
+    - valgrind
+    - clang-tidy
+    - default-jre  # openapi-generator-cli 의존
+
+# ─── License compliance summary ───────────────────────────────────────
+license_summary:
+  permissive: [Unity, cJSON, uthash, nghttp2, libcurl, libuv, libpq, PostgreSQL, OpenSSL, openapi-generator, CMake, clang-tidy]
+  weak_copyleft: [zlog, libjwt]   # LGPL/MPL — dynamic link 으로 충족
+  strong_copyleft_runtime_only_tool: [valgrind]   # GPL, link 안 함
+  notes: |
+    NSSF 바이너리에 *static link* 되는 모든 라이브러리는 permissive
+    또는 LGPL/MPL (dynamic link). GPL 라이브러리는 link 안 함.
+    valgrind 는 test runtime tool 로만 사용 — code-via-link 아님.
+
+# ─── No-JVM policy compliance ─────────────────────────────────────────
+no_jvm_policy:
+  policy_source: 'memory project_no_jvm — NF runtime + 생성 C 코드 + linked libs 에는 JVM 금지. build-time tool 의 host 언어는 자유.'
+  runtime_jvm: false   # NSSF 바이너리에 JVM 없음
+  build_time_jvm: true # openapi-generator-cli 가 JRE 의존 (build host 의 tool, runtime 미포함)
+  evidence:
+    - 'openapi-generator-cli — build-time tool, NSSF runtime 미포함'
+    - 'NSSF 바이너리 link list 에 JVM 라이브러리 0'

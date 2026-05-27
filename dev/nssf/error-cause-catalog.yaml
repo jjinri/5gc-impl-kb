@@ -1,0 +1,202 @@
+# NSSF Error Cause Catalog — 18 cause type
+#
+# 본 yaml 은 NSSF 의 모든 HTTP error response 의 *RFC 7807 ProblemDetails*
+# 와 *3GPP cause type* 의 단일 카탈로그. WI-problem-details-wrapper
+# (Phase 1 wave 1) 가 본 카탈로그를 입력으로 factory function emit.
+#
+# 18 cause = source verification-plan.md / contract error-handling 의
+# operation × cause matrix 의 unique cause set.
+schema_version: error-cause-catalog-v1
+nf: nssf
+stage: implementation-planning
+source_verification_plan: dev/nssf/verification-plan.md
+source_contract: handoff/nssf/contract.yaml
+source_failure_recovery: dev/nssf/failure-recovery.md
+generated_date: 2026-05-27
+
+# ─── Cause types (18 entries) ─────────────────────────────────────────
+causes:
+  - id: TRACER_BULLET_STUB
+    status: 501
+    title: Not Implemented
+    type_urn: 'urn:5gc:nssf:tracer-bullet-stub'
+    detail_template: 'Phase 1 tracer-bullet stub'
+    operations: [NSSelectionGet]  # Phase 1 wave 0 only
+    mandatory_headers: []
+    used_by: ['Phase 1 wave 0 PR #87']
+    notes: 'WI-codegen-bootstrap 진입 후 실 응답으로 교체.'
+
+  - id: UNAUTHORIZED_TOKEN_MISSING
+    status: 401
+    title: Unauthorized
+    type_urn: 'urn:5gc:problem:unauthorized'
+    detail_template: 'OAuth2 bearer token missing'
+    operations: [ALL]
+    mandatory_headers:
+      - 'WWW-Authenticate: Bearer realm="nssf", error="invalid_token"'
+    used_by: [WI-tls-bootstrap]
+
+  - id: UNAUTHORIZED_TOKEN_INVALID
+    status: 401
+    title: Unauthorized
+    type_urn: 'urn:5gc:problem:unauthorized'
+    detail_template: 'OAuth2 bearer token invalid: {reason}'
+    operations: [ALL]
+    mandatory_headers:
+      - 'WWW-Authenticate: Bearer realm="nssf", error="invalid_token"'
+    used_by: [WI-tls-bootstrap]
+
+  - id: FORBIDDEN_SCOPE_MISMATCH
+    status: 403
+    title: Forbidden
+    type_urn: 'urn:5gc:problem:forbidden'
+    detail_template: 'OAuth2 scope mismatch: required={required} actual={actual}'
+    operations: [ALL]
+    used_by: [WI-tls-bootstrap, WI-nsselection-handler, WI-availability-handlers, WI-subscription-handlers]
+
+  - id: NOT_FOUND_NO_AVAILABILITY
+    status: 404
+    title: Not Found
+    type_urn: 'urn:5gc:problem:not-found'
+    detail_template: 'No availability for plmn={plmn} tai={tai}'
+    operations: [NSSelectionGet, NSSAIAvailability_Get]
+    used_by: [WI-availability-repo, WI-nsselection-handler]
+
+  - id: NOT_FOUND_SUBSCRIPTION
+    status: 404
+    title: Not Found
+    type_urn: 'urn:5gc:problem:not-found'
+    detail_template: 'Subscription not found: id={id}'
+    operations: [NSSAIAvailability_Unsubscribe, NSSAIAvailability_SubModifyPatch]
+    used_by: [WI-subscription-store]
+
+  - id: METHOD_NOT_ALLOWED
+    status: 405
+    title: Method Not Allowed
+    type_urn: 'urn:5gc:problem:method-not-allowed'
+    detail_template: 'Method {method} not allowed on {uri}'
+    operations: [ALL]
+    mandatory_headers:
+      - 'Allow: {allowed methods}'
+    used_by: [WI-nsselection-handler]
+
+  - id: REQUEST_TIMEOUT
+    status: 408
+    title: Request Timeout
+    type_urn: 'urn:5gc:problem:request-timeout'
+    detail_template: 'Request did not complete within {timeout}s'
+    operations: [ALL]
+    used_by: [WI-nsselection-handler, WI-availability-handlers]
+
+  - id: PAYLOAD_LENGTH_REQUIRED
+    status: 411
+    title: Length Required
+    type_urn: 'urn:5gc:problem:length-required'
+    detail_template: 'Content-Length header required'
+    operations: [NSSAIAvailability_Put, NSSAIAvailability_Patch, NSSAIAvailability_Post]
+    used_by: [WI-availability-handlers, WI-subscription-handlers]
+
+  - id: URI_TOO_LONG
+    status: 414
+    title: URI Too Long
+    type_urn: 'urn:5gc:problem:uri-too-long'
+    detail_template: 'Request URI exceeds {max} bytes'
+    operations: [NSSelectionGet]
+    used_by: [WI-nsselection-handler]
+
+  - id: PAYLOAD_TOO_LARGE
+    status: 413
+    title: Payload Too Large
+    type_urn: 'urn:5gc:problem:payload-too-large'
+    detail_template: 'Request body exceeds {max} bytes'
+    operations: [NSSAIAvailability_Put, NSSAIAvailability_Patch, NSSAIAvailability_Post]
+    used_by: [WI-availability-handlers, WI-subscription-handlers]
+
+  - id: UNSUPPORTED_MEDIA_TYPE_JSON
+    status: 415
+    title: Unsupported Media Type
+    type_urn: 'urn:5gc:problem:unsupported-media-type'
+    detail_template: 'Content-Type must be application/json (got: {actual})'
+    operations: [NSSAIAvailability_Put, NSSAIAvailability_Post]
+    used_by: [WI-availability-handlers, WI-subscription-handlers]
+
+  - id: UNSUPPORTED_MEDIA_TYPE_JSON_PATCH
+    status: 415
+    title: Unsupported Media Type
+    type_urn: 'urn:5gc:problem:unsupported-media-type'
+    detail_template: 'Content-Type must be application/json-patch+json (got: {actual})'
+    operations: [NSSAIAvailability_Patch, NSSAIAvailability_SubModifyPatch]
+    mandatory_headers:
+      - 'Accept-Patch: application/json-patch+json'
+    used_by: [WI-availability-handlers, WI-subscription-handlers]
+
+  - id: BAD_REQUEST_INVALID_BODY
+    status: 400
+    title: Bad Request
+    type_urn: 'urn:5gc:problem:bad-request'
+    detail_template: 'Request body invalid: {reason}'
+    operations: [ALL_WRITE]
+    used_by: [WI-availability-engine, WI-availability-handlers, WI-subscription-handlers]
+
+  - id: BAD_REQUEST_INVALID_PARAM
+    status: 400
+    title: Bad Request
+    type_urn: 'urn:5gc:problem:bad-request'
+    detail_template: 'Query parameter invalid: {param}'
+    operations: [NSSelectionGet]
+    used_by: [WI-nsselection-handler]
+
+  - id: TOO_MANY_REQUESTS
+    status: 429
+    title: Too Many Requests
+    type_urn: 'urn:5gc:problem:too-many-requests'
+    detail_template: 'Rate limit exceeded'
+    operations: [ALL]
+    mandatory_headers:
+      - 'Retry-After: {seconds}'
+    used_by: ['Phase 5 hardening']
+    notes: 'Phase 5 의 rate-limit 정책 freeze 시 활성.'
+
+  - id: SERVICE_UNAVAILABLE_DB
+    status: 503
+    title: Service Unavailable
+    type_urn: 'urn:5gc:problem:service-unavailable'
+    detail_template: 'Database backend unavailable: {reason}'
+    operations: [ALL]
+    mandatory_headers:
+      - 'Retry-After: {seconds}'
+    used_by: [WI-availability-repo, WI-subscription-store, WI-notification-dispatcher]
+
+  - id: SERVICE_UNAVAILABLE_UPSTREAM
+    status: 503
+    title: Service Unavailable
+    type_urn: 'urn:5gc:problem:service-unavailable'
+    detail_template: 'Upstream NF unavailable: {nf}'
+    operations: [ALL]
+    mandatory_headers:
+      - 'Retry-After: {seconds}'
+    used_by: [WI-notification-dispatcher]
+
+  - id: INTERNAL_SERVER_ERROR
+    status: 500
+    title: Internal Server Error
+    type_urn: 'urn:5gc:problem:internal-server-error'
+    detail_template: 'Internal error: {request_id}'
+    operations: [ALL]
+    used_by: [ALL]
+    notes: '구체 reason 은 log 만, response body 의 detail 은 request_id 만 노출 (Phase 5 log redaction 정책).'
+
+# ─── Factory function naming ──────────────────────────────────────────
+factory_naming_convention: |
+  WI-problem-details-wrapper 가 emit 할 factory function 명명 규칙.
+  - nf_problem_details_make_<status_code>() — status code 1차 dispatch.
+  - nf_problem_details_make_<status_code>_<cause_short>() — 같은 status code
+    의 cause variant 가 2+ 일 때 (예 401 의 token_missing vs token_invalid).
+  - 모든 factory 가 cJSON 으로 RFC 7807 body emit + mandatory header 자동 부착.
+
+# ─── Cross-ref ────────────────────────────────────────────────────────
+cross_references:
+  failure_recovery: dev/nssf/failure-recovery.md  # §2.1 HTTP error contract
+  verification_plan: dev/nssf/verification-plan.md  # Unit/Integration/Contract test 의 cause coverage
+  contract: handoff/nssf/contract.yaml  # operation × cause matrix source
+  problem_details_factory_target: WI-problem-details-wrapper

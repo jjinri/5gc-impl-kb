@@ -1,0 +1,46 @@
+# NSSF Codegen Drift Allowlist
+#
+# 본 yaml 은 codegen drift gate 가 *예외 처리* 할 파일/경로/marker 의
+# 목록. WI-codegen-bootstrap (Phase 1 wave 1) 진입 시 drift 검사가 본
+# yaml 의 entry 와 매칭되는 항목을 PASS 처리한다.
+#
+# entry 추가 = drift gate 의 *느슨화*. 추가 시 reason + replace_condition +
+# expected_remove_phase 명시 의무.
+schema_version: codegen-drift-allowlist-v1
+nf: nssf
+stage: implementation-planning
+source_generation_manifest: src/nssf/generated/GENERATION_MANIFEST.yaml
+source_codegen_config: infra/nssf/codegen/openapi-generator-cli.config.yaml
+generated_date: 2026-05-27
+
+# ─── Allowlist entries ────────────────────────────────────────────────
+entries:
+  - id: phase1_wave0_nsselection_boundary_stub
+    path: src/nssf/generated/api/NSSelectionGet.h
+    kind: handwritten_stub
+    marker: 'NSSF_GENERATED_BOUNDARY_STUB'
+    reason: |
+      Phase 1 wave 0 tracer-bullet 의 generator boundary 표현 — hand-written
+      stub 헤더. WI-codegen-bootstrap 진입 전에는 openapi-generator 가 본
+      파일을 emit 하지 않으므로 drift 검사 대상 외.
+    replace_condition: |
+      WI-codegen-bootstrap PR 진입 시 openapi-generator output 으로 교체 +
+      NSSF_GENERATED_BOUNDARY_STUB marker 제거.
+    expected_remove_phase: phase1_wave1
+    introduced_pr: '#87'
+    expected_remove_pr: 'PR-phase1-wave1-codegen-bootstrap'
+
+# ─── Policy ───────────────────────────────────────────────────────────
+policy:
+  entry_addition: |
+    drift allowlist 추가 = PR 별 *증거 + 합의* 필요. 각 entry 는 reason +
+    replace_condition + expected_remove_phase 명시. 무조건 추가 금지.
+  entry_lifetime: |
+    allowlist entry 는 *임시 처방*. expected_remove_phase 도달 시 entry 제거
+    의무. lingering entry = drift 감시 약화.
+  ci_check: |
+    CI 의 drift check 가 본 yaml 의 entries[].path 와 매칭되는 경로를
+    skip. 매칭 안 되면 drift fail.
+  audit: |
+    각 entry 의 expected_remove_phase 가 도달했는데 entry 가 잔존하면
+    별도 validator (후속 PR) 가 WARN. blocking 아니나 음성 신호.
