@@ -29,6 +29,10 @@ policy:
     각 PR 은 *독립 revertible*. 머지 후 회귀 발견 시 revert 1건으로 정상화
     가능해야 함. cross-PR 의 implicit dependency 금지.
 
+plan_history:
+  - '#90 merged — execution-control drift validator + CI gate.'
+  - '#91 merged — Phase 1 wave 1 dependency prep + apt sanity probe.'
+
 # ─── 2. PR 시퀀스 ─────────────────────────────────────────────────────
 prs:
   - id: PR-phase1-wave0
@@ -74,7 +78,8 @@ prs:
       - dev/nssf/team-execution-plan.md   # cross-ref 추가 한정
     depends_on:
       - PR-phase1-wave0
-    status: in_progress
+    status: merged
+    merged_pr: 'https://github.com/jjinri/5gc-impl-kb/pull/88'
     required_checks:
       - pytest_full_suite
       - validate_artifact_catalog
@@ -87,13 +92,23 @@ prs:
     phase: phase0_readiness_gate
     work_items: []
     scope_files:
-      - engineering/nssf/engineering-design.md
-      - design/nssf/readiness-config.yaml
-      - dev/nssf/codegen-work-items.yaml
-      - dev/nssf/team-execution-plan.md
+      - engineering/nssf/dependency-decisions.yaml
+      - dev/nssf/cmake-dependencies.yaml
+      - dev/nssf/conf/nssf-config.schema.yaml
+      - dev/nssf/conf/nssf.example.ini
+      - dev/nssf/error-cause-catalog.yaml
+      - dev/nssf/failure-recovery.md
+      - dev/nssf/operator-inputs.yaml
+      - infra/nssf/codegen/drift-allowlist.yaml
+      - infra/nssf/codegen/openapi-generator-cli.config.yaml
+      - infra/nssf/migrations/manifest.yaml
+      - src/nssf/generated/GENERATION_MANIFEST.yaml
+      - tests/nssf/fixtures/manifest.yaml
+      - tests/nssf/golden/nsselection_get_501.json
     depends_on:
       - PR-execution-control-pack
-    status: not_started
+    status: merged
+    merged_pr: 'https://github.com/jjinri/5gc-impl-kb/pull/89'
     required_checks:
       - pytest_full_suite
       - validate_artifact_catalog
@@ -115,18 +130,46 @@ prs:
     scope_files:
       - infra/nssf/codegen/openapi-generator-cli.config.yaml
       - infra/nssf/codegen/vendor/cJSON/**
-      - src/nssf/generated/models/**
+      - src/nssf/generated/model/**
       - src/nssf/generated/CMakeLists.txt
       - CMakeLists.txt  # generated subdirectory 등록
     depends_on:
       - PR-library-stack-decision-pass
-    status: not_started
+    status: merged
+    merged_pr: 'https://github.com/jjinri/5gc-impl-kb/pull/92'
     required_checks:
       - phase1_wave1_codegen_drift_check
       - pytest_full_suite
       - validate_artifact_catalog
     estimated_loc: 2000
-    notes: 'openapi-generator 산출 LOC 가 큼. generated/ 만 별도 PR 권고.'
+    notes: 'PR #92 는 NSSelection-only emit. NSSAIAvailability emit 은 PR-codegen-nssaiavailability-extension 으로 후속 분리.'
+
+  - id: PR-codegen-nssaiavailability-extension
+    title: 'feat(nssf): codegen NSSAIAvailability extension — multi-spec emit'
+    phase: phase1_wave1
+    work_items:
+      - WI-codegen-bootstrap
+    scope_files:
+      - infra/nssf/codegen/regenerate.sh
+      - infra/nssf/codegen/type-overrides.yaml
+      - infra/nssf/codegen/drift-allowlist.yaml
+      - design/scripts/verify-generated-models.py
+      - src/nssf/generated/model/**
+      - src/nssf/generated/GENERATION_MANIFEST.yaml
+      - tests/nssf/unit/test_generated_smoke.c
+    depends_on:
+      - PR-phase1-wave1-codegen-bootstrap
+    status: not_started
+    required_checks:
+      - phase1_wave1_codegen_drift_check
+      - pytest_full_suite
+      - validate_artifact_catalog
+      - execution_control_drift
+    estimated_loc: 1200
+    notes: |
+      `infra/nssf/codegen/type-overrides.yaml` multi_spec_strategy.next_pr 의
+      follow-up. NSSAIAvailability spec generate 추가 후 deferred schemas 를
+      verifier expected set 으로 승격한다.
 
   - id: PR-phase1-wave1-schema-bootstrap
     title: 'feat(nssf): WI-schema-bootstrap — PostgreSQL bootstrap (availability / subscription / retry_queue)'
@@ -264,6 +307,7 @@ prs:
       - tests/nssf/unit/test_availability_engine_*.c
     depends_on:
       - PR-phase1-wave1-nsselection-handler
+      - PR-codegen-nssaiavailability-extension
     status: not_started
     required_checks: []  # phase2 진입 시 verification-matrix 의 phase2 checks 활성
     estimated_loc: 1000
