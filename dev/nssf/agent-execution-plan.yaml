@@ -1,0 +1,292 @@
+# NSSF Agent Execution Plan — 기계 계약
+#
+# 본 파일은 dev/nssf/team-execution-plan.md (사람 산문) 의 *기계 표현* 이다.
+# autonomous codegen agent 가 phase 진입 / write 권한 / no-spec-reread /
+# checkpoint / required_checks 결정 시 본 yaml 을 읽는다.
+#
+# team-execution-plan.md 변경 시 본 yaml 도 같이 갱신. 두 파일 사이 drift 는
+# Pane 2 review 권고에 따라 별도 validator (후속 PR) 에서 검출 예정.
+schema_version: agent-execution-plan-v1
+nf: nssf
+stage: implementation-planning
+source_team_plan: dev/nssf/team-execution-plan.md
+source_codegen_work_items: dev/nssf/codegen-work-items.yaml
+source_readiness_config: design/nssf/readiness-config.yaml
+generated_date: 2026-05-27
+
+# ─── 1. Lanes ─────────────────────────────────────────────────────────
+# team-execution-plan.md 의 5 lane H2 정의의 기계 표현.
+lanes:
+  - id: orchestrator
+    description: phase 진입 게이트 확인, lane 간 작업 큐 관리, blocker 라우팅, run state 갱신.
+    write_scope_allow:
+      - dev/<nf>/_implementation_run_state.yaml
+      - dev/<nf>/_run_state.yaml
+    write_scope_deny:
+      - src/**
+      - tests/**
+      - design/**
+      - docs/**
+      - dev/<nf>/codegen-work-items.yaml
+      - dev/<nf>/agent-execution-plan.yaml
+      - dev/<nf>/verification-matrix.yaml
+
+  - id: code
+    description: codegen-work-items.yaml 의 owner_lane=code 항목 구현, generated wrapper, handwritten module.
+    write_scope_allow:
+      - src/<nf>/**
+      - CMakeLists.txt
+      - infra/<nf>/**
+      - .github/workflows/readiness-check.yml  # cmake/ctest step 한정
+    write_scope_deny:
+      - tests/**
+      - design/**
+      - docs/adr/**
+      - engineering/**
+      - dev/<nf>/codegen-work-items.yaml
+      - specs/**
+
+  - id: reviewer
+    description: code lane 산출의 ADR-0004 security baseline / architecture / contract 일관성 review.
+    write_scope_allow:
+      - dev/<nf>/reviews/**  # 향후 디렉터리 도입 시
+    write_scope_deny:
+      - src/**
+      - tests/**
+      - design/**
+      - docs/**
+      - engineering/**
+    notes: PR comment 또는 reviews/ 디렉터리에 review 결과. 직접 코드 수정 금지 (PR redirect 만).
+
+  - id: tester
+    description: verification-plan.md 의 unit/integration/contract test 작성·실행.
+    write_scope_allow:
+      - tests/<nf>/**
+    write_scope_deny:
+      - src/<nf>/**
+      - design/**
+      - engineering/**
+
+  - id: verifier
+    description: verification-plan.md 의 security/e2e/observability gate 실행, signal yaml 수집, blocker 보고.
+    write_scope_allow:
+      - dev/<nf>/verification-logs/**  # 향후 디렉터리 도입 시
+      - dev/<nf>/signals/**
+    write_scope_deny:
+      - src/**
+      - tests/**
+
+# ─── 2. Phases ────────────────────────────────────────────────────────
+# /nf-implement SKILL.md 의 Phase 0~5 와 readiness-config phase_policy 를 통합.
+# Phase 1 은 wave 0 (tracer-bullet toolchain) + wave 1 (full feature wiring) 로
+# 분리 (PR #87 의 합의).
+phases:
+  - id: phase0_readiness_gate
+    name: readiness gate
+    description: readiness_pack_ready PASS 확인 후 phase1 진입.
+    work_items: []
+    status: completed
+    entry_gate: '/nf-readiness <nf> 의 모든 upstream gate PASS'
+    exit_gate:
+      - 'design/scripts/nf-readiness-status.py <nf> — gates.readiness_pack_ready.status == PASS'
+    required_checks:
+      - nf_readiness_pack_ready
+    active_lanes: [orchestrator]
+
+  - id: phase1_wave0
+    name: tracer-bullet toolchain
+    description: SKILL.md Phase 1 정의의 NSSF 산출 — toolchain skeleton + 501 stub 으로 vertical slice 증명.
+    work_items:
+      - WI-tracer-bullet-toolchain
+    status: completed
+    merged_pr: '#87'
+    entry_gate: phase0_readiness_gate.exit_gate PASS
+    exit_gate:
+      - cmake -S . -B build -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug configure PASS
+      - cmake --build build --parallel PASS (ASan/UBSan active)
+      - ctest --test-dir build --output-on-failure 1/1 PASS
+    required_checks:
+      - pytest_full_suite
+      - validate_artifact_catalog
+      - phase1_wave0_cmake_configure
+      - phase1_wave0_cmake_build
+      - phase1_wave0_ctest_smoke
+    active_lanes: [code, tester]
+
+  - id: phase1_wave1
+    name: NSSelectionGet full feature wiring
+    description: WI-codegen-bootstrap → ... → WI-nsselection-handler 까지 NSSelectionGet end-to-end 구현. wave 0 머지 후 진입.
+    work_items:
+      - WI-codegen-bootstrap
+      - WI-schema-bootstrap
+      - WI-tls-bootstrap
+      - WI-problem-details-wrapper
+      - WI-nftype-wrapper
+      - WI-availability-repo
+      - WI-selection-engine
+      - WI-nsselection-handler
+    status: not_started
+    entry_gate: phase1_wave0.exit_gate PASS
+    exit_gate:
+      - WI-nsselection-handler integration test PASS
+      - NSSelectionGet golden path 200 green
+      - contract test (NSSelectionGet response schema) PASS
+    required_checks:
+      - phase1_wave1_codegen_drift_check
+      - phase1_wave1_unit_tests_all_pass
+      - phase1_wave1_integration_nsselection_get_happy
+      - phase1_wave1_integration_nsselection_get_errors
+      - phase1_wave1_contract_nsselection_response_schema
+    active_lanes: [code, tester, reviewer]
+    prerequisite_decisions:
+      - 'library/stack decision pass (libcurl/libuv/uthash/zlog/valgrind 채택 여부) — 별도 PR 필요. Phase 1 wave 1 진입 전 ratify.'
+
+  - id: phase2
+    name: NSSAIAvailability writes
+    description: Put/Patch/Delete/Options 4 handler + retry_queue enqueue.
+    work_items:
+      - WI-availability-engine
+      - WI-availability-handlers
+      - WI-notification-dispatcher
+    status: not_started
+    entry_gate: phase1_wave1.exit_gate PASS
+    exit_gate:
+      - Put/Patch/Delete/Options integration test PASS
+      - retry_queue row enqueue 검증
+    required_checks:
+      - phase2_integration_put
+      - phase2_integration_patch
+      - phase2_integration_delete
+      - phase2_integration_options
+      - phase2_retry_queue_enqueue
+    active_lanes: [code, tester, reviewer]
+
+  - id: phase3
+    name: subscription
+    description: Post/Unsubscribe/SubModifyPatch 3 handler + initial snapshot dispatch.
+    work_items:
+      - WI-subscription-store
+      - WI-subscription-handlers
+    status: not_started
+    entry_gate: phase2.exit_gate PASS
+    exit_gate:
+      - subscription 3 op integration test PASS
+      - initial snapshot dispatch 검증
+    required_checks:
+      - phase3_integration_post
+      - phase3_integration_unsubscribe
+      - phase3_integration_submodifypatch
+      - phase3_initial_snapshot_dispatch
+    active_lanes: [code, tester, reviewer]
+
+  - id: phase4
+    name: contract / security / e2e verification
+    description: 8 op × 18 cause matrix + ADR-0004 7 항목 evidence + e2e 시나리오.
+    work_items:
+      - WI-contract-tests
+      - WI-security-tests
+      - WI-e2e-tests
+    status: not_started
+    entry_gate: phase3.exit_gate PASS
+    exit_gate:
+      - 8 op × 18 cause matrix green
+      - ADR-0004 7 항목 evidence emit
+      - e2e 시나리오 green
+    required_checks:
+      - phase4_contract_matrix
+      - phase4_security_baseline_evidence
+      - phase4_e2e_scenarios
+    active_lanes: [tester, verifier]
+
+  - id: phase5
+    name: hardening
+    description: metric/log/trace seam production-capable signal emit.
+    work_items:
+      - WI-observability-finalize
+    status: not_started
+    entry_gate: phase4.exit_gate PASS
+    exit_gate:
+      - metric / log / trace seam emit
+      - label cardinality 정책 freeze
+      - log redaction 정책 freeze
+      - trace sampler 정책 freeze
+    required_checks:
+      - phase5_metric_seam
+      - phase5_log_redaction
+      - phase5_trace_sampler
+    active_lanes: [code, verifier]
+
+# ─── 3. No-spec-reread policy ─────────────────────────────────────────
+# /nf-implement SKILL.md 의 invariant — autonomous codegen agent 는 specs/
+# 의 원본 OpenAPI / docx 를 *semantic decision / data model / API matrix
+# 도출* 목적으로 재독하지 않는다.
+no_spec_reread:
+  policy: |
+    codegen agent 는 specs/<spec>/ 의 원본 OpenAPI YAML / docx 를 semantic
+    decision / data model / API matrix 도출 목적으로 다시 읽지 않는다.
+    readiness pack (api-implementation-matrix.md, data-model-implementation-
+    map.md, codegen-work-items.yaml, spec-to-design-coverage.md) 이 충분한
+    입력이어야 한다.
+  allowed:
+    - id: source_trace
+      description: PR evidence / drift check reference 용도. 이미 결정된 내용이 어디서 왔는지 확인만.
+    - id: generator_input
+      description: openapi-generator 등 generator-only mode 입력. agent 가 의미 해석 안 함.
+  blocked:
+    - id: semantic_rediscovery
+      description: 'schema 가 어떤 의미인지 specs 에서 다시 봐야겠다 류의 재해석.'
+    - id: api_operation_rediscovery
+      description: API operation 의 비공개 행동을 specs 에서 새로 발견하는 시도.
+    - id: security_rediscovery
+      description: ADR-0004 외의 security 결정을 33.501 / 33.310 / 33.210 에서 재발견하는 시도. PR #33 정책 — security 는 project baseline 으로 흡수.
+  audit_target: dev/<nf>/_implementation_run_state.yaml
+  audit_field: spec_reread_audit[]
+  blocker_action: |
+    blocked entry 1건 이상 발생 시 wrapper 즉시 stop + /nf-readiness <nf>
+    reopen 안내. blocked rediscovery 가 필요했다는 것은 readiness pack 이
+    불완전하다는 증거.
+
+# ─── 4. Checkpoint / handoff 규칙 ─────────────────────────────────────
+checkpointing:
+  state_file: dev/<nf>/_implementation_run_state.yaml
+  state_schema_version: implementation-run-state-v1
+  state_gitignored: true
+  triggers:
+    - phase 시작
+    - phase 완료
+    - long-running step (cmake build, ctest) 직전
+    - blocker 발생
+    - context / usage risk (long-running run 의 안전 멈춤)
+  resume_invariant:
+    - field: readiness_generated_at
+      check: 현재 _readiness_status.yaml.generated_at 와 일치
+      mismatch_action: resume 거부 + /nf-readiness <nf> 재평가 안내
+  handoff_required_artifacts:
+    tracked:
+      - dev/<nf>/codegen-work-items.yaml
+      - dev/<nf>/team-execution-plan.md
+      - dev/<nf>/agent-execution-plan.yaml
+      - dev/<nf>/verification-matrix.yaml
+      - dev/<nf>/verification-plan.md
+      - dev/<nf>/api-implementation-matrix.md
+      - dev/<nf>/data-model-implementation-map.md
+      - dev/<nf>/spec-to-design-coverage.md
+      - dev/<nf>/open-gaps-and-assumptions.md
+      - design/<nf>/architecture/**
+      - engineering/<nf>/engineering-design.md
+    regenerable_gitignored:
+      - dev/<nf>/_readiness_status.yaml         # nf-readiness-status.py
+      - dev/<nf>/_impl_status.yaml              # nf-impl-status.py
+      - dev/<nf>/_implementation_run_state.yaml # /nf-implement run state
+      - design/<nf>/_contract_status.yaml       # nf-contract-check.py
+      - design/<nf>/_arch_status.yaml           # nf-arch-status.py
+      - engineering/<nf>/_engineering_status.yaml  # nf-eng-status.py
+
+# ─── 5. cross-ref ─────────────────────────────────────────────────────
+cross_references:
+  team_execution_plan: dev/nssf/team-execution-plan.md  # lane H2 prose 원본
+  codegen_work_items: dev/nssf/codegen-work-items.yaml   # WI item 정의
+  verification_matrix: dev/nssf/verification-matrix.yaml # check id 카탈로그
+  pr_slicing_plan: dev/nssf/pr-slicing-plan.yaml         # PR 단위 분할
+  skill_definition: .claude/skills/nf-implement/SKILL.md # Phase 0~5 contract
+  readiness_config: design/nssf/readiness-config.yaml    # phase_policy source

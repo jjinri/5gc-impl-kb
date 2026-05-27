@@ -1,0 +1,332 @@
+# NSSF Verification Matrix — check id 카탈로그
+#
+# autonomous agent 가 phase exit 시 *어떤 명령으로 무엇을 증명* 하는지를
+# 명시적으로 정의한다. agent-execution-plan.yaml 의 phases[].required_checks
+# 는 본 yaml 의 checks[].id 를 참조한다.
+#
+# 본 파일은 dev/nssf/verification-plan.md (사람 산문 + AUTO Unit/Integration/
+# Contract/E2E/Observability sub-section) 의 *기계 표현* 이다. verification-
+# plan.md AUTO 가 갱신되면 본 yaml 도 같이 갱신.
+schema_version: verification-matrix-v1
+nf: nssf
+stage: implementation-planning
+source_verification_plan: dev/nssf/verification-plan.md
+source_codegen_work_items: dev/nssf/codegen-work-items.yaml
+source_agent_execution_plan: dev/nssf/agent-execution-plan.yaml
+generated_date: 2026-05-27
+
+# ─── 1. Project-wide checks (모든 phase 진입/종료 시 의무) ─────────────
+checks:
+  - id: pytest_full_suite
+    command: '.venv/bin/python3 -m pytest tests/ -q'
+    proves: design/scripts validator + lifecycle script suite 회귀 없음
+    phase: ALL
+    work_item: ALL
+    required: true
+    pass_criteria: 'exit 0 + stdout "<N> passed" — 현재 baseline 94 passed'
+    run_in_ci: true
+    ci_step_name: 'pytest tests/ (full unit + integration suite)'
+
+  - id: validate_artifact_catalog
+    command: '.venv/bin/python3 design/scripts/validate-artifact-catalog.py'
+    proves: 'docs/lifecycle-artifacts.md §3 ↔ repo 산출 drift 없음'
+    phase: ALL
+    work_item: ALL
+    required: true
+    pass_criteria: 'exit 0 + "PASS N FAIL 0" stdout'
+    run_in_ci: true
+    ci_step_name: 'validate-artifact-catalog (drift guard for docs/lifecycle-artifacts.md §3)'
+
+  - id: nf_readiness_pack_ready
+    command: '.venv/bin/python3 design/scripts/nf-readiness-status.py nssf --no-write'
+    proves: aggregate gate readiness_pack_ready PASS (handoff_ready + contract_implementable + arch_consistent + impl_ready_for_codegen + eng_frozen)
+    phase: phase0_readiness_gate
+    work_item: ALL
+    required: true
+    pass_criteria: 'gates.readiness_pack_ready.status == PASS + blocked_by == []'
+    run_in_ci: false   # gitignored upstream status 가 fresh-clone 에 부재. /nf-readiness 가 선행 필요.
+
+  - id: nf_impl_status
+    command: '.venv/bin/python3 design/scripts/nf-impl-status.py nssf --no-write'
+    proves: impl_consistent + impl_ready_for_codegen PASS (WI graph self-consistent, 20 checks)
+    phase: phase0_readiness_gate
+    work_item: ALL
+    required: true
+    pass_criteria: 'gate impl_consistent PASS + gate impl_ready_for_codegen PASS'
+    run_in_ci: true
+    ci_step_name: 'nf-impl-status --no-write (validator gate)'
+
+  - id: nf_readiness_pack_generate_check
+    command: '.venv/bin/python3 design/scripts/nf-readiness-pack-generate.py nssf --check'
+    proves: 'readiness pack AUTO 섹션 drift 없음 (config-driven render PASS)'
+    phase: ALL
+    work_item: ALL
+    required: true
+    pass_criteria: '6/6 PASS (traceability, implementation-plan, test-matrix, team-execution-plan, open-gaps, verification-plan)'
+    run_in_ci: true
+    ci_step_name: 'nf-readiness-pack-generate --check (drift guard)'
+
+# ─── 2. Phase 1 wave 0 (tracer-bullet toolchain) ──────────────────────
+  - id: phase1_wave0_cmake_configure
+    command: 'cmake -S . -B build -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug'
+    proves: CMake configure 성공 + Unix Makefiles generator + Debug build type
+    phase: phase1_wave0
+    work_item: WI-tracer-bullet-toolchain
+    required: true
+    pass_criteria: 'exit 0 + stdout "Build files have been written"'
+    run_in_ci: true
+    ci_step_name: 'CMake configure (Unix Makefiles, Debug, sanitizers ON)'
+
+  - id: phase1_wave0_cmake_build
+    command: 'cmake --build build --parallel'
+    proves: ASan/UBSan 활성 빌드 성공, -Wall -Wextra -Werror clean (handwritten code)
+    phase: phase1_wave0
+    work_item: WI-tracer-bullet-toolchain
+    required: true
+    pass_criteria: 'exit 0 + nssf_transport + unity + test_nsselection_handler targets built'
+    run_in_ci: true
+    ci_step_name: 'CMake build'
+
+  - id: phase1_wave0_ctest_smoke
+    command: 'ctest --test-dir build --output-on-failure'
+    proves: nsselection_handler_smoke 5 assertion PASS, ASan/UBSan leak/UB 0
+    phase: phase1_wave0
+    work_item: WI-tracer-bullet-toolchain
+    required: true
+    pass_criteria: '"100% tests passed, 0 tests failed out of 1"'
+    run_in_ci: true
+    ci_step_name: 'ctest (Phase 1 tracer-bullet smoke)'
+
+# ─── 3. Phase 1 wave 1 (NSSelectionGet full feature wiring) ───────────
+  - id: phase1_wave1_codegen_drift_check
+    command: 'cmake --build build --target nssf_generated'
+    proves: WI-codegen-bootstrap openapi-generator 산출이 contract data-model 과 drift 없음 (Phase 3 진입 시점 활성)
+    phase: phase1_wave1
+    work_item: WI-codegen-bootstrap
+    required: true
+    pass_criteria: 'exit 0 + 14 contract data-model schema + TS29571 external dep emit'
+    run_in_ci: false   # WI-codegen-bootstrap 실 진입 후 활성
+    notes: 'WI-codegen-bootstrap PR (phase 1 wave 1 시작) 머지 시점에 CI step 추가 예정.'
+
+  - id: phase1_wave1_unit_tests_all_pass
+    command: 'ctest --test-dir build -R "^nssf_(generated_|schema_|tls_|oauth2_|problem_details_|nftype_|availability_repo_|selection_engine_)"'
+    proves: wave 1 의 7 WI 의 unit test 모두 PASS
+    phase: phase1_wave1
+    work_item:
+      - WI-codegen-bootstrap
+      - WI-schema-bootstrap
+      - WI-tls-bootstrap
+      - WI-problem-details-wrapper
+      - WI-nftype-wrapper
+      - WI-availability-repo
+      - WI-selection-engine
+    required: true
+    pass_criteria: '모든 매칭 test PASS'
+    run_in_ci: false
+
+  - id: phase1_wave1_integration_nsselection_get_happy
+    command: 'ctest --test-dir build -R nssf_nsselection_.*_happy'
+    proves: NSSelectionGet golden path 200 (AuthorizedNetworkSliceInfo)
+    phase: phase1_wave1
+    work_item: WI-nsselection-handler
+    required: true
+    pass_criteria: 'PASS'
+    run_in_ci: false
+
+  - id: phase1_wave1_integration_nsselection_get_errors
+    command: 'ctest --test-dir build -R nssf_nsselection_.*_errors'
+    proves: NSSelectionGet error path 403 / 404 / 414 / 500 정확 응답
+    phase: phase1_wave1
+    work_item: WI-nsselection-handler
+    required: true
+    pass_criteria: 'PASS'
+    run_in_ci: false
+
+  - id: phase1_wave1_contract_nsselection_response_schema
+    command: 'ctest --test-dir build -R nssf_nsselection_response_schema'
+    proves: handoff contract.yaml 의 NSSelectionGet response schema 와 byte-level 일치
+    phase: phase1_wave1
+    work_item: WI-nsselection-handler
+    required: true
+    pass_criteria: 'PASS'
+    run_in_ci: false
+
+# ─── 4. Phase 2 (NSSAIAvailability writes) ────────────────────────────
+  - id: phase2_integration_put
+    command: 'ctest --test-dir build -R nssf_nssaiavailability_put_integration'
+    proves: NSSAIAvailability Put handler 200/400/415 응답 정확
+    phase: phase2
+    work_item: WI-availability-handlers
+    required: true
+    pass_criteria: 'PASS'
+    run_in_ci: false
+
+  - id: phase2_integration_patch
+    command: 'ctest --test-dir build -R nssf_nssaiavailability_patch_integration'
+    proves: NSSAIAvailability Patch (RFC 6902 JSON Patch) handler 응답 정확
+    phase: phase2
+    work_item: WI-availability-handlers
+    required: true
+    pass_criteria: 'PASS'
+    run_in_ci: false
+
+  - id: phase2_integration_delete
+    command: 'ctest --test-dir build -R nssf_nssaiavailability_delete_integration'
+    proves: NSSAIAvailability Delete + cascade subscription tombstone
+    phase: phase2
+    work_item: WI-availability-handlers
+    required: true
+    pass_criteria: 'PASS'
+    run_in_ci: false
+
+  - id: phase2_integration_options
+    command: 'ctest --test-dir build -R nssf_nssaiavailability_options_integration'
+    proves: NSSAIAvailability Options Allow header 정확
+    phase: phase2
+    work_item: WI-availability-handlers
+    required: true
+    pass_criteria: 'PASS'
+    run_in_ci: false
+
+  - id: phase2_retry_queue_enqueue
+    command: 'ctest --test-dir build -R nssf_notification_dispatcher_'
+    proves: Put/Patch 후 NotificationDispatcher retry_queue 에 row enqueue
+    phase: phase2
+    work_item: WI-notification-dispatcher
+    required: true
+    pass_criteria: 'PASS'
+    run_in_ci: false
+
+# ─── 5. Phase 3 (subscription) ────────────────────────────────────────
+  - id: phase3_integration_post
+    command: 'ctest --test-dir build -R nssf_subscription_post_integration'
+    proves: subscription Post 201 + initial snapshot dispatch
+    phase: phase3
+    work_item: WI-subscription-handlers
+    required: true
+    pass_criteria: 'PASS'
+    run_in_ci: false
+
+  - id: phase3_integration_unsubscribe
+    command: 'ctest --test-dir build -R nssf_subscription_unsubscribe_integration'
+    proves: subscription Unsubscribe 204
+    phase: phase3
+    work_item: WI-subscription-handlers
+    required: true
+    pass_criteria: 'PASS'
+    run_in_ci: false
+
+  - id: phase3_integration_submodifypatch
+    command: 'ctest --test-dir build -R nssf_subscription_submodifypatch_integration'
+    proves: subscription SubModifyPatch (RFC 6902) 200
+    phase: phase3
+    work_item: WI-subscription-handlers
+    required: true
+    pass_criteria: 'PASS'
+    run_in_ci: false
+
+  - id: phase3_initial_snapshot_dispatch
+    command: 'ctest --test-dir build -R nssf_subscription_initial_snapshot'
+    proves: 신규 subscription 진입 시 initial snapshot 1회 dispatch
+    phase: phase3
+    work_item: WI-subscription-store
+    required: true
+    pass_criteria: 'PASS'
+    run_in_ci: false
+
+# ─── 6. Phase 4 (contract / security / e2e) ───────────────────────────
+  - id: phase4_contract_matrix
+    command: 'ctest --test-dir build -R nssf_contract_'
+    proves: 8 operation × 18 cause matrix green
+    phase: phase4
+    work_item: WI-contract-tests
+    required: true
+    pass_criteria: '8 × 18 = 144 case PASS'
+    run_in_ci: false
+
+  - id: phase4_security_baseline_evidence
+    command: 'ctest --test-dir build -R nssf_security_'
+    proves: ADR-0004 의 7 항목 baseline_mandate evidence emit
+    phase: phase4
+    work_item: WI-security-tests
+    required: true
+    pass_criteria: '7 mandate 모두 evidence + 0 violation'
+    run_in_ci: false
+
+  - id: phase4_e2e_scenarios
+    command: 'ctest --test-dir build -R nssf_e2e_'
+    proves: request-flow.md 의 핵심 e2e 시나리오 green
+    phase: phase4
+    work_item: WI-e2e-tests
+    required: true
+    pass_criteria: '모든 e2e 시나리오 PASS'
+    run_in_ci: false
+
+# ─── 7. Phase 5 (hardening) ───────────────────────────────────────────
+  - id: phase5_metric_seam
+    command: 'ctest --test-dir build -R nssf_observability_metric'
+    proves: metric seam (counter / histogram / gauge) production-capable signal emit
+    phase: phase5
+    work_item: WI-observability-finalize
+    required: true
+    pass_criteria: 'label cardinality 정책 준수 + 모든 seam emit'
+    run_in_ci: false
+
+  - id: phase5_log_redaction
+    command: 'ctest --test-dir build -R nssf_observability_log_redaction'
+    proves: log redaction 정책 — 민감 필드 (token, cert, user id) 미노출
+    phase: phase5
+    work_item: WI-observability-finalize
+    required: true
+    pass_criteria: 'redaction 모든 경우 PASS'
+    run_in_ci: false
+
+  - id: phase5_trace_sampler
+    command: 'ctest --test-dir build -R nssf_observability_trace_sampler'
+    proves: trace sampler 정책 (parent-based + ratio) freeze
+    phase: phase5
+    work_item: WI-observability-finalize
+    required: true
+    pass_criteria: 'sampler decision deterministic PASS'
+    run_in_ci: false
+
+# ─── 8. Cross-cutting CI gates ────────────────────────────────────────
+# 본 섹션은 codegen-work-items.yaml 의 개별 WI 가 아니라 readiness pack
+# transversal 검사. CI workflow (readiness-check.yml) 의 step 매핑.
+ci_pipeline:
+  workflow: .github/workflows/readiness-check.yml
+  steps:
+    - name: pytest tests/ (full unit + integration suite)
+      check_id: pytest_full_suite
+    - name: nf-manifest (refresh from tracked specs)
+      check_id: nf_manifest_refresh
+      command: 'python3 design/scripts/nf-manifest.py nssf --primary 29.531 --write'
+      proves: manifest 가 tracked specs 와 정합
+    - name: nf-seed-gen (handoff seed)
+      check_id: nf_seed_gen
+      command: 'python3 design/scripts/nf-seed-gen.py nssf'
+      proves: contract seed 갱신 deterministic
+    - name: materialize-contract (topics)
+      check_id: materialize_contract
+      command: 'python3 design/scripts/materialize-contract.py nssf --force'
+      proves: contract topic md 산출 deterministic
+    - name: build-handoff (contract.yaml)
+      check_id: build_handoff
+      command: 'python3 design/scripts/build-handoff.py nssf'
+      proves: handoff/nssf/contract.yaml 가 design source 와 정합
+    - name: nf-readiness-pack-generate --check (drift guard)
+      check_id: nf_readiness_pack_generate_check
+    - name: nf-impl-status --no-write (validator gate)
+      check_id: nf_impl_status
+    - name: validate-artifact-catalog (drift guard for docs/lifecycle-artifacts.md §3)
+      check_id: validate_artifact_catalog
+    - name: Install CMake + build-essential
+      check_id: ci_cmake_install
+      command: 'sudo apt-get install -y cmake build-essential'
+      proves: CI runner 에 build prerequisite 설치
+    - name: CMake configure (Unix Makefiles, Debug, sanitizers ON)
+      check_id: phase1_wave0_cmake_configure
+    - name: CMake build
+      check_id: phase1_wave0_cmake_build
+    - name: ctest (Phase 1 tracer-bullet smoke)
+      check_id: phase1_wave0_ctest_smoke

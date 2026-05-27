@@ -94,5 +94,8 @@ lane 별 진행 규칙.
 - `design/nssf/architecture/runtime-model.md` — module/process 모델.
 - `engineering/nssf/engineering-design.md` — runtime/library 결정.
 - `codegen-work-items.yaml`, `verification-plan.md`.
+- `agent-execution-plan.yaml` — lane/phase/no-spec-reread/checkpoint 기계 표현.
+- `verification-matrix.yaml` — check id 카탈로그 (phase exit gate 의 required_checks 가 본 yaml 참조).
+- `pr-slicing-plan.yaml` — autonomous implementation PR 단위 분할.
 - `docs/plans/2026-05-21-nf-readiness-implementation-workflow-upgrade-plan.md` §7.
 <!-- USER:references-body:end -->
