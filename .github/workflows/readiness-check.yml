@@ -21,6 +21,7 @@ on:
       - 'design/**'
       - 'dev/**'
       - 'engineering/**'
+      - 'infra/**'
       - 'src/**'
       - 'tests/**'
       - 'CMakeLists.txt'
@@ -33,6 +34,7 @@ on:
       - 'design/**'
       - 'dev/**'
       - 'engineering/**'
+      - 'infra/**'
       - 'src/**'
       - 'tests/**'
       - 'CMakeLists.txt'
@@ -84,6 +86,9 @@ jobs:
 
       - name: validate-execution-control-drift (drift guard for execution-control pack)
         run: python3 design/scripts/validate-execution-control-drift.py nssf
+
+      - name: verify-generated-models (WI-codegen-bootstrap oracle gate)
+        run: python3 design/scripts/verify-generated-models.py nssf
 
       # Phase 1 tracer-bullet — CMake configure / build / ctest (NSSelectionGet 501 stub).
       # Sanitizer (ASan/UBSan) 활성 Debug build. Phase 3 codegen 진입 시

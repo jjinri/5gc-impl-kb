@@ -17,16 +17,37 @@ source_engineering_design: engineering/nssf/engineering-design.md
 source_codegen_config: infra/nssf/codegen/openapi-generator-cli.config.yaml
 source_drift_allowlist: infra/nssf/codegen/drift-allowlist.yaml
 generated_date: 2026-05-27
-generator_status: phase1_wave0_stub  # WI-codegen-bootstrap 진입 시 'active' 로 갱신
+generator_status: active  # WI-codegen-bootstrap (PR #15) 진입 후 active.
 
-# ─── 1. Current Phase 1 wave 0 산출 ──────────────────────────────────
-# PR #87 가 만든 hand-written stub. WI-codegen-bootstrap 진입 시 교체.
+# ─── 1. Active generator pipeline (Phase 1 wave 1 — PR #15) ───────────
+# WI-codegen-bootstrap 진입 — openapi-generator-cli 7.10.0 가
+# specs/29.531/TS29531_Nnssf_NSSelection.yaml 입력 + TS29571/TS29510
+# bundle 으로 emit. regenerate.sh 가 deterministic regen.
+generator_pipeline:
+  tool: openapi-generator-cli
+  tool_version: 7.10.0
+  regenerator_script: infra/nssf/codegen/regenerate.sh
+  spec_inputs:
+    - specs/29.531/TS29531_Nnssf_NSSelection.yaml  # primary input
+    - specs/29.571/TS29571_CommonData.yaml         # external $ref bundle
+    - specs/29.510/TS29510_Nnrf_NFManagement.yaml  # external $ref bundle
+  emit_targets:
+    - src/nssf/generated/model/  (32 schemas — NSSelection + TS29571 transitive)
+    - src/nssf/generated/include/  (list, binary, keyValuePair utility headers)
+    - src/nssf/generated/external/  (cJSON 1.x, generator's pinned copy)
+
+# ─── 2. Boundary stubs (PR #87 산출, PR #15 에서도 유지) ──────────────
+# src/nssf/generated/api/NSSelectionGet.h 는 PR #87 의 handwritten stub.
+# 본 PR (#15) 은 generator 의 api/ (HTTP client) 를 commit 하지 않음 — NSSF
+# runtime 은 nghttp2 server + handwritten transport handler 사용. 따라서
+# boundary stub 의 NSSF_GENERATED_BOUNDARY_STUB marker 는 *유지* — wrapper
+# 본체 PR (PR-phase1-wave1-nsselection-handler) 까지 잔존.
 phase1_wave0_stubs:
   - path: src/nssf/generated/api/NSSelectionGet.h
     kind: handwritten_stub
     marker: 'NSSF_GENERATED_BOUNDARY_STUB'
-    replace_during: WI-codegen-bootstrap
-    rationale: 'Phase 1 wave 0 tracer-bullet 의 generator boundary 표현. Phase 1 wave 1 진입 시 openapi-generator output 으로 교체.'
+    replace_during: PR-phase1-wave1-nsselection-handler
+    rationale: 'Phase 1 wave 0 tracer-bullet 의 generator boundary 표현. NSSF runtime 이 generator api/ 를 link 안 하므로 본 PR (#15) 에서도 미교체. wrapper PR 진입 시 실 handler 로 교체.'
 
 # ─── 2. Phase 1 wave 1 (WI-codegen-bootstrap) 예상 산출 ───────────────
 # openapi-generator(C) + cJSON serializer 가 emit 할 model schema.
