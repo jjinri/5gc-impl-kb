@@ -21,7 +21,9 @@ on:
       - 'design/**'
       - 'dev/**'
       - 'engineering/**'
+      - 'src/**'
       - 'tests/**'
+      - 'CMakeLists.txt'
       - '.claude/skills/**'
       - '.github/workflows/readiness-check.yml'
   push:
@@ -31,7 +33,9 @@ on:
       - 'design/**'
       - 'dev/**'
       - 'engineering/**'
+      - 'src/**'
       - 'tests/**'
+      - 'CMakeLists.txt'
       - '.claude/skills/**'
       - '.github/workflows/readiness-check.yml'
 
@@ -77,3 +81,18 @@ jobs:
 
       - name: validate-artifact-catalog (drift guard for docs/lifecycle-artifacts.md §3)
         run: python3 design/scripts/validate-artifact-catalog.py
+
+      # Phase 1 tracer-bullet — CMake configure / build / ctest (NSSelectionGet 501 stub).
+      # Sanitizer (ASan/UBSan) 활성 Debug build. Phase 3 codegen 진입 시
+      # WI-codegen-bootstrap 가 본 step 의 generated/ 디렉터리 stub 을 교체한다.
+      - name: Install CMake + build-essential
+        run: sudo apt-get update && sudo apt-get install -y cmake build-essential
+
+      - name: CMake configure (Unix Makefiles, Debug, sanitizers ON)
+        run: cmake -S . -B build -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug
+
+      - name: CMake build
+        run: cmake --build build --parallel
+
+      - name: ctest (Phase 1 tracer-bullet smoke)
+        run: ctest --test-dir build --output-on-failure
