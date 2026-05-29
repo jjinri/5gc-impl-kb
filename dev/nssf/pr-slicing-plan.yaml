@@ -32,6 +32,14 @@ policy:
 plan_history:
   - '#90 merged — execution-control drift validator + CI gate.'
   - '#91 merged — Phase 1 wave 1 dependency prep + apt sanity probe.'
+  - '#92 merged — WI-codegen-bootstrap (openapi-generator + cJSON vendoring).'
+  - '#97 merged — Phase 1 wave 1 P0 wrapper prep.'
+  - '#98 merged — WI-problem-details-wrapper + codegen gap follow-up.'
+  - '#99 merged — WI-nftype-wrapper.'
+  - '#100 merged — handoff doc 2026-05-29.'
+  - '#101 merged — WI-schema-bootstrap (PostgreSQL bootstrap).'
+  - '#103 merged — autonomous-runner PR-A 정책 freeze (ADR-0005 + plan + CONTEXT glossary).'
+  - '#104 merged — autonomous-runner PR-B 인프라 (5 agent + slice picker + security drift + retro CI).'
 
 # ─── 2. PR 시퀀스 ─────────────────────────────────────────────────────
 prs:
@@ -460,3 +468,98 @@ prs:
       - phase5_log_redaction
       - phase5_trace_sampler
     estimated_loc: 1500
+
+# ─── 3. Autonomous runner rollout pack ────────────────────────────────
+# ADR-0005 의 자율 runner infrastructure 도입 PR 시퀀스. 본 4 PR 은 *meta
+# layer* — `/nf-implement` 자체를 구축. self-merge 권한 (ADR-0005 D1) 은 본
+# 4 PR 에 적용되지 *않는다* (bootstrap chicken-and-egg). NSSF feature slice
+# 의 자율 진행은 본 4 PR 머지 후부터 시작.
+#
+# 본 pack 의 PR 들이 next-slice picker 의 graph 에 포함되므로 PR-D 머지 후
+# 자동으로 NSSF wave 1 잔여 slice 로 picker 가 이동한다.
+
+  - id: PR-autonomous-runner-policy
+    title: 'docs(adr-0005): autonomous implementation policy — PR-A 정책 freeze'
+    phase: meta_autonomous_runner_rollout
+    work_items: []
+    scope_files:
+      - docs/adr/ADR-0005-autonomous-implementation-policy.md
+      - docs/plans/2026-05-29-nf-implement-autonomous-runner-grill.md
+      - CLAUDE.md
+      - CONTEXT.md
+    depends_on:
+      - PR-phase1-wave1-schema-bootstrap
+    status: merged
+    merged_pr: 'https://github.com/jjinri/5gc-impl-kb/pull/103'
+    required_checks: []   # docs-only, no readiness-check trigger.
+    estimated_loc: 464
+    notes: |
+      ADR-0005 D1~D7 + 11 분기 plan freeze + CONTEXT glossary 6 용어 +
+      CLAUDE.md 의사결정/lifecycle § 단서. 사람 review/merge.
+
+  - id: PR-autonomous-runner-infrastructure
+    title: 'feat(nf-implement): PR-B — autonomous runner infrastructure'
+    phase: meta_autonomous_runner_rollout
+    work_items: []
+    scope_files:
+      - .claude/agents/nf-orchestrator.md
+      - .claude/agents/nf-code.md
+      - .claude/agents/nf-reviewer.md
+      - .claude/agents/nf-tester.md
+      - .claude/agents/nf-verifier.md
+      - design/scripts/nf-implement-slice-status.py
+      - infra/security/baseline-patterns.yaml
+      - tests/security_patterns/__init__.py
+      - tests/security_patterns/test_baseline_retro.py
+      - tests/security_patterns/fixtures/positive_violations.c
+      - .github/workflows/readiness-check.yml
+    depends_on:
+      - PR-autonomous-runner-policy
+    status: merged
+    merged_pr: 'https://github.com/jjinri/5gc-impl-kb/pull/104'
+    required_checks:
+      - readiness-check   # full pytest + agent paths trigger.
+    estimated_loc: 1088
+    notes: |
+      5 NF-agnostic lane subagent + deterministic next-slice picker +
+      Layer A security drift pattern + retro-test CI gate. 사람 review/merge.
+
+  - id: PR-autonomous-runner-runner-skill
+    title: 'feat(nf-implement): PR-C — SKILL.md runner rewrite + plan-amendment template'
+    phase: meta_autonomous_runner_rollout
+    work_items: []
+    scope_files:
+      - .claude/skills/nf-implement/SKILL.md
+      - dev/nssf/plan-amendments/README.md
+      - dev/nssf/plan-amendments/_template.md
+      - dev/nssf/pr-slicing-plan.yaml
+    depends_on:
+      - PR-autonomous-runner-infrastructure
+    status: in_progress
+    required_checks:
+      - readiness-check
+    estimated_loc: 600
+    notes: |
+      skeleton → runner 본문 rewrite + state schema v1 → v2 확장 inline 문서 +
+      plan-amendment 1-pager template + 본 pr-slicing-plan 의
+      autonomous-runner-rollout pack section. 사람 review/merge.
+
+  - id: PR-autonomous-runner-nssf-first-slice
+    title: 'feat(nssf): PR-D — NSSF 첫 자율 slice (dry-run + 1 slice 실증)'
+    phase: meta_autonomous_runner_rollout
+    work_items: []
+    scope_files:
+      - dev/nssf/_implementation_run_state.yaml   # evidence 첨부 (gitignored)
+      - dev/nssf/plan-amendments/2026-XX-XX-nssf-wave1-status-sync.md
+    depends_on:
+      - PR-autonomous-runner-runner-skill
+    status: not_started
+    required_checks:
+      - readiness-check
+    estimated_loc: 200
+    notes: |
+      bootstrap exception — 본 PR 도 사람 review/merge. 본 PR 의 산출 =
+      `/nf-implement nssf --dry-run` evidence + 첫 자율 slice 결과
+      (NSSF wave 1 stale status 정합을 위한 plan amendment 가 orchestrator
+      가 자율 작성한 *첫* artifact 가 될 수 있다 — 자율 작동 자체의 자기
+      검증).
