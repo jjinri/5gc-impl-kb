@@ -17,8 +17,14 @@ set(NSSF_GENERATED_EXTERNAL_DIR "${CMAKE_CURRENT_SOURCE_DIR}/external")
 file(GLOB NSSF_GENERATED_MODEL_SOURCES CONFIGURE_DEPENDS
     "${NSSF_GENERATED_MODEL_DIR}/*.c")
 
+# generated/include runtime — list.h 의 .c 구현 보충 (PR #92 후속). 향후
+# regenerate.sh 가 supportingFiles 활성하면 자동 emit 으로 교체된다.
+file(GLOB NSSF_GENERATED_INCLUDE_SOURCES CONFIGURE_DEPENDS
+    "${NSSF_GENERATED_INCLUDE_DIR}/*.c")
+
 add_library(nssf_generated STATIC
     ${NSSF_GENERATED_MODEL_SOURCES}
+    ${NSSF_GENERATED_INCLUDE_SOURCES}
     ${NSSF_GENERATED_EXTERNAL_DIR}/cJSON.c)
 
 target_include_directories(nssf_generated PUBLIC

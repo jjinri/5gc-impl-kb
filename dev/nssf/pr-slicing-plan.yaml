@@ -214,14 +214,28 @@ prs:
       - WI-problem-details-wrapper
     scope_files:
       - src/nssf/wrappers/nf_problem_details_wrapper.{h,c}
+      - src/nssf/wrappers/CMakeLists.txt
+      - src/nssf/CMakeLists.txt
       - tests/nssf/unit/test_problem_details_factory.c
       - tests/nssf/unit/test_problem_details_headers.c
+      - tests/nssf/CMakeLists.txt
+      # PR #92 codegen runtime gap 보충 (scope expansion).
+      - src/nssf/generated/include/list.c
+      - src/nssf/generated/include/codegen_shim.c
+      - src/nssf/generated/CMakeLists.txt
     depends_on:
       - PR-phase1-wave1-codegen-bootstrap
-    status: not_started
+    status: in_progress
     required_checks:
       - pytest_full_suite
     estimated_loc: 800
+    notes: |
+      Phase 1 wave 1 wrapper PR. WI 산출 외 PR #92 codegen runtime gap 2종
+      보충 — generated/include/list.c (generator supportingFiles 미활성으로
+      누락) + generated/include/codegen_shim.c (access_token_{err,req}.c
+      enum field convertToJSON 의 name-mangling 버그 alias). 본 PR 가 첫
+      실사용자라 같은 PR 에 묶음. 향후 regenerate.sh / openapi-generator
+      config 갱신으로 정상 emit 시 본 보충 파일은 dead code 가 되어 제거.
 
   - id: PR-phase1-wave1-nftype-wrapper
     title: 'feat(nssf): WI-nftype-wrapper — anyOf passthrough policy'
