@@ -225,7 +225,8 @@ prs:
       - src/nssf/generated/CMakeLists.txt
     depends_on:
       - PR-phase1-wave1-codegen-bootstrap
-    status: in_progress
+    status: merged
+    merged_pr: 'https://github.com/jjinri/5gc-impl-kb/pull/98'
     required_checks:
       - pytest_full_suite
     estimated_loc: 800
@@ -244,10 +245,12 @@ prs:
       - WI-nftype-wrapper
     scope_files:
       - src/nssf/wrappers/nf_type_wrapper.{h,c}
+      - src/nssf/wrappers/CMakeLists.txt
       - tests/nssf/unit/test_nftype_wrapper.c
+      - tests/nssf/CMakeLists.txt
     depends_on:
       - PR-phase1-wave1-codegen-bootstrap
-    status: not_started
+    status: in_progress
     required_checks:
       - pytest_full_suite
     estimated_loc: 400
