@@ -86,3 +86,8 @@ target_compile_features(test_nftype_wrapper PRIVATE c_std_11)
 
 add_test(NAME nssf_nftype_wrapper
          COMMAND test_nftype_wrapper)
+
+# Phase 1 wave 1 WI-schema-bootstrap — PostgreSQL bootstrap integration test.
+# libpq fixture, ctest -R nssf_schema_bootstrap 매칭. libpq 부재 또는
+# POSTGRES_* env 미주입 시 SKIP PASS 로 회피.
+add_subdirectory(integration)

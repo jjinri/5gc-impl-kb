@@ -36,7 +36,7 @@ tables:
       - 'tai JSONB NOT NULL'
       - 'snssais JSONB NOT NULL'
       - 'amf_set_id TEXT'
-      - 'reallocation_indication BOOLEAN DEFAULT FALSE'
+      - 'reallocation_indication BOOLEAN NOT NULL DEFAULT FALSE'
       - 'created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()'
       - 'updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()'
     indexes:
@@ -50,7 +50,7 @@ tables:
       - 'callback_url TEXT NOT NULL'
       - 'filter JSONB NOT NULL'
       - 'expiry_at TIMESTAMPTZ'  # G-10 default 24h
-      - 'tombstone BOOLEAN DEFAULT FALSE'  # cascade delete signal
+      - 'tombstone BOOLEAN NOT NULL DEFAULT FALSE'  # cascade delete signal
       - 'created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()'
     indexes:
       - 'CREATE INDEX subscription_expiry_idx ON subscription (expiry_at) WHERE tombstone = FALSE'
