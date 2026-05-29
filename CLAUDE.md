@@ -29,6 +29,7 @@ NF 개발 단계 이름은 [`docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`](
 - `/nf-impl-plan` 은 architecture 문서를 구현 작업·테스트·traceability 계획으로 변환하는 canonical skill 이다. 소스 코드나 build system 을 만들지 않는다.
 - user-facing lifecycle skill 이 다음 user-facing lifecycle skill 을 자동 호출하지 않는다. 같은 단계의 필수 script/check 만 내부 실행하고, 다음 단계는 추천으로 보고한다.
 - `handoff_ready` 는 상세 아키텍처 설계를 시작할 수 있는 contract 입력이 충분하다는 뜻이다. 상세 아키텍처와 구현 계획은 별도 단계다.
+- `/nf-implement <nf>` 의 자율 runner 정책 (orchestrator self-merge, 5 lane subagent, chain self-respawn, 3-tier retry, drift 검출) 은 [`docs/adr/ADR-0005-autonomous-implementation-policy.md`](./docs/adr/ADR-0005-autonomous-implementation-policy.md) 를 따른다. 본 wrapper 는 readiness_pack_ready PASS 이후 phase 5 종료 또는 3-trigger escape (ADR 신설 / `eng_frozen` 변경 / ADR-0004 영향) 까지 자율 진행한다.
 
 ## Source-of-truth policy
 
@@ -53,6 +54,8 @@ Git 작업 원칙은 [`AGENTS.md`](./AGENTS.md) 를 따른다.
 ## 의사결정 제시
 
 비-trivial 의사결정을 사용자에게 선택지로 제시할 때, 진행 옵션과 나란히 **"Pane 2 에 의사결정 리뷰 요청"** (다른 pane 의 독립 인스턴스 second-opinion) 을 *항상* 선택지 중 하나로 포함한다. 본 repo 의 비-trivial = plan → second-opinion → PR 패턴상 분기 결정은 교차검토가 기본이다. trivial·되돌리기 쉬운 결정은 제외. self/other pane 구분은 `AGENTS.md` 와 memory 규칙을 따른다.
+
+**Autonomous slice 예외 (ADR-0005).** `/nf-implement <nf>` orchestrator 가 진행 중인 NSSF feature slice 의 *PR 사이클 진행 결정* (다음 slice 선택, lane dispatch, self-merge gate 통과 시 머지) 은 비-trivial 의사결정이 아니다 — orchestrator 자율. 단 plan amendment (`pr-slicing-plan.yaml` 갱신) / ADR 신설 / `eng_frozen` 변경 / ADR-0004 security baseline 영향 결정은 본 § 적용 — Pane 2 옵션 유지.
 
 ---
 
