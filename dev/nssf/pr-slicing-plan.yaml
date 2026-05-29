@@ -179,10 +179,13 @@ prs:
     scope_files:
       - infra/nssf/schema.sql
       - infra/nssf/schema_README.md
+      - infra/nssf/migrations/manifest.yaml
       - tests/nssf/integration/test_schema_bootstrap.c
+      - tests/nssf/integration/CMakeLists.txt
+      - tests/nssf/CMakeLists.txt
     depends_on:
       - PR-phase1-wave1-codegen-bootstrap
-    status: not_started
+    status: in_progress
     required_checks:
       - pytest_full_suite
     estimated_loc: 400
@@ -250,7 +253,8 @@ prs:
       - tests/nssf/CMakeLists.txt
     depends_on:
       - PR-phase1-wave1-codegen-bootstrap
-    status: in_progress
+    status: merged
+    merged_pr: 'https://github.com/jjinri/5gc-impl-kb/pull/99'
     required_checks:
       - pytest_full_suite
     estimated_loc: 400
