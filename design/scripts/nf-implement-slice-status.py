@@ -32,6 +32,7 @@ agent 의 책임.
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import pathlib
 import subprocess
@@ -166,8 +167,29 @@ def render_human(payload: dict[str, Any]) -> str:
     return yaml.safe_dump(payload, sort_keys=False, allow_unicode=True)
 
 
+def _json_safe(value: Any) -> Any:
+    if isinstance(value, (dt.datetime, dt.date)):
+        return value.isoformat()
+    if isinstance(value, dict):
+        return {str(k): _json_safe(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_json_safe(v) for v in value]
+    if isinstance(value, tuple):
+        return [_json_safe(v) for v in value]
+    return value
+
+
 def render_json(payload: dict[str, Any]) -> str:
-    return json.dumps(payload, indent=2, sort_keys=False, ensure_ascii=False)
+    return json.dumps(_json_safe(payload), indent=2, sort_keys=False, ensure_ascii=False)
+
+
+def _display_path(path: pathlib.Path) -> str:
+    if path.is_absolute():
+        try:
+            return str(path.relative_to(REPO))
+        except ValueError:
+            return str(path)
+    return str(path)
 
 
 def build_payload(nf: str, plan_path: pathlib.Path, state_path: pathlib.Path,
@@ -187,8 +209,8 @@ def build_payload(nf: str, plan_path: pathlib.Path, state_path: pathlib.Path,
         }
     return {
         "nf": nf,
-        "plan": str(plan_path.relative_to(REPO)) if plan_path.is_absolute() else str(plan_path),
-        "state": str(state_path.relative_to(REPO)) if state_path.is_absolute() else str(state_path),
+        "plan": _display_path(plan_path),
+        "state": _display_path(state_path),
         "next_slice": {
             "id": next_pr["id"],
             "title": next_pr.get("title"),

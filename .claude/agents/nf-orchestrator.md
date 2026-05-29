@@ -120,6 +120,12 @@ audit = `state.spec_reread_audit[].purpose`. blocked entry 1개 = 즉시 stop +
 dispatch 시 prompt 에 다음 inject.
 
 - slice id + scope_files + depends_on.
+- lane-partitioned scope_files:
+  - nf-code: non-test implementation/codegen entries (`src/<nf>/**`,
+    `src/<nf>/generated/**`, `infra/<nf>/codegen/**`, exact `design/scripts/*`
+    helpers) that are explicitly present in the slice scope.
+  - nf-tester: test entries (`tests/<nf>/**`) explicitly present in the slice scope.
+  - nf-reviewer/nf-verifier: full slice scope_files for scope and gate checking.
 - relevant readiness pack 발췌 (api-implementation-matrix / data-model-implementation-map / codegen-work-items 의 해당 WI 만).
 - 본 lane 의 책임 범위 (team-execution-plan.md user_sections override 우선).
 - No Spec Semantic Rediscovery rule.

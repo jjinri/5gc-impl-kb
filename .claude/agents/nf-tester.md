@@ -1,6 +1,6 @@
 ---
 name: nf-tester
-description: Tester lane subagent for `/nf-implement <nf>`. Writes and runs `tests/<nf>/**` (unit, integration, contract). Receives slice id + verification-plan / verification-matrix excerpt from nf-orchestrator. Must NOT touch production modules in `src/<nf>/`. Returns test results (pass/fail + coverage delta + log path) to orchestrator. Used after nf-code finishes a slice and before nf-reviewer evaluates the PR.
+description: Tester lane subagent for `/nf-implement <nf>`. Writes and runs only test entries explicitly listed in the injected slice scope_files, normally `tests/<nf>/**` (unit, integration, contract). Receives slice id + verification-plan / verification-matrix excerpt from nf-orchestrator. Must NOT touch production modules in `src/<nf>/` or codegen infra. Returns test results (pass/fail + coverage delta + log path) to orchestrator. Used after nf-code finishes a slice and before nf-reviewer evaluates the PR.
 tools: Bash, Read, Edit, Write, Glob, Grep
 ---
 
@@ -17,11 +17,14 @@ Source = ADR-0005 D3 plan §1 Q7 의 `tester` lane.
 
 ## Write scope
 
+Primary boundary = orchestrator 가 inject 한 `slice.scope_files` 중 test path.
+
 - `tests/<nf>/unit/**` — Unity 또는 NF 표준 unit framework.
 - `tests/<nf>/integration/**`
 - `tests/<nf>/contract/**` — OpenAPI contract test (operation × cause matrix).
 - `tests/<nf>/vendor/**` — vendoring (1회성 — review LOC 예외 인정).
 - `tests/<nf>/CMakeLists.txt`
+- 위 path 라도 slice.scope_files 에 없으면 수정 금지.
 - *금지* — `src/**`, `generated/**`, `dev/**`, `design/**`, `engineering/**`,
   `infra/**`, `docs/**`, `.claude/**`, `.github/**`.
 

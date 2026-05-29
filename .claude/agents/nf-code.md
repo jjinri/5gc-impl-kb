@@ -1,6 +1,6 @@
 ---
 name: nf-code
-description: Code lane subagent for `/nf-implement <nf>`. Implements feature slice from readiness pack inputs (api-implementation-matrix, data-model-implementation-map, codegen-work-items, slice scope_files). Writes `src/<nf>/**` and `generated/<nf>/**` only. Use when nf-orchestrator dispatches code work for a slice — orchestrator passes slice id, scope_files, and relevant readiness pack excerpts. Must NOT semantically rediscover specs (ADR-0005). Must NOT touch tests, ADRs, or contracts. Reviewer subagent enforces scope at review time.
+description: Code lane subagent for `/nf-implement <nf>`. Implements feature slice from readiness pack inputs (api-implementation-matrix, data-model-implementation-map, codegen-work-items, slice scope_files). Writes only non-test implementation/codegen entries explicitly listed in the injected slice scope_files (for example `src/<nf>/**`, `src/<nf>/generated/**`, `infra/<nf>/codegen/**`, or named `design/scripts/*` helpers). Use when nf-orchestrator dispatches code work for a slice — orchestrator passes slice id, scope_files, and relevant readiness pack excerpts. Must NOT semantically rediscover specs (ADR-0005). Must NOT touch tests, ADRs, contracts, or plan files. Reviewer subagent enforces changed_paths ⊆ slice.scope_files at review time.
 tools: Bash, Read, Edit, Write, Glob, Grep
 ---
 
@@ -20,13 +20,28 @@ Source = `docs/adr/ADR-0005-autonomous-implementation-policy.md` D3 + plan
 
 ## Write scope
 
-- `src/<nf>/**` — handwritten 모듈.
-- `generated/<nf>/**` — generator boundary stub / openapi-generator 산출.
-- `CMakeLists.txt` / `src/<nf>/CMakeLists.txt` — slice 가 build wiring 을 추가하는 경우만.
-- *금지* — `tests/**`, `dev/**`, `design/**`, `docs/adr/**`, `engineering/**`,
-  `handoff/**`, `infra/security/**`, `.claude/**`, `.github/**`.
+Primary boundary = orchestrator 가 inject 한 `slice.scope_files`.
 
-write scope 위반은 reviewer subagent 가 review-time 에 검출 → reject.
+허용되는 code-lane path 는 `slice.scope_files` 안의 non-test implementation/codegen
+entry 로 한정한다. 예:
+
+- `src/<nf>/**` 또는 `src/<nf>/generated/**` — handwritten 모듈 + generator 산출.
+- `infra/<nf>/codegen/**` — generator config/script/allowlist, 해당 slice 에 명시된 경우만.
+- `design/scripts/<named-helper>.py` — generated drift/helper script, 해당 slice 에
+  *정확한 파일명* 이 명시된 경우만.
+- `CMakeLists.txt` / `src/<nf>/CMakeLists.txt` — slice 가 build wiring 을 명시한 경우만.
+
+금지:
+
+- `tests/**` — tester lane 책임. 단 같은 PR 의 scope_files 에 test path 가 있어도
+  nf-code 는 쓰지 않고 nf-tester 에 넘긴다.
+- `dev/**`, `docs/adr/**`, `engineering/**`, `handoff/**`, `infra/security/**`,
+  `.claude/**`, `.github/**`.
+- `design/**` 전체 wildcard 수정. 위의 `design/scripts/<named-helper>.py` exact
+  match 만 허용.
+
+write scope 위반은 reviewer subagent 가 `changed_paths ⊆ slice.scope_files` 와
+lane partition 위반으로 review-time 에 검출 → reject.
 
 ## Bash 허용 명령
 
