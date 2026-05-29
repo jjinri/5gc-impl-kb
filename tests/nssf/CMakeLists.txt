@@ -35,3 +35,36 @@ target_compile_options(test_generated_smoke PRIVATE -Wall -Wextra)
 
 add_test(NAME generated_smoke
          COMMAND test_generated_smoke)
+
+# Phase 1 wave 1 WI-problem-details-wrapper — RFC 7807 factory + mandatory
+# header metadata. dev/nssf/error-cause-catalog.yaml 의 18 production cause
+# 와 1:1 매핑.
+add_executable(test_problem_details_factory
+    unit/test_problem_details_factory.c)
+
+target_link_libraries(test_problem_details_factory
+    PRIVATE
+        unity
+        nssf_wrappers
+        nssf_sanitizers)
+
+target_compile_features(test_problem_details_factory PRIVATE c_std_11)
+target_compile_options(test_problem_details_factory PRIVATE -Wall -Wextra)
+
+add_test(NAME nssf_problem_details_factory
+         COMMAND test_problem_details_factory)
+
+add_executable(test_problem_details_headers
+    unit/test_problem_details_headers.c)
+
+target_link_libraries(test_problem_details_headers
+    PRIVATE
+        unity
+        nssf_wrappers
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_problem_details_headers PRIVATE c_std_11)
+
+add_test(NAME nssf_problem_details_headers
+         COMMAND test_problem_details_headers)

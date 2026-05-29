@@ -1,3 +1,5 @@
+add_subdirectory(wrappers)
+
 add_library(nssf_transport STATIC
     transport/nsselection_handler.c)
 
