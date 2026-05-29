@@ -193,10 +193,14 @@ prs:
       - tests/nssf/CMakeLists.txt
     depends_on:
       - PR-phase1-wave1-codegen-bootstrap
-    status: in_progress
+    status: merged
+    merged_pr: 'https://github.com/jjinri/5gc-impl-kb/pull/101'
     required_checks:
       - pytest_full_suite
     estimated_loc: 400
+    notes: |
+      status sync — plan-amendments/2026-05-29-nssf-wave1-status-sync.md
+      (PR-D bootstrap manual sync).
 
   - id: PR-phase1-wave1-tls-bootstrap
     title: 'feat(nssf): WI-tls-bootstrap — TLS context + OAuth2 JWKS + scope check'
