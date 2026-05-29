@@ -68,3 +68,21 @@ target_compile_features(test_problem_details_headers PRIVATE c_std_11)
 
 add_test(NAME nssf_problem_details_headers
          COMMAND test_problem_details_headers)
+
+# Phase 1 wave 1 WI-nftype-wrapper — NFType anyOf passthrough policy (G-09).
+# design/nssf/contract/data-model/NFType.json 의 67 known enum + unknown
+# passthrough wrapper.
+add_executable(test_nftype_wrapper
+    unit/test_nftype_wrapper.c)
+
+target_link_libraries(test_nftype_wrapper
+    PRIVATE
+        unity
+        nssf_wrappers
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_nftype_wrapper PRIVATE c_std_11)
+
+add_test(NAME nssf_nftype_wrapper
+         COMMAND test_nftype_wrapper)

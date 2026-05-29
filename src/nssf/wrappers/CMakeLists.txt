@@ -4,7 +4,8 @@
 # problem_details / nf_type 등 schema 위에 RFC 7807 factory · anyOf passthrough
 # wrapper 를 제공한다.
 add_library(nssf_wrappers STATIC
-    nf_problem_details_wrapper.c)
+    nf_problem_details_wrapper.c
+    nf_type_wrapper.c)
 
 target_include_directories(nssf_wrappers PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR})
