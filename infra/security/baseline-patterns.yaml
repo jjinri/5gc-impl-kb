@@ -1,0 +1,168 @@
+# Project Security Baseline drift detection patterns.
+#
+# ADR-0005 D7 Layer A — deny/allow regex 매칭으로 PR diff 의 ADR-0004
+# baseline mandate 위반을 detect 한다. nf-reviewer subagent 가 본 yaml 을
+# read-only 로 사용. tests/security_patterns/test_baseline_retro.py 가
+# false-positive 0 으로 retro-test.
+#
+# ADR-0004 의 normative source 는 design/policies/security-baseline.yaml.
+# 본 yaml 은 그 mandate 를 *코드 표면 패턴* 으로 번역.
+#
+# severity:
+#   block    — nf-reviewer 가 PR reject. orchestrator self-merge 금지.
+#   advisory — 보고만. PR reject 사유 아님.
+#
+# Layer B (semantic config-source check) 는 본 yaml 의 `b_*` prefix 패턴 이며
+# AST 한계로 false negative 허용. primary block 은 `a_*` Layer A 패턴.
+
+schema_version: security-baseline-patterns-v1
+rationale_source:
+  - docs/adr/ADR-0004-project-security-baseline.md
+  - docs/adr/ADR-0005-autonomous-implementation-policy.md
+  - design/policies/security-baseline.yaml
+
+# 적용 범위 — 본 yaml 은 NF source 와 generated wrapper 만 검사. 테스트나
+# fixture, vendoring 은 의도적 제외.
+default_applies_to:
+  - 'src/**/*.c'
+  - 'src/**/*.h'
+  - 'src/**/*.cpp'
+  - 'src/**/*.hpp'
+  - 'generated/**/*.c'
+  - 'generated/**/*.h'
+
+# 의도적 검사 제외 — vendoring 또는 외부 reference.
+exclude_globs:
+  - 'tests/**'
+  - 'src/**/vendor/**'
+  - 'generated/**/vendor/**'
+  - 'infra/**/vendor/**'
+
+patterns:
+
+  # ─── M1 — internal_https_tls_code_path ─────────────────────────────
+  - id: a_m1_tls_disable_macro
+    adr_item: ADR-0004 §M1
+    severity: block
+    layer: A
+    description: |
+      TLS layer 완전 비활성 매크로/플래그 사용 금지. M1 mandate — 내부 TLS-capable
+      stack 의무.
+    deny:
+      - '#\s*define\s+NSSF_TLS_DISABLED\s+1'
+      - '#\s*define\s+TLS_DISABLED\s+1'
+      - '\bdisable_tls\s*=\s*true\b'
+    allow: []
+
+  - id: a_m1_plain_http_listener
+    adr_item: ADR-0004 §M1
+    severity: block
+    layer: A
+    description: |
+      평문 HTTP listener bind 금지. nghttp2/libcurl init 시 TLS context
+      mandatory.
+    deny:
+      - '\bnghttp2_session_server_new\s*\(\s*[^,]+,\s*[^,]+,\s*NULL\s*\)'
+      - '\bcurl_easy_setopt\s*\(\s*[^,]+,\s*CURLOPT_USE_SSL\s*,\s*CURLUSESSL_NONE\b'
+      - '\bSSL_CTX_set_min_proto_version\s*\(\s*[^,]+,\s*SSL3_VERSION\s*\)'
+      - '\bSSL_CTX_set_min_proto_version\s*\(\s*[^,]+,\s*TLS1_VERSION\s*\)'
+      - '\bSSL_CTX_set_min_proto_version\s*\(\s*[^,]+,\s*TLS1_1_VERSION\s*\)'
+    allow:
+      - '\bSSL_CTX_set_min_proto_version\s*\(\s*[^,]+,\s*TLS1_2_VERSION\s*\)'
+      - '\bSSL_CTX_set_min_proto_version\s*\(\s*[^,]+,\s*TLS1_3_VERSION\s*\)'
+
+  # ─── M2 — mtls_code_path ───────────────────────────────────────────
+  - id: a_m2_disable_peer_verify
+    adr_item: ADR-0004 §M2
+    severity: block
+    layer: A
+    description: |
+      Peer verification 비활성 금지. mTLS code path mandate.
+    deny:
+      - '\bSSL_CTX_set_verify\s*\(\s*[^,]+,\s*SSL_VERIFY_NONE\b'
+      - '\bSSL_set_verify\s*\(\s*[^,]+,\s*SSL_VERIFY_NONE\b'
+      - '\bcurl_easy_setopt\s*\(\s*[^,]+,\s*CURLOPT_SSL_VERIFYPEER\s*,\s*0L?\b'
+      - '\bcurl_easy_setopt\s*\(\s*[^,]+,\s*CURLOPT_SSL_VERIFYHOST\s*,\s*0L?\b'
+    allow:
+      - '\bSSL_CTX_set_verify\s*\(\s*[^,]+,\s*SSL_VERIFY_PEER\b'
+      - '\bcurl_easy_setopt\s*\(\s*[^,]+,\s*CURLOPT_SSL_VERIFYPEER\s*,\s*1L?\b'
+
+  - id: b_m2_hardcoded_cert_path
+    adr_item: ADR-0004 §M2
+    severity: advisory
+    layer: B
+    description: |
+      Cert/key path 가 string literal hardcode 로 의심 (config 가 아닌 fixed
+      경로). operator-config 입력이 권장. false negative 가능 — advisory.
+    deny:
+      - '"/etc/[^"]*\.(pem|crt|key)"'
+      - '"[A-Za-z]:/[^"]*\.(pem|crt|key)"'
+    allow: []
+
+  # ─── M3 — inbound_oauth2_bearer_validation_code_path ───────────────
+  - id: a_m3_skip_token_validation
+    adr_item: ADR-0004 §M3
+    severity: block
+    layer: A
+    description: |
+      Inbound bearer token validation 우회 금지. 항상 검증 가능한 code path.
+    deny:
+      - '\boauth2_validation\s*=\s*false\b'
+      - '\bskip_token_validation\s*=\s*true\b'
+      - '\bjwt_decode\s*\(\s*[^,]+,\s*[^,]+,\s*NULL\s*,\s*0\s*\)'
+    allow: []
+
+  # ─── M4 — outbound_oauth2_token_attach_code_path ───────────────────
+  - id: a_m4_outbound_without_authorization
+    adr_item: ADR-0004 §M4
+    severity: advisory
+    layer: A
+    description: |
+      Outbound NRF/peer 호출 시 Authorization header 미설정 의심. M4 mandate —
+      access token 부착 capability. heuristic (header set 누락) 이므로
+      advisory.
+    deny:
+      - '\bcurl_easy_setopt\s*\(\s*[^,]+,\s*CURLOPT_HTTPHEADER\s*,\s*NULL\s*\)'
+    allow: []
+
+  # ─── M5 — dev_disable_with_production_path_present ─────────────────
+  - id: a_m5_production_code_stripped
+    adr_item: ADR-0004 §M5
+    severity: block
+    layer: A
+    description: |
+      Production TLS/OAuth code path 를 dev profile 핑계로 제거 금지.
+      `#ifdef DEV_BUILD` 안에 보안 init 을 *완전 제거* 하는 패턴 차단.
+    deny:
+      - '#\s*ifdef\s+DEV_BUILD[\s\S]{0,200}SSL_CTX_free'
+      - '#\s*ifdef\s+DEV_BUILD[\s\S]{0,200}return\s+0\s*;\s*//\s*skip\s+tls'
+    allow: []
+
+  # ─── M6 — third_party_library_mandate ──────────────────────────────
+  - id: a_m6_custom_crypto
+    adr_item: ADR-0004 §M6
+    severity: block
+    layer: A
+    description: |
+      NF 가 TLS/X.509/JWT/JWS primitive 직접 구현 금지. maintained library
+      (OpenSSL/libcurl/libjwt 등) 사용 필수.
+    deny:
+      - '\bstatic\s+(int|void|char\s*\*)\s+(my|custom|nssf|amf|nrf|smf|udm|udr|ausf|nef|pcf|smsf|chf|n3iwf|ngnif|nef|af|bsf|nbsf|nwdaf|nsacf|seppf)_(rsa|aes|sha|hmac|jwt|jws|x509)_'
+      - '\b#\s*include\s+"crypto/(rsa|aes|sha|hmac)\.h"'
+    allow:
+      - '\b#\s*include\s+<openssl/'
+      - '\b#\s*include\s+<jwt\.h>'
+      - '\b#\s*include\s+<curl/curl\.h>'
+
+  # ─── M7 — profile_spec_depth_externalized ──────────────────────────
+  - id: a_m7_spec_33501_inline_reference
+    adr_item: ADR-0004 §M7
+    severity: advisory
+    layer: A
+    description: |
+      33.501/33.310/33.210 의 *내용* 을 NF 코드 안에 인용해 구현 결정 금지.
+      operator-config + maintained library compliance 에 위임.
+    deny:
+      - '//\s*per\s+33\.(501|310|210)\b'
+      - '/\*\s*per\s+33\.(501|310|210)\b'
+    allow: []
