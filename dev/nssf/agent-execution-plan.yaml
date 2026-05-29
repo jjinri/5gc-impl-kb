@@ -216,6 +216,28 @@ phases:
       - phase5_trace_sampler
     active_lanes: [code, verifier]
 
+  - id: meta_autonomous_runner_rollout
+    name: autonomous runner rollout (meta layer)
+    description: |
+      ADR-0005 의 `/nf-implement` 자율 runner infrastructure 구축 PR 시퀀스
+      (PR-A 정책 / PR-B 인프라 / PR-C runner skill / PR-D NSSF 첫 자율 slice).
+      본 phase 의 PR 들은 NSSF feature lifecycle 외의 *meta layer* — self-merge
+      권한 (ADR-0005 D1) 미적용, 사람 review/merge.
+    work_items: []
+    status: in_progress
+    entry_gate: 'PR #101 (WI-schema-bootstrap) merged + 2026-05-29 grill 합의.'
+    exit_gate:
+      - PR-autonomous-runner-policy merged
+      - PR-autonomous-runner-infrastructure merged
+      - PR-autonomous-runner-runner-skill merged
+      - PR-autonomous-runner-nssf-first-slice merged
+    required_checks:
+      - readiness-check
+    active_lanes: [orchestrator, reviewer]
+    notes: |
+      본 phase 종료 후 `/nf-implement nssf` 가 NSSF feature lifecycle 의
+      자율 진행을 시작한다. 본 phase 자체의 진행은 자율이 아닌 manual review.
+
 # ─── 3. No-spec-reread policy ─────────────────────────────────────────
 # /nf-implement SKILL.md 의 invariant — autonomous codegen agent 는 specs/
 # 의 원본 OpenAPI / docx 를 *semantic decision / data model / API matrix

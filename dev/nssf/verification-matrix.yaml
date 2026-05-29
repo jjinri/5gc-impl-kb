@@ -310,6 +310,21 @@ checks:
     pass_criteria: 'sampler decision deterministic PASS'
     run_in_ci: false
 
+  # ─── meta_autonomous_runner_rollout phase 검사 ──────────────────────
+  - id: readiness-check
+    command: 'gh pr checks <PR> --watch=false  # GitHub Actions workflow readiness-check.yml'
+    proves: |
+      readiness-check workflow 의 모든 step (pytest + materialize chain +
+      generator drift + impl-status + artifact catalog + execution control
+      drift + verify-generated-models + Phase 1 wave 0 cmake/ctest +
+      Phase 1 wave 1 sanity probe) PASS.
+    phase: meta_autonomous_runner_rollout
+    work_item: ALL
+    required: true
+    pass_criteria: '모든 step SUCCESS — GitHub Checks API conclusion: success'
+    run_in_ci: true
+    ci_step_name: 'readiness-check (전체 workflow)'
+
 # ─── 8. Cross-cutting CI gates ────────────────────────────────────────
 # 본 섹션은 codegen-work-items.yaml 의 개별 WI 가 아니라 readiness pack
 # transversal 검사. CI workflow (readiness-check.yml) 의 step 매핑.
