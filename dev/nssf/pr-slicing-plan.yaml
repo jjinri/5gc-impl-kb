@@ -40,6 +40,8 @@ plan_history:
   - '#101 merged — WI-schema-bootstrap (PostgreSQL bootstrap).'
   - '#103 merged — autonomous-runner PR-A 정책 freeze (ADR-0005 + plan + CONTEXT glossary).'
   - '#104 merged — autonomous-runner PR-B 인프라 (5 agent + slice picker + security drift + retro CI).'
+  - '#105 merged — autonomous-runner PR-C runner skill rewrite + plan-amendment template.'
+  - '#106 merged — autonomous-runner PR-D NSSF first dry-run evidence + wave1 status sync.'
 
 # ─── 2. PR 시퀀스 ─────────────────────────────────────────────────────
 prs:
@@ -539,7 +541,8 @@ prs:
       - dev/nssf/pr-slicing-plan.yaml
     depends_on:
       - PR-autonomous-runner-infrastructure
-    status: in_progress
+    status: merged
+    merged_pr: 'https://github.com/jjinri/5gc-impl-kb/pull/105'
     required_checks:
       - readiness-check
     estimated_loc: 600
@@ -557,7 +560,8 @@ prs:
       - dev/nssf/plan-amendments/2026-XX-XX-nssf-wave1-status-sync.md
     depends_on:
       - PR-autonomous-runner-runner-skill
-    status: not_started
+    status: merged
+    merged_pr: 'https://github.com/jjinri/5gc-impl-kb/pull/106'
     required_checks:
       - readiness-check
     estimated_loc: 200
