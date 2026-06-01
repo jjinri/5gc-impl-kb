@@ -227,7 +227,8 @@ prs:
       - tests/nssf/integration/CMakeLists.txt
     depends_on:
       - PR-phase1-wave1-codegen-bootstrap
-    status: not_started
+    status: merged
+    merged_pr: 'https://github.com/jjinri/5gc-impl-kb/pull/115'
     required_checks:
       - pytest_full_suite
     estimated_loc: 1200
