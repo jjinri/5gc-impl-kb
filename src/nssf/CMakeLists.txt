@@ -1,6 +1,7 @@
 add_subdirectory(wrappers)
 add_subdirectory(runtime)
 add_subdirectory(repository)
+add_subdirectory(engine)
 
 add_library(nssf_transport STATIC
     transport/nsselection_handler.c)
