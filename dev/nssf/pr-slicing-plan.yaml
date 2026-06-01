@@ -323,10 +323,14 @@ prs:
       - src/nssf/engine/selection_engine.{h,c}
       - src/nssf/engine/CMakeLists.txt
       - tests/nssf/unit/test_selection_engine_*.c
+      # build-glue (amendment 2026-06-01, PR #120 review — 선례 #98/#115/#117).
+      - src/nssf/CMakeLists.txt
+      - tests/nssf/CMakeLists.txt
     depends_on:
       - PR-phase1-wave1-availability-repo
       - PR-phase1-wave1-nftype-wrapper
-    status: not_started
+    status: merged
+    merged_pr: 'https://github.com/jjinri/5gc-impl-kb/pull/120'
     required_checks:
       - pytest_full_suite
     estimated_loc: 1400
