@@ -7,8 +7,9 @@
  * http 로 제공한다. libjwt jwks_load_fromurl (libcurl) 이 http://127.0.0.1:PORT
  * 에서 가져온다.
  *
- *  fetch path: nssf_jwks_cache_create(url) → nssf_jwks_cache_refresh →
- *              keyring populated.
+ *  fetch path: nssf_jwks_cache_create_insecure(url) → nssf_jwks_cache_refresh →
+ *              keyring populated. (insecure ctor = loopback-only http test gate;
+ *              the production ctor is https-only — see test_scheme_policy_*).
  *  valid:      private key 로 RS256 서명한 JWT (matching kid, 유효 exp, scope
  *              "nnssf-nsselection") → nssf_oauth2_validate_bearer == 0,
  *              out_scope == "nnssf-nsselection".
@@ -341,10 +342,14 @@ static char g_url[128];
 static void test_fetch_populates_keyring(void)
 {
     if (!g_srv.running) {
-        TEST_FAIL_MESSAGE("mock JWKS server failed to bind 127.0.0.1 — see SKIP");
+        TEST_IGNORE_MESSAGE(
+            "mock JWKS server failed to bind 127.0.0.1 — fetch path skipped");
         return;
     }
-    nssf_jwks_cache_t *cache = nssf_jwks_cache_create(g_url, 60);
+    /* The mock serves plain http on loopback — the production https-only
+     * constructor would (correctly) reject it, so the loopback insecure path is
+     * the right tool to point a test at the 127.0.0.1 mock. */
+    nssf_jwks_cache_t *cache = nssf_jwks_cache_create_insecure(g_url, 60);
     TEST_ASSERT_NOT_NULL(cache);
 
     int rc = nssf_jwks_cache_refresh(cache);
@@ -356,10 +361,10 @@ static void test_fetch_populates_keyring(void)
 static void test_validate_valid_token(void)
 {
     if (!g_srv.running) {
-        TEST_FAIL_MESSAGE("mock JWKS server unavailable");
+        TEST_IGNORE_MESSAGE("mock JWKS server unavailable — fetch path skipped");
         return;
     }
-    nssf_jwks_cache_t *cache = nssf_jwks_cache_create(g_url, 60);
+    nssf_jwks_cache_t *cache = nssf_jwks_cache_create_insecure(g_url, 60);
     TEST_ASSERT_NOT_NULL(cache);
 
     char *token = sign_jwt(kKid, NSSF_SCOPE_NSSELECTION, 300);
@@ -383,10 +388,10 @@ static void test_validate_valid_token(void)
 static void test_validate_tampered_signature_rejected(void)
 {
     if (!g_srv.running) {
-        TEST_FAIL_MESSAGE("mock JWKS server unavailable");
+        TEST_IGNORE_MESSAGE("mock JWKS server unavailable — fetch path skipped");
         return;
     }
-    nssf_jwks_cache_t *cache = nssf_jwks_cache_create(g_url, 60);
+    nssf_jwks_cache_t *cache = nssf_jwks_cache_create_insecure(g_url, 60);
     TEST_ASSERT_NOT_NULL(cache);
 
     char *token = sign_jwt(kKid, NSSF_SCOPE_NSSELECTION, 300);
@@ -433,10 +438,10 @@ static void test_validate_tampered_signature_rejected(void)
 static void test_validate_wrong_kid_rejected(void)
 {
     if (!g_srv.running) {
-        TEST_FAIL_MESSAGE("mock JWKS server unavailable");
+        TEST_IGNORE_MESSAGE("mock JWKS server unavailable — fetch path skipped");
         return;
     }
-    nssf_jwks_cache_t *cache = nssf_jwks_cache_create(g_url, 60);
+    nssf_jwks_cache_t *cache = nssf_jwks_cache_create_insecure(g_url, 60);
     TEST_ASSERT_NOT_NULL(cache);
 
     /* Correct signature but a kid the keyring does not contain → no key found. */
@@ -456,10 +461,10 @@ static void test_validate_wrong_kid_rejected(void)
 static void test_validate_expired_token_rejected(void)
 {
     if (!g_srv.running) {
-        TEST_FAIL_MESSAGE("mock JWKS server unavailable");
+        TEST_IGNORE_MESSAGE("mock JWKS server unavailable — fetch path skipped");
         return;
     }
-    nssf_jwks_cache_t *cache = nssf_jwks_cache_create(g_url, 60);
+    nssf_jwks_cache_t *cache = nssf_jwks_cache_create_insecure(g_url, 60);
     TEST_ASSERT_NOT_NULL(cache);
 
     /* exp set 600s in the past → expired. */
@@ -476,6 +481,45 @@ static void test_validate_expired_token_rejected(void)
     nssf_jwks_cache_free(cache);
 }
 
+/*
+ * Pin the H1 security fix (9ceac04): the production constructor is https-only,
+ * and the TEST/DEV insecure constructor is loopback-only. This test needs no
+ * server — the constructors enforce scheme/host policy *before* any fetch.
+ */
+static void test_scheme_policy_enforced(void)
+{
+    /* Production constructor: http:// → rejected (MITM keyset-poisoning gate). */
+    TEST_ASSERT_NULL_MESSAGE(
+        nssf_jwks_cache_create("http://127.0.0.1:9/jwks", 60),
+        "production constructor must reject http:// (https-only)");
+
+    /* Production constructor: https:// accepted. Constructor does not fetch, so
+     * a non-reachable host still yields a valid cache object. */
+    nssf_jwks_cache_t *https_cache =
+        nssf_jwks_cache_create("https://nrf.example/jwks", 60);
+    TEST_ASSERT_NOT_NULL_MESSAGE(
+        https_cache, "production constructor must accept https:// scheme");
+    nssf_jwks_cache_free(https_cache);
+
+    /* Non-https, non-http schemes and a missing scheme → rejected. */
+    TEST_ASSERT_NULL_MESSAGE(nssf_jwks_cache_create("ftp://x/jwks", 60),
+                             "ftp:// scheme must be rejected");
+    TEST_ASSERT_NULL_MESSAGE(nssf_jwks_cache_create("nrf.example/jwks", 60),
+                             "URL without a scheme must be rejected");
+
+    /* Insecure (TEST/DEV) constructor: loopback http → accepted. */
+    nssf_jwks_cache_t *loopback_cache =
+        nssf_jwks_cache_create_insecure("http://127.0.0.1:9/jwks", 60);
+    TEST_ASSERT_NOT_NULL_MESSAGE(
+        loopback_cache, "insecure constructor must accept loopback http://");
+    nssf_jwks_cache_free(loopback_cache);
+
+    /* Defense in depth: even the insecure path refuses a non-loopback host. */
+    TEST_ASSERT_NULL_MESSAGE(
+        nssf_jwks_cache_create_insecure("http://evil.example/jwks", 60),
+        "insecure constructor must reject non-loopback host");
+}
+
 int main(void)
 {
     g_key = EVP_RSA_gen(2048);
@@ -485,19 +529,21 @@ int main(void)
     }
 
     char *jwks_json = make_public_jwks_json(g_key);
-    if (!mock_server_start(&g_srv, jwks_json)) {
+    bool server_ok = mock_server_start(&g_srv, jwks_json);
+    if (!server_ok) {
         fprintf(stderr,
                 "[SKIP] test_jwks_fetch — could not bind 127.0.0.1 mock JWKS "
-                "server (sandboxed network?). Fetch path not exercised.\n");
-        /* Genuine bind failure → do not fail the suite, but make it explicit. */
-        free(jwks_json);
-        EVP_PKEY_free(g_key);
-        return 0;
+                "server (sandboxed network?). Fetch path not exercised; "
+                "scheme-policy test still runs (no server needed).\n");
+    } else {
+        snprintf(g_url, sizeof(g_url), "http://127.0.0.1:%d/jwks", g_srv.port);
+        fprintf(stderr, "[test_jwks_fetch] mock JWKS server at %s\n", g_url);
     }
-    snprintf(g_url, sizeof(g_url), "http://127.0.0.1:%d/jwks", g_srv.port);
-    fprintf(stderr, "[test_jwks_fetch] mock JWKS server at %s\n", g_url);
 
     UNITY_BEGIN();
+    /* Scheme/host policy is enforced by the constructor — no server required. */
+    RUN_TEST(test_scheme_policy_enforced);
+    /* Server-dependent fetch/validate paths (each guards on g_srv.running). */
     RUN_TEST(test_fetch_populates_keyring);
     RUN_TEST(test_validate_valid_token);
     RUN_TEST(test_validate_tampered_signature_rejected);
@@ -505,7 +551,9 @@ int main(void)
     RUN_TEST(test_validate_expired_token_rejected);
     int rc = UNITY_END();
 
-    mock_server_stop(&g_srv);
+    if (server_ok) {
+        mock_server_stop(&g_srv);
+    }
     free(jwks_json);
     EVP_PKEY_free(g_key);
     return rc;

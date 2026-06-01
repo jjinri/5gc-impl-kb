@@ -249,7 +249,9 @@ static nssf_tls_context_t *make_valid_ctx(void)
         .server_key_path = g_server_key_path,
         .client_ca_path = g_ca_pem_path,
         .min_version = "TLSv1.2", /* allow 1.2 so the in-mem pump converges. */
-        .cipher_suites = NULL,
+        /* Split cipher fields left NULL → OpenSSL secure defaults (M7). */
+        .tls13_ciphersuites = NULL,
+        .tls12_cipher_list = NULL,
     };
     char errbuf[256] = {0};
     nssf_tls_context_t *ctx = nssf_tls_context_create(&cfg, errbuf, sizeof(errbuf));
@@ -262,6 +264,32 @@ static void test_create_succeeds_and_reports_enabled(void)
     nssf_tls_context_t *ctx = make_valid_ctx();
     TEST_ASSERT_NOT_NULL(nssf_tls_context_ssl_ctx(ctx));
     TEST_ASSERT_TRUE(nssf_tls_context_is_enabled(ctx));
+    nssf_tls_context_free(ctx);
+}
+
+/*
+ * Pin the split-cipher field change (9ceac04): leaving BOTH tls13_ciphersuites
+ * and tls12_cipher_list NULL must build a context on OpenSSL secure defaults
+ * (M7) — i.e. the renamed/split fields accept "operator left ciphers unset".
+ */
+static void test_create_with_default_ciphers(void)
+{
+    nssf_tls_config_t cfg = {
+        .enabled = true,
+        .server_cert_path = g_server_cert_path,
+        .server_key_path = g_server_key_path,
+        .client_ca_path = g_ca_pem_path,
+        .min_version = "TLSv1.2",
+        .tls13_ciphersuites = NULL, /* → OpenSSL default TLSv1.3 ciphersuites. */
+        .tls12_cipher_list = NULL,  /* → OpenSSL default TLSv1.2 cipher list. */
+    };
+    char errbuf[256] = {0};
+    nssf_tls_context_t *ctx =
+        nssf_tls_context_create(&cfg, errbuf, sizeof(errbuf));
+    TEST_ASSERT_NOT_NULL_MESSAGE(
+        ctx, errbuf[0] != '\0' ? errbuf
+                               : "context must build with both cipher fields NULL");
+    TEST_ASSERT_NOT_NULL(nssf_tls_context_ssl_ctx(ctx));
     nssf_tls_context_free(ctx);
 }
 
@@ -316,7 +344,8 @@ static void test_create_fails_fast_on_missing_cert(void)
         .server_key_path = g_server_key_path,
         .client_ca_path = g_ca_pem_path,
         .min_version = NULL,
-        .cipher_suites = NULL,
+        .tls13_ciphersuites = NULL,
+        .tls12_cipher_list = NULL,
     };
     char errbuf[256] = {0};
     nssf_tls_context_t *ctx = nssf_tls_context_create(&cfg, errbuf, sizeof(errbuf));
@@ -375,6 +404,7 @@ int main(void)
 
     UNITY_BEGIN();
     RUN_TEST(test_create_succeeds_and_reports_enabled);
+    RUN_TEST(test_create_with_default_ciphers);
     RUN_TEST(test_mtls_trusted_client_handshake_ok);
     RUN_TEST(test_mtls_no_client_cert_rejected);
     RUN_TEST(test_mtls_untrusted_client_cert_rejected);
