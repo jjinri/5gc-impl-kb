@@ -34,10 +34,30 @@ ZLOG_VERSION=1.2.18 sudo bash infra/nssf/scripts/install-zlog.sh
   (`dependency-decisions.yaml` license_summary.permissive; static/dynamic 무방,
   본 build 는 dynamic).
 
-## 미해결 — libjwt
+## install-libjwt.sh
 
-`cmake-dependencies.yaml` 는 libjwt `>= 1.16` 을 요구하나 Ubuntu 22.04 apt
-candidate 는 `1.10.2` (구버전 + 다른 API). upstream (`benmcollins/libjwt`)
-현행 release 는 `v2.x`/`v3.x` 로 API rework 가 커서 어느 line 을 채택할지는
-engineering 결정 (ratified `dependency-decisions.yaml` jwt slot 갱신 동반 가능).
-본 scripts dir 의 후속 `install-libjwt.sh` 는 그 결정 확정 후 추가한다.
+libjwt (benmcollins/libjwt) **v3.3.3** source build + install. Ubuntu 22.04 apt
+candidate 는 `1.10.2` — CVE-2026-33996 affected + v3 JWKS API 부재라 사용 금지.
+ratified jwt slot = v3.3.3 (re-ratify 2026-06-01, operator + Pane 2).
+
+```bash
+# 시스템 설치 (CI 와 동일, /usr) — root 필요
+sudo bash infra/nssf/scripts/install-libjwt.sh
+
+# 사용자 로컬
+LIBJWT_PREFIX="$HOME/.local" bash infra/nssf/scripts/install-libjwt.sh
+```
+
+- build-time deps (apt): `cmake pkg-config build-essential libjansson-dev
+  libssl-dev libcurl4-openssl-dev`. script 가 jansson/openssl/libcurl pkg-config
+  부재 시 명확한 FAIL.
+- backend — OpenSSL (crypto) + jansson (JSON) + libcurl (JWKS-from-URL).
+  cmake flags `WITH_GNUTLS=OFF WITH_MBEDTLS=OFF WITH_JSON_C=OFF WITH_LIBCURL=ON
+  WITH_TESTS=OFF`.
+- API target v3 — `jwt_checker_verify` + JWKS (`jwks_load` / `jwks_load_fromurl`
+  / `jwks_find_bykid`).
+- libjwt 는 자체 `libjwt.pc` 배포 (cmake install) — `.pc` 생성 불필요.
+- provenance — release asset `libjwt-3.3.3.tar.xz` SHA256
+  (`88d56f428d186cf1af180f52b841ea348c6b4f1d1f0fbd3e75df8f1bd076df64`) 을
+  `sha256sum -c` 로 검증.
+- License — MPL-2.0 (weak copyleft; dynamic link). idempotent (== 3.3.3 시 no-op).
