@@ -83,9 +83,32 @@ static bool has_prefix_ci(const char *url, const char *prefix)
  * loopback host (127.0.0.1, [::1], localhost) — terminated by ':' (port), '/'
  * (path), or end-of-string. Keeps even the insecure path unusable against a real
  * remote.
+ *
+ * WHY reject userinfo: an RFC-3986 authority is [ userinfo "@" ] host [ ":" port ].
+ * A '@' makes everything before it userinfo and the REAL host the part after it,
+ * so "http://127.0.0.1@evil.com/jwks" resolves to evil.com. A prefix-only loopback
+ * check would be spoofed by such userinfo. We therefore isolate the authority
+ * (between "://" and the first '/', '?', or '#') and reject any '@' in it before
+ * trusting the host bytes.
  */
 static bool host_is_loopback(const char *url)
 {
+    static const char scheme[] = "http://";
+    if (!has_prefix_ci(url, scheme)) {
+        return false;
+    }
+    /* Authority = bytes after "://" up to the first '/', '?', '#', or '\0'. */
+    const char *authority = url + (sizeof(scheme) - 1);
+    for (const char *p = authority; *p != '\0'; p++) {
+        if (*p == '/' || *p == '?' || *p == '#') {
+            break;
+        }
+        if (*p == '@') {
+            /* userinfo present → real host is after '@'; not a trusted loopback. */
+            return false;
+        }
+    }
+
     static const char *const prefixes[] = {
         "http://127.0.0.1", "http://[::1]", "http://localhost",
     };
