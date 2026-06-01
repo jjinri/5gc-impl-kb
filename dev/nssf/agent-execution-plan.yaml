@@ -147,6 +147,7 @@ phases:
     work_items:
       - WI-availability-engine
       - WI-availability-handlers
+      - WI-outbound-oauth2
       - WI-notification-dispatcher
     status: not_started
     entry_gate: phase1_wave1.exit_gate PASS
