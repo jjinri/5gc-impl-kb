@@ -53,16 +53,16 @@ Engineering Design 의 technology decision freeze gate. 최종 implementation GO
 모든 NF 구현이 따라야 하는 TLS/mTLS/OAuth2 production-capable code path 의무. Source = `docs/adr/ADR-0004-project-security-baseline.md`. 33.501/33.310/33.210 세부는 operator-provided config + maintained library compliance 로 다루며 NF별 lifecycle dependency 로 끌어들이지 않는다.
 
 **Autonomous Implementation Orchestrator**
-`/nf-implement <nf>` 호출 시 Claude session 안에서 sub-agent 로 도는 entity. plan 을 읽고 next-slice 를 선택, lane subagent 를 dispatch, PR 을 open / merge, 그리고 context 한계 시 chain self-respawn 한다. Source = `docs/adr/ADR-0005-autonomous-implementation-policy.md`.
+`/nf-implement <nf>` 가 `claude --agent nf-orchestrator` 로 기동하는 *main-thread* agent. plan 을 읽고 next-slice 를 선택, 4 lane subagent 를 dispatch, PR 을 open / merge, 그리고 context 한계 시 checkpoint 후 `--resume` 으로 재기동된다. harness 제약상 subagent 는 subagent 를 spawn 하지 못하므로 orchestrator 는 main-thread 여야 lane 을 dispatch 할 수 있다. Source = `docs/adr/ADR-0005-autonomous-implementation-policy.md`.
 
 **Lane Subagent**
-implementation 사이클을 수행하는 5 NF-agnostic agent (`orchestrator`, `code`, `reviewer`, `tester`, `verifier`). 정의는 `.claude/agents/nf-<lane>.md`. NF-specific lane override 는 `dev/<nf>/team-execution-plan.md` 의 user_sections 본문이 prompt context 로 제공한다. reviewer subagent 는 Edit/Write 권한이 0 이다.
+orchestrator (main-thread) 가 `Agent` tool 로 dispatch 하는 4 NF-agnostic 1-level subagent (`code`, `reviewer`, `tester`, `verifier`). 정의는 `.claude/agents/nf-<lane>.md` (orchestrator agent 정의도 같은 위치에 있으나 lane 이 아니라 main-thread 로 launch). NF-specific lane override 는 `dev/<nf>/team-execution-plan.md` 의 user_sections 본문이 prompt context 로 제공한다. reviewer subagent 는 Edit/Write 권한이 0 이다. lane 실행은 기본 직렬 (code → tester → reviewer/verifier), 병렬은 read-only lane 또는 worktree 격리 시만.
 
 **Slice Picker**
 `pr-slicing-plan.yaml` 의 topo sort + `gh pr view` 동적 상태 조회로 next PR slice 를 deterministic 산출하는 단일 진실 출처. 구현 = `design/scripts/nf-implement-slice-status.py`. orchestrator 의 LLM judgment 으로 slice 를 선택하지 않는다.
 
-**Chain Self-Respawn**
-orchestrator subagent 가 context window 한계 (예 70%) 시 동일 type subagent 새로 spawn 한 뒤 본인 exit 하는 패턴. hand-off prompt 는 state file path 와 checkpoint metadata 만 전달한다. depth cap = 20.
+**Checkpoint/Resume**
+main-thread orchestrator 가 context window 한계 시 harness compaction 으로 진행하고, 한계 도달 시 사람이 `/nf-implement <nf> --resume` 으로 재기동하면 state checkpoint (last_checkpoint_at + completed_phases + current_slice) 에서 이어가는 패턴. chain self-respawn (동일 type subagent 재spawn) 은 폐기됐다. resume_count cap = 20, run_epoch = resume 시퀀스 번호.
 
 **Self-Merge**
 orchestrator 의 `gh pr merge --squash --delete-branch` 자동. ADR-0005 D1 이 권한을 부여하고 D2 의 4-condition gate (`required_checks` PASS + reviewer approve + `MERGEABLE` + branch up-to-date) 가 검증한다. 사람이 직접 main 에 push 하는 금지는 그대로 유지된다.

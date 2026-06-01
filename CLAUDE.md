@@ -29,7 +29,7 @@ NF 개발 단계 이름은 [`docs/adr/ADR-0001-nf-lifecycle-and-vocabulary.md`](
 - `/nf-impl-plan` 은 architecture 문서를 구현 작업·테스트·traceability 계획으로 변환하는 canonical skill 이다. 소스 코드나 build system 을 만들지 않는다.
 - user-facing lifecycle skill 이 다음 user-facing lifecycle skill 을 자동 호출하지 않는다. 같은 단계의 필수 script/check 만 내부 실행하고, 다음 단계는 추천으로 보고한다.
 - `handoff_ready` 는 상세 아키텍처 설계를 시작할 수 있는 contract 입력이 충분하다는 뜻이다. 상세 아키텍처와 구현 계획은 별도 단계다.
-- `/nf-implement <nf>` 의 자율 runner 정책 (orchestrator self-merge, 5 lane subagent, chain self-respawn, 3-tier retry, drift 검출) 은 [`docs/adr/ADR-0005-autonomous-implementation-policy.md`](./docs/adr/ADR-0005-autonomous-implementation-policy.md) 를 따른다. 본 wrapper 는 readiness_pack_ready PASS 이후 phase 5 종료 또는 3-trigger escape (ADR 신설 / `eng_frozen` 변경 / ADR-0004 영향) 까지 자율 진행한다.
+- `/nf-implement <nf>` 의 자율 runner 정책 (orchestrator self-merge, main-thread orchestrator loop + 4 lane subagent, checkpoint/resume, 3-tier retry, drift 검출) 은 [`docs/adr/ADR-0005-autonomous-implementation-policy.md`](./docs/adr/ADR-0005-autonomous-implementation-policy.md) 를 따른다. 본 wrapper 는 readiness_pack_ready PASS 이후 phase 5 종료 또는 3-trigger escape (ADR 신설 / `eng_frozen` 변경 / ADR-0004 영향) 까지 자율 진행한다.
 
 ## Source-of-truth policy
 

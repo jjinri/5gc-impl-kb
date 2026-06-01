@@ -1,6 +1,6 @@
 ---
 id: ADR-0005
-title: Autonomous Implementation Policy — orchestrator self-merge + 5 lane subagent + chain self-respawn
+title: Autonomous Implementation Policy — orchestrator self-merge + main-thread orchestrator loop + 4 lane subagent
 status: proposed
 date: 2026-05-29
 supersedes: []
@@ -27,13 +27,13 @@ User 의 요구 — *"Phase 5 까지 사람이 다음 schema-bootstrap 해 라�
 
 ## Decision
 
-다음 7 항목을 본 repo 의 autonomous implementation policy 로 ratify.
+다음 8 항목을 본 repo 의 autonomous implementation policy 로 ratify.
 
 ### D1. orchestrator self-merge 권한 부여
 
-`/nf-implement <nf>` 호출 시 spawn 된 orchestrator subagent 가 `gh pr merge
---squash --delete-branch` 권한을 가진다. 사람의 review/merge 가 매 PR 사이클의
-gating 단계가 아니다.
+`/nf-implement <nf>` 호출 시 launcher 가 기동한 main-thread orchestrator agent 가
+`gh pr merge --squash --delete-branch` 권한을 가진다. 사람의 review/merge 가 매 PR
+사이클의 gating 단계가 아니다.
 
 본 결정은 기존 memory `feedback_merge_pr` 의 *"원격 main 직접 push 금지, PR
 머지 사이클 의무"* 와 호환 — orchestrator 의 `gh pr merge` 도 PR 사이클 일부.
@@ -48,11 +48,23 @@ orchestrator 의 self-merge 직전 검증:
 3. `mergeable: MERGEABLE`.
 4. branch up-to-date with main.
 
-### D3. 5 NF-agnostic lane subagent
+### D3. main-thread orchestrator loop + 4 NF-agnostic lane subagent
 
-`.claude/agents/nf-{orchestrator,code,reviewer,tester,verifier}.md` 정의. NF
-별 override 는 `dev/<nf>/team-execution-plan.md` 의 user_sections 본문에서
-prompt context 로 inject. reviewer subagent 는 Edit/Write 권한 0.
+orchestrator 는 `claude --agent nf-orchestrator` 로 기동한 *main-thread* agent 며
+loop 를 돈다 — subagent 가 아니다. harness 제약상 subagent 는 subagent 를 spawn
+하지 못하므로 (Agent tool 이 subagent unavailable tools), orchestrator 가
+main-thread 여야 4 lane 을 dispatch 할 수 있다.
+
+4 lane (`nf-{code,reviewer,tester,verifier}`) 은 orchestrator 가 `Agent` tool 로
+dispatch 하는 *1-level* subagent. `.claude/agents/nf-{orchestrator,code,reviewer,
+tester,verifier}.md` 정의 — orchestrator agent 정의는 유지하되 launcher 가
+main-thread 로 기동한다. NF 별 override 는 `dev/<nf>/team-execution-plan.md` 의
+user_sections 본문에서 prompt context 로 inject. reviewer subagent 는 Edit/Write
+권한 0.
+
+lane 실행은 기본 직렬 (code → tester → reviewer/verifier). 병렬 dispatch 는
+read-only lane (reviewer/verifier) 또는 worktree 로 격리된 lane 에 한정 — 공유
+write scope 를 가진 lane 을 병렬화하지 않는다.
 
 ### D4. Plan-driven next-slice picker
 
@@ -68,15 +80,21 @@ amendment) 도 self-merge 가능. 단 다음 중 1개 이상이면 즉시 stop +
 2. `eng_frozen` decision 변경.
 3. ADR-0004 security baseline 영향.
 
-### D6. Chain self-respawn + cost cap
+### D6. Checkpoint/resume + cost cap
 
-Context window 한계 처리 = orchestrator 가 동일 type subagent 새로 spawn 후
-본인 exit. hand-off prompt 는 state file path + checkpoint metadata 만.
+Context window 한계 처리 = harness compaction + state checkpoint + `--resume`.
+chain self-respawn (동일 type subagent 재spawn) 은 *폐기* — main-thread
+orchestrator 는 harness 가 context 를 compaction 하며, 한계 도달 시 사람이
+`/nf-implement <nf> --resume` 으로 재기동하면 state checkpoint 에서 이어간다.
+hand-off 매개는 `dev/<nf>/_implementation_run_state.yaml` 의 checkpoint
+(last_checkpoint_at + completed_phases + current_slice) 단독.
 
 Cost cap (셋 중 1개 도달 시 stop):
-- chain_depth 20.
+- resume_count 20 (이전 chain_depth — resume 누적 횟수 cap).
 - total_slices_completed 50.
 - 동일 slice tier2 attempts ≥ 2.
+
+run_epoch = resume 시퀀스 번호 (resume 마다 +1), state 의 audit field.
 
 ### D7. 2-layer security baseline drift 검출
 
@@ -87,6 +105,22 @@ Cost cap (셋 중 1개 도달 시 stop):
 
 pattern yaml 은 reviewed lifecycle artifact (사람 ratify 후 git tracked). ADR-0004
 변경 시 동기 갱신 의무.
+
+### D8. 3-tier retry policy
+
+self-merge 4-condition (D2) 중 ANY false, 또는 CI red / lane 실패 시 retry tier
+진입. 본 정책이 retry 의 active behavior source 다 (orchestrator 가 직접 참조).
+
+- tier 0 (flake): CI red 1회 = re-run 1회. 동일 step + 동일 메시지 2회 연속 시
+  tier 1.
+- tier 1 (auto-fix): nf-code / nf-tester subagent 재호출 + failure log prompt.
+  max 2 attempt.
+- tier 2 (diagnose): `diagnose` skill 호출 → root cause → (a) 수정 1 attempt
+  또는 (b) plan amendment PR (D5) 또는 (c) tier 3.
+- tier 3 (stop): blocker 기록 + 사람 보고. 동일 slice tier 2 ≥ 2 시 자동 tier 3.
+
+counter = `state.current_slice_attempts: {tier0, tier1, tier2}`, slice merged 시
+reset.
 
 ## Consequences
 
@@ -102,8 +136,9 @@ pattern yaml 은 reviewed lifecycle artifact (사람 ratify 후 git tracked). AD
 - self-merge 가 wrong code 머지 가능성 — 4-condition gate (D2) + auto-revert
   (plan §1 Q4) + retro-test CI (D7) 이 완화책. 그러나 ADR-0004 가 아직 다루지
   않는 신종 vulnerability 는 검출 불가.
-- chain self-respawn 의 hand-off 가 실패하면 silent stop — `--status` 로 사람이
-  발견 가능하지만 즉시성 약함. depth cap 20 이 무한 chain 방지.
+- resume hand-off (state checkpoint) 가 불완전하면 재기동이 잘못된 slice 에서
+  이어질 수 있음 — `--status` 로 사람이 checkpoint 확인 가능. resume_count cap 20
+  이 무한 resume 방지.
 - plan amendment self-merge 가 plan 의 사람 의도와 drift 가능 — git log 가 모든
   amendment PR 의 history 유지, reviewer subagent 가 ADR-0001 vocab 검사.
 
