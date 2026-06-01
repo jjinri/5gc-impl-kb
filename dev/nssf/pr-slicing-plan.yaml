@@ -42,6 +42,7 @@ plan_history:
   - '#104 merged — autonomous-runner PR-B 인프라 (5 agent + slice picker + security drift + retro CI).'
   - '#105 merged — autonomous-runner PR-C runner skill rewrite + plan-amendment template.'
   - '#106 merged — autonomous-runner PR-D NSSF first dry-run evidence + wave1 status sync.'
+  - '#110 merged — PR-codegen-nssaiavailability-extension (first fully-autonomous orchestrator slice, ADR-0005 4-condition self-merge gate). multi-spec emit, model 32→50.'
 
 # ─── 2. PR 시퀀스 ─────────────────────────────────────────────────────
 prs:
@@ -169,7 +170,8 @@ prs:
       - tests/nssf/unit/test_generated_smoke.c
     depends_on:
       - PR-phase1-wave1-codegen-bootstrap
-    status: not_started
+    status: merged
+    merged_pr: 'https://github.com/jjinri/5gc-impl-kb/pull/110'
     required_checks:
       - phase1_wave1_codegen_drift_check
       - pytest_full_suite
@@ -179,7 +181,8 @@ prs:
     notes: |
       `infra/nssf/codegen/type-overrides.yaml` multi_spec_strategy.next_pr 의
       follow-up. NSSAIAvailability spec generate 추가 후 deferred schemas 를
-      verifier expected set 으로 승격한다.
+      verifier expected set 으로 승격한다. #110 머지 — 첫 fully-autonomous
+      orchestrator slice (4-condition gate PASS). model count 32 → 50.
 
   - id: PR-phase1-wave1-schema-bootstrap
     title: 'feat(nssf): WI-schema-bootstrap — PostgreSQL bootstrap (availability / subscription / retry_queue)'
