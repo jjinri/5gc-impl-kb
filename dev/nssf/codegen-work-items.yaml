@@ -144,6 +144,30 @@ items:
       - ctest --test-dir build -R nssf_tls_
       - ctest --test-dir build -R nssf_oauth2_
 
+  # backlog WI — amendment 2026-06-01 (operator 결정, Pane-2 review of PR #115).
+  # ADR-0004 M4 (outbound OAuth2) 를 WI-tls-bootstrap (inbound M3) 에서 분리.
+  # pr-slicing-plan PR-phase2-outbound-oauth2 의 work_item source.
+  - id: WI-outbound-oauth2
+    owner_lane: code
+    depends_on:
+      - WI-tls-bootstrap
+    inputs:
+      - docs/adr/ADR-0004-project-security-baseline.md (M4 outbound token attach)
+      - engineering/nssf/engineering-design.md (sbi_client_stack, oauth2 outbound slot)
+      - design/nssf/architecture/runtime-model.md (outbound OAuth2 token cache lifecycle)
+    expected_files:
+      - src/nssf/runtime/oauth2_outbound.{h,c} (NRF token endpoint client_credentials acquire + TTL token cache + outbound bearer attach)
+      - src/nssf/runtime/CMakeLists.txt (link nssf_runtime — libcurl + libjwt)
+    acceptance:
+      - NRF token endpoint 로부터 client_credentials grant 로 access token 취득 + TTL cache.
+      - outbound peer NF / NRF 호출에 Authorization Bearer 부착 (M4 code path 존재).
+      - token TTL 만료 시 자동 refresh (lazy acquire).
+    tests:
+      - tests/nssf/unit/test_oauth2_outbound_attach.c — bearer 부착 + TTL refresh 경계
+      - tests/nssf/integration/test_nrf_token_acquire.c — mock NRF token endpoint fixture
+    verification_commands:
+      - ctest --test-dir build -R nssf_oauth2_outbound
+
   - id: WI-problem-details-wrapper
     owner_lane: code
     depends_on:

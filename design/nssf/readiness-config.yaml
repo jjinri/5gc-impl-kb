@@ -479,6 +479,7 @@ phase_policy:
       work_items:
         - WI-availability-engine
         - WI-availability-handlers
+        - WI-outbound-oauth2
         - WI-notification-dispatcher
     phase3:
       description: "subscription, PR G 후속"
