@@ -1,7 +1,7 @@
 ---
 plan: nf-implement-autonomous-runner
 date: 2026-05-29
-status: draft
+status: partially-superseded
 trigger: |
   `/nf-implement` SKILL.md (E3, 2026-05-22) 가 contract/skeleton 만 정의.
   Phase 1 wave 1 (#87/#92/#98/#99/#101) 까지 사람이 PR 사이클을 매뉴얼로 수행.
@@ -21,6 +21,17 @@ related:
 ---
 
 # /nf-implement autonomous runner — 설계 freeze
+
+> **⚠ Partially superseded (handoff #108 → ADR-0005 Option A/A′ reconcile).**
+> 본 문서의 *dispatch topology* 결정 (orchestrator 를 subagent 로 spawn + **chain
+> self-respawn** + "5 lane subagent") 은 harness 제약 (subagent 는 subagent 를
+> spawn 하지 못함) 으로 **무효** 다. 현행 정책 = **main-thread orchestrator loop +
+> 4 lane subagent + checkpoint/resume** (`claude --agent nf-orchestrator` launch).
+> 아래 본문의 `chain_depth` / `chain self-respawn` / `70% self-respawn` /
+> "5 lane" 서술은 *역사적 기록* 으로만 읽는다 — active source 는
+> `docs/adr/ADR-0005-autonomous-implementation-policy.md` (D3/D6/D8).
+> self-merge / deterministic picker / 3-trigger escape / security drift / 3-tier
+> retry 결정은 그대로 유효.
 
 본 문서는 2026-05-29 grill 의 11 분기 결정 + 4 PR rollout spec freeze.
 
