@@ -391,9 +391,32 @@ static void test_validate_tampered_signature_rejected(void)
 
     char *token = sign_jwt(kKid, NSSF_SCOPE_NSSELECTION, 300);
     TEST_ASSERT_NOT_NULL(token);
-    /* Flip the last char of the signature segment → signature invalid. */
-    size_t len = strlen(token);
-    token[len - 1] = (token[len - 1] == 'A') ? 'B' : 'A';
+    /*
+     * Tamper the signature deterministically. The JWT signature is the third
+     * dot-separated segment (after the second '.'). We must NOT flip the LAST
+     * base64url char: an RS256 signature is 256 bytes → 342 base64url chars,
+     * and the final char only carries 2 meaningful signature bits + 4 padding
+     * bits, so a low-bit flip there is often discarded by the decoder → the
+     * 256-byte signature stays identical → verify still passes (flaky leak).
+     *
+     * Instead we perturb several chars well inside the signature segment, where
+     * every base64url char encodes 6 fully-meaningful signature bits. Changing
+     * those alters the decoded signature bytes, so RSA verify deterministically
+     * fails on every run.
+     */
+    char *sig = strrchr(token, '.'); /* points at the second '.' */
+    TEST_ASSERT_NOT_NULL_MESSAGE(sig, "JWT must have a signature segment");
+    sig += 1; /* first char of the signature segment */
+    size_t sig_len = strlen(sig);
+    /* Need enough room that the perturbed indices are away from padding tail. */
+    TEST_ASSERT_TRUE_MESSAGE(sig_len > 40,
+                             "RS256 signature segment unexpectedly short");
+    /* Flip a spread of middle-of-signature chars to a different base64url char. */
+    const size_t kOffsets[] = {10, 20, 30};
+    for (size_t i = 0; i < sizeof(kOffsets) / sizeof(kOffsets[0]); i++) {
+        char *p = &sig[kOffsets[i]];
+        *p = (*p == 'A') ? 'B' : 'A';
+    }
 
     char *scope = NULL;
     char errbuf[256] = {0};
