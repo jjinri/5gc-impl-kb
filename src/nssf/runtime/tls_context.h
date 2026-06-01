@@ -28,7 +28,8 @@ typedef struct nssf_tls_config {
     const char *server_key_path;   /* PEM private key. required. */
     const char *client_ca_path;    /* PEM CA bundle for peer (mTLS). required. */
     const char *min_version;       /* "TLSv1.2" | "TLSv1.3"; NULL → TLSv1.3. */
-    const char *cipher_suites;     /* nullable → OpenSSL secure defaults. */
+    const char *tls13_ciphersuites; /* OpenSSL TLSv1.3 ciphersuite string → SSL_CTX_set_ciphersuites; NULL → OpenSSL secure default (M7). */
+    const char *tls12_cipher_list;  /* OpenSSL TLSv1.2 cipher list → SSL_CTX_set_cipher_list; NULL → OpenSSL secure default (M7). */
 } nssf_tls_config_t;
 
 typedef struct nssf_tls_context nssf_tls_context_t;

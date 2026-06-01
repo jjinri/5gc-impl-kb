@@ -131,23 +131,22 @@ nssf_tls_context_t *nssf_tls_context_create(const nssf_tls_config_t *cfg,
                        SSL_VERIFY_PEER | SSL_VERIFY_FAIL_IF_NO_PEER_CERT, NULL);
 
     /*
-     * Operator-provided ciphers only when supplied (M7). The string targets the
-     * TLSv1.3 ciphersuite slot since TLSv1.3 is the default floor; on a TLSv1.2
-     * floor the same operator string also feeds the legacy cipher list so the
-     * profile is honoured across both. Omitting it leaves OpenSSL defaults.
+     * Operator ciphers, each independently optional (M7). TLSv1.3 and TLSv1.2
+     * use incompatible OpenSSL syntaxes, so each string feeds only its own slot —
+     * never cross-fed. Omitting either leaves the OpenSSL secure default for that
+     * protocol.
      */
-    if (cfg->cipher_suites != NULL && cfg->cipher_suites[0] != '\0') {
-        if (SSL_CTX_set_ciphersuites(ssl_ctx, cfg->cipher_suites) != 1) {
-            capture_ssl_error(errbuf, errlen, "set TLSv1.3 ciphersuites failed");
-            SSL_CTX_free(ssl_ctx);
-            return NULL;
-        }
-        if (min_proto == TLS1_2_VERSION &&
-            SSL_CTX_set_cipher_list(ssl_ctx, cfg->cipher_suites) != 1) {
-            capture_ssl_error(errbuf, errlen, "set TLSv1.2 cipher list failed");
-            SSL_CTX_free(ssl_ctx);
-            return NULL;
-        }
+    if (cfg->tls13_ciphersuites != NULL && cfg->tls13_ciphersuites[0] != '\0' &&
+        SSL_CTX_set_ciphersuites(ssl_ctx, cfg->tls13_ciphersuites) != 1) {
+        capture_ssl_error(errbuf, errlen, "set TLSv1.3 ciphersuites failed");
+        SSL_CTX_free(ssl_ctx);
+        return NULL;
+    }
+    if (cfg->tls12_cipher_list != NULL && cfg->tls12_cipher_list[0] != '\0' &&
+        SSL_CTX_set_cipher_list(ssl_ctx, cfg->tls12_cipher_list) != 1) {
+        capture_ssl_error(errbuf, errlen, "set TLSv1.2 cipher list failed");
+        SSL_CTX_free(ssl_ctx);
+        return NULL;
     }
 
     nssf_tls_context_t *ctx = calloc(1, sizeof(*ctx));

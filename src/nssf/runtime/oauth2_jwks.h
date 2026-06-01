@@ -4,6 +4,9 @@
  * libjwt v3 JWKS fetch (jwks_load_fromurl over HTTPS with peer verification) +
  * TTL cache + signature/exp verification of inbound access tokens. No crypto is
  * hand-rolled (M6). The JWKS URL and TTL come from operator config (M7).
+ *
+ * Scope: inbound bearer validation (M3). Outbound token acquisition/attach (M4)
+ * is a separate slice — not implemented here.
  */
 
 #ifndef NSSF_RUNTIME_OAUTH2_JWKS_H
@@ -33,9 +36,24 @@ typedef struct nssf_jwks_cache nssf_jwks_cache_t;
  * Create a thread-safe JWKS cache bound to jwks_url with the given TTL. The
  * keyring is initially empty — first validate (or explicit refresh) populates
  * it. ttl_seconds == 0 → default 3600. Returns NULL on OOM / NULL url.
+ *
+ * Production JWKS URLs MUST be https:// — http:// is rejected to prevent MITM
+ * keyset poisoning (ADR-0004 M3/M7). Any non-https scheme (or no scheme) → NULL.
  */
 nssf_jwks_cache_t *nssf_jwks_cache_create(const char *jwks_url,
                                           uint32_t ttl_seconds);
+
+/*
+ * TEST/DEV ONLY. Bypasses the https:// scheme enforcement of
+ * nssf_jwks_cache_create. MUST NOT be used in production — exists solely so
+ * integration tests can point at a 127.0.0.1 loopback mock JWKS server over
+ * http. Not a production code path.
+ *
+ * Defense-in-depth: the URL host must be a loopback host (127.0.0.1, [::1], or
+ * localhost); any other host → NULL. ttl_seconds == 0 → default 3600.
+ */
+nssf_jwks_cache_t *nssf_jwks_cache_create_insecure(const char *jwks_url,
+                                                   uint32_t ttl_seconds);
 
 /*
  * Offline helper: build a cache whose keyring is seeded from a JWKS JSON string

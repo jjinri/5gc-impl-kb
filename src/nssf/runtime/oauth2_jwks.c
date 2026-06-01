@@ -19,6 +19,8 @@
 #include <string.h>
 #include <time.h>
 
+#include <ctype.h>
+
 #include <jwt.h>
 
 /* libjwt jwks_load_fromurl verify level: 2 = verify Host and Peer (M2). */
@@ -63,12 +65,61 @@ static nssf_jwks_cache_t *cache_alloc(uint32_t ttl_seconds)
     return cache;
 }
 
-nssf_jwks_cache_t *nssf_jwks_cache_create(const char *jwks_url,
-                                          uint32_t ttl_seconds)
+/* Case-insensitive prefix test on the scheme portion of url. */
+static bool has_prefix_ci(const char *url, const char *prefix)
+{
+    size_t i = 0;
+    for (; prefix[i] != '\0'; i++) {
+        if (url[i] == '\0' ||
+            tolower((unsigned char)url[i]) != tolower((unsigned char)prefix[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/*
+ * TEST/DEV-only loopback gate. After the http:// scheme, the authority must be a
+ * loopback host (127.0.0.1, [::1], localhost) — terminated by ':' (port), '/'
+ * (path), or end-of-string. Keeps even the insecure path unusable against a real
+ * remote.
+ */
+static bool host_is_loopback(const char *url)
+{
+    static const char *const prefixes[] = {
+        "http://127.0.0.1", "http://[::1]", "http://localhost",
+    };
+    for (size_t i = 0; i < sizeof(prefixes) / sizeof(prefixes[0]); i++) {
+        if (has_prefix_ci(url, prefixes[i])) {
+            char next = url[strlen(prefixes[i])];
+            if (next == '\0' || next == ':' || next == '/') {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/*
+ * Shared URL-bound cache body. allow_insecure_loopback selects the scheme
+ * policy: production requires https://; the test-only path accepts http:// but
+ * only to a loopback host. Anything outside the selected policy → NULL.
+ */
+static nssf_jwks_cache_t *create_with_scheme_policy(const char *jwks_url,
+                                                    uint32_t ttl_seconds,
+                                                    bool allow_insecure_loopback)
 {
     if (jwks_url == NULL || jwks_url[0] == '\0') {
         return NULL;
     }
+    if (allow_insecure_loopback) {
+        if (!host_is_loopback(jwks_url)) {
+            return NULL;
+        }
+    } else if (!has_prefix_ci(jwks_url, "https://")) {
+        return NULL;
+    }
+
     nssf_jwks_cache_t *cache = cache_alloc(ttl_seconds);
     if (cache == NULL) {
         return NULL;
@@ -81,6 +132,18 @@ nssf_jwks_cache_t *nssf_jwks_cache_create(const char *jwks_url,
     }
     cache->refresh_enabled = true;
     return cache;
+}
+
+nssf_jwks_cache_t *nssf_jwks_cache_create(const char *jwks_url,
+                                          uint32_t ttl_seconds)
+{
+    return create_with_scheme_policy(jwks_url, ttl_seconds, false);
+}
+
+nssf_jwks_cache_t *nssf_jwks_cache_create_insecure(const char *jwks_url,
+                                                   uint32_t ttl_seconds)
+{
+    return create_with_scheme_policy(jwks_url, ttl_seconds, true);
 }
 
 nssf_jwks_cache_t *nssf_jwks_cache_create_from_json(const char *jwks_json,
