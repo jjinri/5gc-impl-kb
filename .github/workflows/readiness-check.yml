@@ -112,7 +112,7 @@ jobs:
             libcurl4-openssl-dev \
             libuv1-dev \
             libssl-dev \
-            libjwt-dev \
+            libjansson-dev \
             libpq-dev \
             valgrind \
             clang-tidy \
@@ -121,9 +121,16 @@ jobs:
       # zlog 는 Ubuntu 22.04 universe (apt) 에 부재 — ratified logging dependency
       # (engineering/nssf/dependency-decisions.yaml). canonical source-build
       # script 로 provision (CI + 로컬 dev 공용 단일 출처). WI-tls-bootstrap 부터
-      # link 대상 (LGPL-2.1 dynamic link).
+      # link 대상 (Apache-2.0, dynamic link).
       - name: Install zlog (source build — apt universe gap)
         run: sudo bash infra/nssf/scripts/install-zlog.sh
+
+      # libjwt 는 apt candidate 1.10.2 (CVE-2026-33996 + v3 JWKS API 부재).
+      # ratified jwt slot = v3.3.3 (re-ratify 2026-06-01). source-build only —
+      # OpenSSL + jansson + libcurl backend. WI-tls-bootstrap 부터 link 대상
+      # (MPL-2.0, dynamic link).
+      - name: Install libjwt (source build — apt too old)
+        run: sudo bash infra/nssf/scripts/install-libjwt.sh
 
       # Verify Phase 1 wave 1 library availability via pkg-config + which.
       # CMakeLists 가 아직 본 라이브러리들을 사용하지 않으므로 CMake find_package
@@ -132,7 +139,7 @@ jobs:
       - name: Verify Phase 1 wave 1 library availability (sanity probe)
         run: |
           echo "=== pkg-config availability ==="
-          for pkg in libnghttp2 libcurl libuv openssl libjwt libpq; do
+          for pkg in libnghttp2 libcurl libuv openssl libpq jansson; do
             if pkg-config --exists "$pkg"; then
               version=$(pkg-config --modversion "$pkg")
               echo "OK $pkg version=$version"
@@ -147,6 +154,14 @@ jobs:
             echo "OK zlog version=$(pkg-config --modversion zlog)"
           else
             echo "FAIL zlog not found / < 1.2.16 — install-zlog.sh source build expected"
+            exit 1
+          fi
+
+          echo "=== libjwt availability (source-build provisioned, exact v3.3.3) ==="
+          if pkg-config --exists libjwt && [ "$(pkg-config --modversion libjwt)" = "3.3.3" ]; then
+            echo "OK libjwt version=$(pkg-config --modversion libjwt)"
+          else
+            echo "FAIL libjwt not 3.3.3 (got '$(pkg-config --modversion libjwt 2>/dev/null)') — install-libjwt.sh source build expected"
             exit 1
           fi
 

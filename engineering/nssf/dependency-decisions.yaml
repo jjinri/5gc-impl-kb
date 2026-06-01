@@ -119,8 +119,17 @@ decisions:
 
   - slot: jwt
     package: libjwt
-    rationale: 'engineering-design ratified. v3 API 변화가 크므로 version pin 필수. JWKS fetch + validation.'
-    license: MPL-2.0
+    version: '3.3.3'   # re-ratify 2026-06-01 (operator + Pane 2) — was ">= 1.16" 추상 pin
+    api_target: v3      # jwt_checker_verify + jwks (jwks_load / jwks_load_fromurl / jwks_find_bykid)
+    provisioning: source-build   # infra/nssf/scripts/install-libjwt.sh — apt 금지 (아래 rationale)
+    rationale: |
+      libjwt v3.3.3 채택 (re-ratify 2026-06-01, operator + Pane 2 second-opinion).
+      이전 "min 1.16" 추상 pin 은 upstream 현실 (현행 v2.x/v3.x, v1.x 와 API 상이)
+      과 불일치. v3 API target — jwt_checker_verify + JWKS (jwks_load /
+      jwks_load_fromurl / jwks_find_bykid). JWKS fetch + signature/expiry/
+      audience/scope validation. apt 1.10.2 / 구 1.x 사용 금지 —
+      CVE-2026-33996 affected + v3 JWKS API 부재. source-build only.
+    license: MPL-2.0   # Pane 2 검증 — v3.3.3 MPL-2.0 (weak copyleft, dynamic link)
     container_externalized: true
     vendored: false
     version_pin_required: true
@@ -198,16 +207,25 @@ dependency_aggregate:
   ci_packages_apt:  # ubuntu-22.04 apt-get install -y 대상
     - cmake
     - build-essential
+    - pkg-config
     - libnghttp2-dev
     - libcurl4-openssl-dev
     - libuv1-dev
     - libssl-dev
-    - libjwt-dev
+    - libjansson-dev   # libjwt v3 build-time dep
     - libpq-dev
-    - libzlog-dev  # Ubuntu 22.04 에 zlog 가 부재면 source build 필요 (별도 PR)
     - valgrind
     - clang-tidy
     - default-jre  # openapi-generator-cli 의존
+  source_build:  # apt 부재/구버전 — source-build provisioning (scripts/)
+    - name: zlog
+      version: '1.2.18'
+      script: infra/nssf/scripts/install-zlog.sh
+      reason: 'Ubuntu 22.04 universe 부재.'
+    - name: libjwt
+      version: '3.3.3'
+      script: infra/nssf/scripts/install-libjwt.sh
+      reason: 'apt candidate 1.10.2 < v3 (CVE-2026-33996 + no v3 JWKS API). source-build only.'
 
 # ─── License compliance summary ───────────────────────────────────────
 license_summary:

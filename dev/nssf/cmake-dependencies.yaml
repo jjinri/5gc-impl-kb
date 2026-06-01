@@ -65,9 +65,13 @@ pkg_config:
     pkg: libjwt
     cmake_imported_target: PkgConfig::libjwt
     required: true
-    min_version: '1.16'
+    min_version: '3.3.3'   # re-ratify 2026-06-01 — v3 API (jwt_checker_verify + JWKS)
     used_by: [WI-tls-bootstrap]
-    notes: 'JWKS fetch + JWT validation. v3 API 와 v1.x API 가 다름 — version pin 필수.'
+    notes: |
+      JWKS fetch + JWT validation. v3 API target (jwt_checker_verify /
+      jwks_load / jwks_load_fromurl / jwks_find_bykid). source-build via
+      infra/nssf/scripts/install-libjwt.sh — apt 1.10.2 금지 (CVE-2026-33996
+      + v3 JWKS API 부재). libjansson + OpenSSL backend.
 
   - name: zlog
     pkg: zlog
@@ -162,11 +166,12 @@ ci_apt_get_install:
   packages:
     - cmake
     - build-essential
+    - pkg-config
     - libnghttp2-dev
     - libcurl4-openssl-dev
     - libuv1-dev
     - libssl-dev
-    - libjwt-dev
+    - libjansson-dev   # libjwt v3 build-time dep
     - libpq-dev
     - valgrind
     - clang-tidy
@@ -179,6 +184,13 @@ ci_apt_get_install:
       script: infra/nssf/scripts/install-zlog.sh
       provenance: 'source archive SHA256 pin (sha256sum -c in script)'
       ci_step: 'Install zlog (source build — apt universe gap)'
+    - name: libjwt
+      version: '3.3.3'
+      license: MPL-2.0
+      reason: 'apt candidate 1.10.2 < v3 (CVE-2026-33996 + no v3 JWKS API).'
+      script: infra/nssf/scripts/install-libjwt.sh
+      provenance: 'release asset libjwt-3.3.3.tar.xz SHA256 pin (sha256sum -c in script)'
+      ci_step: 'Install libjwt (source build — apt too old)'
   notes: |
     Phase 1 wave 0 (PR #87) CI 는 cmake + build-essential 만 사용. 위 list 의
     나머지는 Phase 1 wave 1 진입 시 활성. PR-library-stack-decision-pass
