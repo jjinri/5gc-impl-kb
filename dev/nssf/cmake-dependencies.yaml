@@ -75,7 +75,10 @@ pkg_config:
     required: true
     min_version: '1.2.16'
     used_by: [WI-tls-bootstrap, WI-availability-repo, WI-notification-dispatcher, WI-observability-finalize]
-    notes: 'Ubuntu 22.04 에 zlog .pc 가 부재면 source build (별도 PR 또는 CI step).'
+    notes: |
+      Ubuntu 22.04 universe (apt) 에 zlog 부재 — infra/nssf/scripts/install-zlog.sh
+      source build 로 provision (CI + 로컬 공용). zlog 는 .pc 미배포라 script 가
+      zlog.pc 생성 (PkgConfig::zlog lookup 충족). pinned 1.2.18 (>= 1.2.16).
 
 # ─── 3. Vendored libraries (no find_package) ──────────────────────────
 # repo 안 source commit. add_library() 로 직접 build.
@@ -165,11 +168,17 @@ ci_apt_get_install:
     - libssl-dev
     - libjwt-dev
     - libpq-dev
-    - libzlog-dev  # Ubuntu 22.04 에 부재면 별도 source build PR
     - valgrind
     - clang-tidy
     - default-jre  # openapi-generator-cli (Phase 1 wave 1 진입 시)
+  source_build:  # apt 부재/구버전 — source build provision
+    - name: zlog
+      reason: 'Ubuntu 22.04 universe 에 부재.'
+      script: infra/nssf/scripts/install-zlog.sh
+      ci_step: 'Install zlog (source build — apt universe gap)'
   notes: |
     Phase 1 wave 0 (PR #87) CI 는 cmake + build-essential 만 사용. 위 list 의
     나머지는 Phase 1 wave 1 진입 시 활성. PR-library-stack-decision-pass
-    머지 후 readiness-check.yml step 에 추가.
+    머지 후 readiness-check.yml step 에 추가. zlog 는 apt 부재라 source_build
+    (install-zlog.sh) 로 provision. libjwt 는 apt candidate 1.10.2 < ratified
+    min 1.16 (upstream 현행 v3.x) — 별도 engineering 결정 대기 (본 PR 범위 외).
