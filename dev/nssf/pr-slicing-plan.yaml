@@ -220,12 +220,25 @@ prs:
       - tests/nssf/unit/test_tls_context_handshake.c
       - tests/nssf/unit/test_oauth2_scope_check.c
       - tests/nssf/integration/test_jwks_fetch.c
+      # build-glue (amendment 2026-06-01, PR #115 review — 선례 #98): slice
+      # 자체 파일 compile/test 등록에 필수인 zero-logic CMake glue.
+      - src/nssf/CMakeLists.txt
+      - tests/nssf/CMakeLists.txt
+      - tests/nssf/integration/CMakeLists.txt
     depends_on:
       - PR-phase1-wave1-codegen-bootstrap
     status: not_started
     required_checks:
       - pytest_full_suite
     estimated_loc: 1200
+    scope_note: |
+      INBOUND OAuth2 only (ADR-0004 M3) + TLS/mTLS (M1/M2) + scope check.
+      Outbound OAuth2 token acquisition/attach (M4) 는 본 slice 범위 아님 —
+      별도 후속 slice PR-phase2-outbound-oauth2 로 defer (operator 결정
+      2026-06-01, Pane-2 review). 따라서 본 slice 의 baseline 충족 주장은
+      "M1-M3, M5-M7 PASS; M4 deferred" 다 (M1-M7 전체 PASS 아님).
+      Pane-2 security amendment: JWKS constructor 는 https:// 강제 (http://
+      reject, MITM keyset poison 차단); test-only loopback insecure 경로 분리.
 
   - id: PR-phase1-wave1-problem-details-wrapper
     title: 'feat(nssf): WI-problem-details-wrapper — RFC 7807 + 18 cause factory'
@@ -380,10 +393,37 @@ prs:
     depends_on:
       - PR-phase1-wave1-schema-bootstrap
       - PR-phase1-wave1-tls-bootstrap
+      - PR-phase2-outbound-oauth2
     status: not_started
     required_checks:
       - phase2_retry_queue_enqueue
     estimated_loc: 1000
+
+  # backlog slice — amendment 2026-06-01 (operator 결정, Pane-2 review of PR #115).
+  # ADR-0004 M4 (outbound OAuth2 token acquisition/attach) 는 tls-bootstrap
+  # (inbound M3) 범위에서 제외하고 본 후속 slice 로 분리한다. tls-bootstrap PR
+  # 의 "M1-M7 PASS" overclaim 정정의 plan-side 대응.
+  - id: PR-phase2-outbound-oauth2
+    title: 'feat(nssf): WI-outbound-oauth2 — NRF token acquire + outbound bearer attach (ADR-0004 M4)'
+    phase: phase2
+    work_items:
+      - WI-outbound-oauth2
+    scope_files:
+      - src/nssf/runtime/oauth2_outbound.{h,c}
+      - src/nssf/runtime/CMakeLists.txt
+      - tests/nssf/unit/test_oauth2_outbound_attach.c
+      - tests/nssf/integration/test_nrf_token_acquire.c
+    depends_on:
+      - PR-phase1-wave1-tls-bootstrap
+    status: not_started
+    required_checks:
+      - pytest_full_suite
+    estimated_loc: 900
+    scope_note: |
+      ADR-0004 M4 — NRF token endpoint 호출 (client credentials) + outbound
+      peer NF 호출에 access token 부착 + token TTL cache. tls-bootstrap 가
+      inbound (M3) 만 구현했으므로 본 slice 가 outbound 를 채워 baseline M1-M7
+      을 NF 전체로 완성. verification = test-matrix kind=security t-oauth2-outbound-*.
 
   - id: PR-phase3-subscription-store
     title: 'feat(nssf): WI-subscription-store — 3 op store layer'
