@@ -87,6 +87,47 @@ target_compile_features(test_nftype_wrapper PRIVATE c_std_11)
 add_test(NAME nssf_nftype_wrapper
          COMMAND test_nftype_wrapper)
 
+# Phase 1 wave 1 WI-tls-bootstrap — runtime mTLS + inbound OAuth2 (ADR-0004
+# Layer A). 두 unit test 가 nssf_runtime 의 TLS context (in-test PKI +
+# BIO-pair 핸드셰이크) 와 OAuth2 scope-check (whole-token 의미론) 를 검증.
+# ctest -R nssf_tls_ / nssf_oauth2_ 로 매칭.
+#
+# OpenSSL imported target 은 이 directory scope 에서 별도로 노출해야 한다
+# (runtime 의 find_package 는 그 scope 한정). 동일 OpenSSL 패키지라 1회 재선언.
+find_package(OpenSSL REQUIRED)
+
+add_executable(test_tls_context_handshake
+    unit/test_tls_context_handshake.c)
+
+target_link_libraries(test_tls_context_handshake
+    PRIVATE
+        unity
+        nssf_runtime
+        OpenSSL::SSL
+        OpenSSL::Crypto
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_tls_context_handshake PRIVATE c_std_11)
+
+add_test(NAME nssf_tls_context_handshake
+         COMMAND test_tls_context_handshake)
+
+add_executable(test_oauth2_scope_check
+    unit/test_oauth2_scope_check.c)
+
+target_link_libraries(test_oauth2_scope_check
+    PRIVATE
+        unity
+        nssf_runtime
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_oauth2_scope_check PRIVATE c_std_11)
+
+add_test(NAME nssf_oauth2_scope_check
+         COMMAND test_oauth2_scope_check)
+
 # Phase 1 wave 1 WI-schema-bootstrap — PostgreSQL bootstrap integration test.
 # libpq fixture, ctest -R nssf_schema_bootstrap 매칭. libpq 부재 또는
 # POSTGRES_* env 미주입 시 SKIP PASS 로 회피.
