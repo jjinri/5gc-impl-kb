@@ -26,8 +26,13 @@ ZLOG_VERSION=1.2.18 sudo bash infra/nssf/scripts/install-zlog.sh
 - zlog 는 pkg-config (`.pc`) 를 배포하지 않으므로 script 가 `zlog.pc` 를 생성
   (`PkgConfig::zlog` lookup 충족).
 - idempotent — 이미 `>= 1.2.16` 설치 시 no-op.
-- License — zlog 는 LGPL-2.1. NSSF 바이너리는 *dynamic link* 으로만 사용
-  (static link 금지; `dependency-decisions.yaml` license_summary.weak_copyleft).
+- provenance — 1.2.18 source archive SHA256
+  (`3977dc8ea0069139816ec4025b320d9a7fc2035398775ea91429e83cb0d1ce4e`) 을 script
+  가 `sha256sum -c` 로 검증. version override 시 미pin 이면 WARN + skip.
+- License — zlog 는 Apache-2.0 (>= 1.2.17; homepage 옛 표기만 LGPL, GitHub
+  LICENSE/release/src header 는 Apache-2.0 — 2026-06-01 정정). permissive
+  (`dependency-decisions.yaml` license_summary.permissive; static/dynamic 무방,
+  본 build 는 dynamic).
 
 ## 미해결 — libjwt
 

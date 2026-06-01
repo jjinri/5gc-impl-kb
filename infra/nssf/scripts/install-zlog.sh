@@ -7,9 +7,9 @@
 # ("source build PR pending"). 본 script 가 그 deferred provisioning 의
 # canonical 구현 — CI step + 로컬 dev 공용 단일 출처.
 #
-# License — zlog 는 LGPL-2.1. NSSF 바이너리는 *dynamic link* (shared lib) 로
-# 사용 (dependency-decisions.yaml license_summary.weak_copyleft). static link
-# 금지.
+# License — zlog 는 Apache-2.0 (>= 1.2.17; homepage 옛 표기만 LGPL, GitHub
+# LICENSE/release/src header 는 Apache-2.0, 1.2.18 포함 — 2026-06-01 정정).
+# permissive (static/dynamic link 무방). 본 build 는 shared lib (dynamic).
 #
 # Usage:
 #   sudo bash infra/nssf/scripts/install-zlog.sh           # install to /usr (CI + system)
@@ -25,6 +25,11 @@ ZLOG_MIN_VERSION="1.2.16"          # cmake-dependencies.yaml pkg_config zlog min
 PREFIX="${ZLOG_PREFIX:-/usr}"
 SRC_URL="https://github.com/HardySimpson/zlog/archive/refs/tags/${ZLOG_VERSION}.tar.gz"
 
+# Pinned source-archive SHA256 (provenance — tag pin). Only the default pinned
+# version carries a known-good checksum; an overridden ZLOG_VERSION skips the
+# gate with a warning (operator must pin its checksum to re-enforce).
+ZLOG_SHA256_1_2_18="3977dc8ea0069139816ec4025b320d9a7fc2035398775ea91429e83cb0d1ce4e"
+
 WORK="$(mktemp -d -t zlog-build-XXXXXX)"
 trap 'rm -rf "${WORK}"' EXIT
 
@@ -37,6 +42,20 @@ fi
 
 echo "[install-zlog] fetching zlog ${ZLOG_VERSION} ..."
 curl -fsSL -o "${WORK}/zlog.tar.gz" "${SRC_URL}"
+
+# Provenance — verify pinned SHA256 for the default pinned version.
+EXPECT_SHA=""
+case "${ZLOG_VERSION}" in
+    1.2.18) EXPECT_SHA="${ZLOG_SHA256_1_2_18}" ;;
+esac
+if [ -n "${EXPECT_SHA}" ]; then
+    echo "${EXPECT_SHA}  ${WORK}/zlog.tar.gz" | sha256sum -c - \
+        || { echo "[install-zlog] FAIL — SHA256 mismatch for zlog ${ZLOG_VERSION} (provenance gate)" >&2; exit 1; }
+    echo "[install-zlog] SHA256 verified — zlog ${ZLOG_VERSION}"
+else
+    echo "[install-zlog] WARN — no pinned SHA256 for zlog ${ZLOG_VERSION}; skipping provenance gate" >&2
+fi
+
 tar -xzf "${WORK}/zlog.tar.gz" -C "${WORK}"
 cd "${WORK}/zlog-${ZLOG_VERSION}"
 

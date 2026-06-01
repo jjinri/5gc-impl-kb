@@ -132,7 +132,7 @@ decisions:
       output / rotation / category 지원. category — transport / auth / db /
       selection / notify. correlation field — 3gpp-Sbi-Correlation-Info /
       traceparent / request_id. Phase 5 에서 JSON line format 활성.
-    license: LGPL-2.1
+    license: Apache-2.0  # >= 1.2.17 Apache-2.0 (homepage 옛 LGPL 표기 오류; GitHub LICENSE/release 기준 정정 2026-06-01)
     container_externalized: true
     vendored: false
 
@@ -211,13 +211,16 @@ dependency_aggregate:
 
 # ─── License compliance summary ───────────────────────────────────────
 license_summary:
-  permissive: [Unity, cJSON, uthash, nghttp2, libcurl, libuv, libpq, PostgreSQL, OpenSSL, openapi-generator, CMake, clang-tidy]
-  weak_copyleft: [zlog, libjwt]   # LGPL/MPL — dynamic link 으로 충족
+  permissive: [Unity, cJSON, uthash, nghttp2, libcurl, libuv, libpq, PostgreSQL, OpenSSL, openapi-generator, CMake, clang-tidy, zlog]
+  weak_copyleft: [libjwt]   # MPL-2.0 — dynamic link 으로 충족
   strong_copyleft_runtime_only_tool: [valgrind]   # GPL, link 안 함
   notes: |
-    NSSF 바이너리에 *static link* 되는 모든 라이브러리는 permissive
-    또는 LGPL/MPL (dynamic link). GPL 라이브러리는 link 안 함.
+    NSSF 바이너리 link 라이브러리는 permissive (static/dynamic 무방) 또는
+    MPL (libjwt — dynamic link 권장). GPL 라이브러리는 link 안 함.
     valgrind 는 test runtime tool 로만 사용 — code-via-link 아님.
+    zlog 는 Apache-2.0 (permissive) — 이전 LGPL-2.1/weak_copyleft 표기는 사실
+    오류 (homepage 옛 표기). GitHub LICENSE/release/src header 기준 2026-06-01
+    정정. zlog 라이브러리 결정 자체는 불변 (logging slot = zlog 유지).
 
 # ─── No-JVM policy compliance ─────────────────────────────────────────
 no_jvm_policy:

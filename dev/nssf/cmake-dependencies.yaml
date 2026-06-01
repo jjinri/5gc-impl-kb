@@ -173,8 +173,11 @@ ci_apt_get_install:
     - default-jre  # openapi-generator-cli (Phase 1 wave 1 진입 시)
   source_build:  # apt 부재/구버전 — source build provision
     - name: zlog
+      version: '1.2.18'
+      license: Apache-2.0   # >= 1.2.17; homepage 옛 LGPL 표기 오류, GitHub LICENSE 기준 (2026-06-01 정정)
       reason: 'Ubuntu 22.04 universe 에 부재.'
       script: infra/nssf/scripts/install-zlog.sh
+      provenance: 'source archive SHA256 pin (sha256sum -c in script)'
       ci_step: 'Install zlog (source build — apt universe gap)'
   notes: |
     Phase 1 wave 0 (PR #87) CI 는 cmake + build-essential 만 사용. 위 list 의
