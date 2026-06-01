@@ -127,27 +127,34 @@ external_ref_strategy:
 
 # ─── 6. Multi-spec strategy ──────────────────────────────────────────
 multi_spec_strategy:
-  current_pr_scope: nsselection_only
-  current_pr_pr: '#15'
+  current_pr_scope: nsselection_and_nssaiavailability
+  current_pr_pr: PR-codegen-nssaiavailability-extension
   rationale: |
     openapi-generator-cli 는 단일 -i input 만 받는다. NSSF 의 2 spec
-    (NSSelection + NSSAIAvailability) 는 *각각 generate 후 통합* 또는
-    *통합 spec build → 단일 generate* 전략 필요. 본 PR (#15) 은 *NSSelection
-    only* — tracer-bullet operation 의 schema chain 확보 + pipeline 증명.
-    NSSAIAvailability schema 추가는 별도 PR 에서.
-  next_pr: PR-codegen-nssaiavailability-extension
-  next_pr_scope: |
-    1) regenerate.sh 가 NSSAIAvailability 추가 generate
-    2) shared schema (Snssai, PlmnId, Tai 등) byte-level identity 확인 (드물게 drift 시점에 별도 alert)
-    3) NSSAIAvailability-specific schema (NssaiAvailabilityInfo, NssfEventSubscriptionCreateData/CreatedData 등) 추가 commit
-    4) verify-generated-models.py 의 deferred_schemas 에서 expected 로 이동
-  deferred_schemas:
-    # 본 PR (#15) scope 외 — NSSAIAvailability spec 으로부터 emit. PR-codegen-
-    # nssaiavailability-extension 에서 expected 로 승격.
-    - AuthorizedNssaiAvailabilityInfo
-    - NssaiAvailabilityInfo
-    - NssfEventSubscriptionCreateData
-    - NssfEventSubscriptionCreatedData
+    (NSSelection + NSSAIAvailability) 는 *각각 generate 후 union merge* 전략을
+    쓴다. regenerate.sh 가 두 spec 을 별도 out dir 로 generate 후 model union 을
+    stage 한다. 공통 TS29571 schema (Snssai / PlmnId / Tai / TaiRange / NsagInfo
+    등) 는 NSSelection run 이 canonical — generator 의 C target 이 root input
+    별 transitive $ref 깊이에 따라 공통 schema 를 다르게 emit 하기 때문 (자세한
+    근거는 regenerate.sh 의 NSSelection-is-canonical-for-shared WHY 참조). 본 PR
+    (PR-codegen-nssaiavailability-extension) 이 이 union emit 을 delivered — 직전
+    PR (#15) 의 NSSelection-only tracer-bullet 을 multi-spec 으로 확장.
+  delivered_pr: PR-codegen-nssaiavailability-extension
+  delivered_scope: |
+    1) regenerate.sh 가 NSSAIAvailability 를 두 번째 generate pass 로 추가, model
+       union merge (NSSelection canonical for shared) + include/external identity
+       assert.
+    2) NSSAIAvailability-specific schema (AuthorizedNssaiAvailabilityInfo,
+       NssaiAvailabilityInfo, NssfEventSubscriptionCreateData/CreatedData +
+       transitive deps) 가 src/nssf/generated/model 로 emit — model 산출 32 → 50.
+    3) 본 4 schema 를 deferred_schemas 에서 제거 (expected 로 승격). 이제
+       verify-generated-models.py 가 expected_missing=0 로 PASS.
+  deferred_schemas: []
+  deferred_schemas_note: |
+    PR-codegen-nssaiavailability-extension 머지 전 본 list 는 NSSAIAvailability
+    4 schema (AuthorizedNssaiAvailabilityInfo / NssaiAvailabilityInfo /
+    NssfEventSubscriptionCreateData / NssfEventSubscriptionCreatedData) 를
+    보유했다. 본 PR 이 multi-spec union emit 으로 모두 승격 → list empty.
 
 # ─── 7. Wrapper PR sequence (post-PR #15) ────────────────────────────
 wrapper_pr_sequence:
@@ -164,8 +171,9 @@ wrapper_pr_sequence:
     dependency_of: '#15'
     notes: 18 cause factory + mandatory header 자동 부착. error-cause-catalog.yaml 의 entry 와 1:1.
   - PR: PR-codegen-nssaiavailability-extension
+    status: delivered
     delivers:
-      - regenerate.sh NSSAIAvailability 추가
-      - src/nssf/generated/model 추가 schema (NssaiAvailabilityInfo 등)
-      - verify-generated-models.py expected_schemas 확장
+      - regenerate.sh NSSAIAvailability 두 번째 generate pass + model union merge
+      - src/nssf/generated/model 추가 schema (NssaiAvailabilityInfo 등 — 32 → 50)
+      - type-overrides.yaml deferred_schemas → expected 승격 (empty)
     dependency_of: '#15'

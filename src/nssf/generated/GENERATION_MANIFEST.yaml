@@ -19,20 +19,23 @@ source_drift_allowlist: infra/nssf/codegen/drift-allowlist.yaml
 generated_date: 2026-05-27
 generator_status: active  # WI-codegen-bootstrap (PR #15) 진입 후 active.
 
-# ─── 1. Active generator pipeline (Phase 1 wave 1 — PR #15) ───────────
-# WI-codegen-bootstrap 진입 — openapi-generator-cli 7.10.0 가
-# specs/29.531/TS29531_Nnssf_NSSelection.yaml 입력 + TS29571/TS29510
-# bundle 으로 emit. regenerate.sh 가 deterministic regen.
+# ─── 1. Active generator pipeline (Phase 1 wave 1 — multi-spec) ───────
+# WI-codegen-bootstrap 진입 — openapi-generator-cli 7.10.0 가 NSSF 2 spec
+# (NSSelection + NSSAIAvailability) 를 각각 generate 후 model union merge.
+# TS29571/TS29510 은 external $ref bundle. regenerate.sh 가 deterministic
+# regen + union merge (공통 TS29571 schema 는 NSSelection run canonical).
+# PR-codegen-nssaiavailability-extension 이 NSSAIAvailability emit 추가.
 generator_pipeline:
   tool: openapi-generator-cli
   tool_version: 7.10.0
   regenerator_script: infra/nssf/codegen/regenerate.sh
   spec_inputs:
-    - specs/29.531/TS29531_Nnssf_NSSelection.yaml  # primary input
-    - specs/29.571/TS29571_CommonData.yaml         # external $ref bundle
-    - specs/29.510/TS29510_Nnrf_NFManagement.yaml  # external $ref bundle
+    - specs/29.531/TS29531_Nnssf_NSSelection.yaml         # primary input (pass 1)
+    - specs/29.531/TS29531_Nnssf_NSSAIAvailability.yaml   # primary input (pass 2)
+    - specs/29.571/TS29571_CommonData.yaml                # external $ref bundle
+    - specs/29.510/TS29510_Nnrf_NFManagement.yaml         # external $ref bundle
   emit_targets:
-    - src/nssf/generated/model/  (32 schemas — NSSelection + TS29571 transitive)
+    - src/nssf/generated/model/  (50 schemas — NSSelection + NSSAIAvailability + TS29571 transitive union)
     - src/nssf/generated/include/  (list, binary, keyValuePair utility headers)
     - src/nssf/generated/external/  (cJSON 1.x, generator's pinned copy)
 
