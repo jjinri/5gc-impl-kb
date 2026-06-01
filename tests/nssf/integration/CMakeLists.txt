@@ -72,3 +72,28 @@ add_test(NAME nssf_schema_bootstrap
 set_tests_properties(nssf_schema_bootstrap PROPERTIES
     ENVIRONMENT
         "NSSF_SCHEMA_SQL_PATH=${CMAKE_SOURCE_DIR}/infra/nssf/schema.sql")
+
+# Phase 1 wave 1 WI-availability-repo — AvailabilityRepository libpq backend
+# round-trip integration test. schema_bootstrap 과 동일 gate (PostgreSQL_FOUND
+# 일 때만 build/register) + 동일 SKIP PASS 규약 (POSTGRES_* env 미주입 시).
+# ctest -R nssf_availability_repo_ 매칭 (nssf_availability_repo_pg).
+add_executable(test_availability_repo_pg
+    test_availability_repo_pg.c)
+
+target_link_libraries(test_availability_repo_pg
+    PRIVATE
+        unity
+        nssf_repository
+        PostgreSQL::PostgreSQL
+        nssf_generated
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_availability_repo_pg PRIVATE c_std_11)
+
+add_test(NAME nssf_availability_repo_pg
+         COMMAND test_availability_repo_pg)
+
+set_tests_properties(nssf_availability_repo_pg PROPERTIES
+    ENVIRONMENT
+        "NSSF_SCHEMA_SQL_PATH=${CMAKE_SOURCE_DIR}/infra/nssf/schema.sql")
