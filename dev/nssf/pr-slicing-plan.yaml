@@ -422,6 +422,10 @@ prs:
       - tests/nssf/integration/test_nrf_token_acquire.c
     depends_on:
       - PR-phase1-wave1-tls-bootstrap
+      # phase-order gate (amendment 2026-06-01, operator): M4(phase2) 가 picker
+      # topo sort 에서 phase1_wave1 미완 상태로 앞으로 새던 버그 차단. phase1_wave1
+      # tail(nsselection-handler) 뒤로 정렬 강제 — M4 는 phase1_wave1 완료 후 도달.
+      - PR-phase1-wave1-nsselection-handler
     status: not_started
     required_checks:
       - pytest_full_suite

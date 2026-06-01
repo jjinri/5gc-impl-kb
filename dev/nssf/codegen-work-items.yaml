@@ -151,6 +151,7 @@ items:
     owner_lane: code
     depends_on:
       - WI-tls-bootstrap
+      - WI-nsselection-handler   # phase-order gate (amendment 2026-06-01, operator) — pr-slicing PR-phase2-outbound-oauth2 와 일관. M4 를 phase1_wave1 tail 뒤로 정렬.
     inputs:
       - docs/adr/ADR-0004-project-security-baseline.md (M4 outbound token attach)
       - engineering/nssf/engineering-design.md (sbi_client_stack, oauth2 outbound slot)
