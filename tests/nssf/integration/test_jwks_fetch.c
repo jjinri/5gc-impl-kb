@@ -518,6 +518,40 @@ static void test_scheme_policy_enforced(void)
     TEST_ASSERT_NULL_MESSAGE(
         nssf_jwks_cache_create_insecure("http://evil.example/jwks", 60),
         "insecure constructor must reject non-loopback host");
+
+    /*
+     * Userinfo host-spoof (fix e410ec1): an RFC-3986 authority is
+     * [ userinfo "@" ] host [ ":" port ], so a '@' makes the bytes BEFORE it
+     * userinfo and the REAL host the part AFTER it. "http://127.0.0.1@evil.com"
+     * therefore resolves to evil.com — a prefix-only loopback check would be
+     * spoofed. The insecure constructor must reject any '@' in the authority.
+     */
+    TEST_ASSERT_NULL_MESSAGE(
+        nssf_jwks_cache_create_insecure("http://127.0.0.1@evil.com/jwks", 60),
+        "userinfo spoof (loopback-looking userinfo, real host evil.com) must be "
+        "rejected");
+    TEST_ASSERT_NULL_MESSAGE(
+        nssf_jwks_cache_create_insecure("http://localhost:80@evil.com/jwks", 60),
+        "userinfo spoof with port in userinfo must be rejected");
+    TEST_ASSERT_NULL_MESSAGE(
+        nssf_jwks_cache_create_insecure("http://localhost@evil.com/jwks", 60),
+        "userinfo spoof (bare localhost userinfo, real host evil.com) must be "
+        "rejected");
+
+    /* Regression: a genuine loopback host with an explicit port still accepted. */
+    nssf_jwks_cache_t *loopback_port_cache =
+        nssf_jwks_cache_create_insecure("http://127.0.0.1:8080/jwks", 60);
+    TEST_ASSERT_NOT_NULL_MESSAGE(
+        loopback_port_cache,
+        "genuine loopback host with port must remain accepted");
+    nssf_jwks_cache_free(loopback_port_cache);
+
+    /* Regression: a loopback-looking *prefix* of a real host is still rejected —
+     * "127.0.0.1.evil.com" is evil.com's subdomain, not loopback. The authority
+     * walk has no '@' here, so the prefix/terminator check carries the rejection. */
+    TEST_ASSERT_NULL_MESSAGE(
+        nssf_jwks_cache_create_insecure("http://127.0.0.1.evil.com/jwks", 60),
+        "loopback-looking host prefix of a real domain must be rejected");
 }
 
 int main(void)
