@@ -2,7 +2,7 @@
 name: nf-implement
 description: Public autonomous implementation runner for `/nf-implement <nf>` in 5gc-impl-kb. Requires `readiness_pack_ready` PASS (built by `/nf-readiness <nf>`). Use when the user requests autonomous code generation for an NF (e.g. "/nf-implement nssf", "NSSF 구현 시작", "tracer-bullet 시작", "/nf-implement nssf --phase 1 --dry-run"). Acts as a launcher/preflight: after the readiness gate it starts `nf-orchestrator` as a *main-thread* agent (`claude --agent nf-orchestrator`), which loops next-slice pick → 4 lane dispatch (code/reviewer/tester/verifier) → self-merge under the 4-condition gate → checkpoint/resume → until phase 5 done, cost cap, or 3-trigger escape (ADR-0005). Defines the entry contract, state schema, human stop/observe surface, and the *no spec semantic rediscovery* invariant. Implementation policy = ADR-0005, infrastructure = PR-B (#104).
 argument-hint: "<nf> [--phase <1-5|all>] [--resume] [--dry-run] [--stop] [--status]"
-allowed-tools: Bash(.venv/bin/python3 design/scripts/nf-readiness-status.py *) Bash(.venv/bin/python3 design/scripts/nf-implement-slice-status.py *) Bash(cat *) Bash(ls *) Bash(find dev/* *) Bash(find design/* *) Bash(find engineering/* *) Bash(git status --short) Bash(git log --oneline -n *) Bash(gh pr list *) Bash(gh pr view *) Bash(mkdir -p *)
+allowed-tools: Bash(.venv/bin/python3 design/scripts/nf-readiness-status.py *) Bash(.venv/bin/python3 design/scripts/nf-implement-slice-status.py *) Bash(.venv/bin/python3 design/scripts/nf-implement-control.py *) Bash(cat *) Bash(ls *) Bash(find dev/* *) Bash(find design/* *) Bash(find engineering/* *) Bash(git status --short) Bash(git log --oneline -n *) Bash(gh pr list *) Bash(gh pr view *) Bash(mkdir -p *)
 ---
 
 # nf-implement — autonomous implementation runner
@@ -154,15 +154,23 @@ PASS → 3 단계. FAIL → blocked_by + to_pass 보고 후 stop.
 ### 3. `--status` 처리 (있을 때 단독)
 
 ```bash
-.venv/bin/python3 design/scripts/nf-implement-slice-status.py <nf>
+.venv/bin/python3 design/scripts/nf-implement-slice-status.py <nf>   # next-slice + counters
+.venv/bin/python3 design/scripts/nf-implement-control.py <nf> --status   # control state
 ```
 
-state file 요약 + slice picker 결과 출력. orchestrator dispatch 없음.
+slice picker 결과 + control state 요약 출력. orchestrator launch 없음.
 
 ### 4. `--stop` 처리 (있을 때 단독)
 
-state file 의 `stop_requested = true` 기록. orchestrator 가 활성 시 graceful
-stop. 이미 종료 상태면 안내만.
+```bash
+.venv/bin/python3 design/scripts/nf-implement-control.py <nf> --stop
+```
+
+state file 의 `stop_requested = true` (+ `stop_requested_at`) 를 외부에서 기록한다.
+A′ 에서 orchestrator 는 별도 process 이므로, main pane 의 본 SKILL 이 control
+script 로 state 를 mutate 하고 orchestrator 가 매 loop iteration 시작 시 flag 를
+poll 해 현재 slice 머지 후 graceful 종료한다. 이미 종료 상태면 안내만.
+재기동 전 해제는 `nf-implement-control.py <nf> --clear-stop`.
 
 ### 5. `--dry-run` 처리
 

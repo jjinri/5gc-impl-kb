@@ -201,7 +201,8 @@ def build_payload(nf: str, plan_path: pathlib.Path, state_path: pathlib.Path,
             "current_phase": state.get("current_phase"),
             "completed_phases": state.get("completed_phases"),
             "total_slices_completed": state.get("total_slices_completed"),
-            "chain_depth": state.get("chain_depth"),
+            "resume_count": state.get("resume_count"),
+            "run_epoch": state.get("run_epoch"),
             "current_slice_attempts": state.get("current_slice_attempts"),
             "stop_requested": state.get("stop_requested"),
             "last_checkpoint_at": state.get("last_checkpoint_at"),
@@ -230,8 +231,8 @@ def build_payload(nf: str, plan_path: pathlib.Path, state_path: pathlib.Path,
 def _recommend(next_pr: dict[str, Any] | None, state: dict[str, Any] | None) -> str:
     if state and state.get("stop_requested"):
         return "stop_requested — finish current slice merge, then halt."
-    if state and (state.get("chain_depth") or 0) >= 20:
-        return "chain_depth cap 20 reached — halt + report (ADR-0005 D6)."
+    if state and (state.get("resume_count") or 0) >= 20:
+        return "resume_count cap 20 reached — halt + report (ADR-0005 D6)."
     if state and (state.get("total_slices_completed") or 0) >= 50:
         return "total_slices_completed cap 50 reached — halt + report."
     if next_pr is None:
