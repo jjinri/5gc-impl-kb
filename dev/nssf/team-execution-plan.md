@@ -29,7 +29,7 @@ user_sections:
 | phase | description | work_items |
 |---|---|---|
 | `phase1` | tracer-bullet 부터 NSSelectionGet single-op end-to-end. wave 0 (WI-tracer-bullet-toolchain) 가 toolchain skeleton + 501 stub 으로 vertical slice 증명, 이후 wave 1 (WI-codegen-bootstrap → ... → WI-nsselection-handler) 가 full feature wiring. | `WI-tracer-bullet-toolchain`, `WI-codegen-bootstrap`, `WI-schema-bootstrap`, `WI-tls-bootstrap`, `WI-problem-details-wrapper`, `WI-nftype-wrapper`, `WI-availability-repo`, `WI-selection-engine`, `WI-nsselection-handler` |
-| `phase2` | NSSAIAvailability writes, PR G 후속 | `WI-availability-engine`, `WI-availability-handlers`, `WI-notification-dispatcher` |
+| `phase2` | NSSAIAvailability writes, PR G 후속 | `WI-availability-engine`, `WI-availability-handlers`, `WI-outbound-oauth2`, `WI-notification-dispatcher` |
 | `phase3` | subscription, PR G 후속 | `WI-subscription-store`, `WI-subscription-handlers` |
 | `phase4` | contract / security / e2e tests, PR G 후속 | `WI-contract-tests`, `WI-security-tests`, `WI-e2e-tests` |
 | `phase5` | hardening, PR G 후속 | `WI-observability-finalize` |
