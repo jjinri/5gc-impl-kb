@@ -57,6 +57,8 @@ def parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description="next-slice picker for /nf-implement")
     p.add_argument("nf", help="NF 이름 (예 nssf)")
     p.add_argument("--status", action="store_true", help="요약 출력")
+    p.add_argument("--progress", action="store_true",
+                   help="pr-slicing-plan 전체 진행 dashboard (phase별 + 전체 %) 출력")
     p.add_argument("--json", action="store_true", help="JSON 출력")
     p.add_argument("--use-gh", dest="use_gh", action="store_true", default=True)
     p.add_argument("--no-gh", dest="use_gh", action="store_false")
@@ -183,6 +185,56 @@ def render_json(payload: dict[str, Any]) -> str:
     return json.dumps(_json_safe(payload), indent=2, sort_keys=False, ensure_ascii=False)
 
 
+_PROGRESS_ICON = {
+    "merged": "[x]", "open": "[~]", "in_progress": "[~]",
+    "closed_not_merged": "[!]", "not_started": "[ ]",
+}
+_PROGRESS_ORDER = ["merged", "open", "in_progress", "closed_not_merged", "not_started"]
+
+
+def render_progress(nf: str, prs: list[dict[str, Any]], statuses: dict[str, str],
+                    next_id: str | None, state: dict[str, Any] | None) -> str:
+    """pr-slicing-plan 전체 진행 dashboard. phase별 그룹 + 전체 진행률."""
+    phase_of = {pr["id"]: (pr.get("phase") or "?") for pr in prs}
+    total = len(statuses)
+    counts: dict[str, int] = defaultdict(int)
+    for st in statuses.values():
+        counts[st] += 1
+    done = counts.get("merged", 0)
+    pct = (done * 100 // total) if total else 0
+    bar = "#" * (pct // 5) + "-" * (20 - pct // 5)
+
+    lines = [f"=== {nf} pr-slicing-plan progress ===",
+             f"overall: {done}/{total} merged  [{bar}] {pct}%",
+             "  " + "  ".join(f"{s}={counts[s]}" for s in _PROGRESS_ORDER if counts.get(s)),
+             ""]
+
+    by_phase: dict[str, list[tuple[str, str]]] = defaultdict(list)
+    for pid, st in statuses.items():
+        by_phase[phase_of.get(pid, "?")].append((pid, st))
+
+    def _sort_key(pid_st: tuple[str, str]) -> tuple[int, str]:
+        st = pid_st[1]
+        return (_PROGRESS_ORDER.index(st) if st in _PROGRESS_ORDER else 9, pid_st[0])
+
+    for ph in sorted(by_phase, key=lambda k: (k == "?", k)):
+        items = by_phase[ph]
+        d = sum(1 for _, st in items if st == "merged")
+        lines.append(f"[{ph}] {d}/{len(items)}")
+        for pid, st in sorted(items, key=_sort_key):
+            mark = "  <- NEXT" if pid == next_id else ""
+            lines.append(f"   {_PROGRESS_ICON.get(st, '[?]')} {pid}{mark}")
+
+    rs = state or {}
+    lines += ["",
+              f"NEXT: {next_id or '(none — phase done or blocked)'}",
+              f"run_state: phase={rs.get('current_phase')} "
+              f"slices_done={rs.get('total_slices_completed')} "
+              f"resume_count={rs.get('resume_count')} "
+              f"blockers={len(rs.get('blockers') or [])}"]
+    return "\n".join(lines)
+
+
 def _display_path(path: pathlib.Path) -> str:
     if path.is_absolute():
         try:
@@ -262,6 +314,11 @@ def main() -> int:
     except ValueError as exc:
         print(f"FAIL: {exc}", file=sys.stderr)
         return EXIT_BLOCKED
+
+    if args.progress:
+        next_id = next_pr["id"] if next_pr else None
+        print(render_progress(nf, prs, statuses, next_id, state))
+        return EXIT_OK
 
     payload = build_payload(nf, plan_path, state_path, next_pr, statuses, state)
     out = render_json(payload) if args.json else render_human(payload)
