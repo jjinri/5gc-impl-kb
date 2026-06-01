@@ -147,6 +147,72 @@ target_compile_features(test_availability_repo_inmemory PRIVATE c_std_11)
 add_test(NAME nssf_availability_repo_inmemory
          COMMAND test_availability_repo_inmemory)
 
+# Phase 1 wave 1 WI-selection-engine — SelectionEngine NSSelectionGet decision
+#   allowed = requested ∩ subscribed ∩ plmn_policy ∩ availability[tai].
+# 네 unit test 가 registration / pdu / ueconfig / redirect(G-07)+seam path 를
+# 검증한다. availability 는 nssf_availability_repo_new_inmemory() seed (DB/network
+# 없음) — nssf_engine 이 nssf_repository(availability header)+nssf_generated(cJSON)
+# 를 transitively 노출한다. ctest -R nssf_selection_engine_ 로 4개 매칭.
+add_executable(test_selection_engine_registration
+    unit/test_selection_engine_registration.c)
+
+target_link_libraries(test_selection_engine_registration
+    PRIVATE
+        unity
+        nssf_engine
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_selection_engine_registration PRIVATE c_std_11)
+
+add_test(NAME nssf_selection_engine_registration
+         COMMAND test_selection_engine_registration)
+
+add_executable(test_selection_engine_pdu
+    unit/test_selection_engine_pdu.c)
+
+target_link_libraries(test_selection_engine_pdu
+    PRIVATE
+        unity
+        nssf_engine
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_selection_engine_pdu PRIVATE c_std_11)
+
+add_test(NAME nssf_selection_engine_pdu
+         COMMAND test_selection_engine_pdu)
+
+add_executable(test_selection_engine_ueconfig
+    unit/test_selection_engine_ueconfig.c)
+
+target_link_libraries(test_selection_engine_ueconfig
+    PRIVATE
+        unity
+        nssf_engine
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_selection_engine_ueconfig PRIVATE c_std_11)
+
+add_test(NAME nssf_selection_engine_ueconfig
+         COMMAND test_selection_engine_ueconfig)
+
+add_executable(test_selection_engine_redirect
+    unit/test_selection_engine_redirect.c)
+
+target_link_libraries(test_selection_engine_redirect
+    PRIVATE
+        unity
+        nssf_engine
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_selection_engine_redirect PRIVATE c_std_11)
+
+add_test(NAME nssf_selection_engine_redirect
+         COMMAND test_selection_engine_redirect)
+
 # Phase 1 wave 1 WI-schema-bootstrap — PostgreSQL bootstrap integration test.
 # libpq fixture, ctest -R nssf_schema_bootstrap 매칭. libpq 부재 또는
 # POSTGRES_* env 미주입 시 SKIP PASS 로 회피.
