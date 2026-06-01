@@ -128,6 +128,25 @@ target_compile_features(test_oauth2_scope_check PRIVATE c_std_11)
 add_test(NAME nssf_oauth2_scope_check
          COMMAND test_oauth2_scope_check)
 
+# Phase 1 wave 1 WI-availability-repo — AvailabilityRepository in-memory test
+# seam round-trip. DB 의존 없음 (nssf_availability_repo_new_inmemory). cJSON 은
+# nssf_repository 의 PUBLIC nssf_generated 의존으로 전이. ctest -R
+# nssf_availability_repo_ 매칭 (nssf_availability_repo_inmemory).
+add_executable(test_availability_repo_inmemory
+    unit/test_availability_repo_inmemory.c)
+
+target_link_libraries(test_availability_repo_inmemory
+    PRIVATE
+        unity
+        nssf_repository
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_availability_repo_inmemory PRIVATE c_std_11)
+
+add_test(NAME nssf_availability_repo_inmemory
+         COMMAND test_availability_repo_inmemory)
+
 # Phase 1 wave 1 WI-schema-bootstrap — PostgreSQL bootstrap integration test.
 # libpq fixture, ctest -R nssf_schema_bootstrap 매칭. libpq 부재 또는
 # POSTGRES_* env 미주입 시 SKIP PASS 로 회피.
