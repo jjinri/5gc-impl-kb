@@ -124,3 +124,23 @@ def test_resume_count_cap_recommendation(tmp_path: pathlib.Path) -> None:
     assert payload["run_state"]["run_epoch"] == 20
     assert "resume_count cap 20" in payload["recommendation"]
     assert "chain_depth" not in payload["run_state"]
+
+
+def test_progress_dashboard(tmp_path: pathlib.Path) -> None:
+    # --progress = pr-slicing-plan 전체 진행 dashboard (phase별 + 전체 %).
+    plan = tmp_path / "pr-slicing-plan.yaml"
+    _write_plan(plan)
+    out = subprocess.run(
+        [sys.executable, str(SCRIPT), "demo", "--no-gh", "--progress", "--plan", str(plan)],
+        cwd=REPO,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    text = out.stdout
+    assert "pr-slicing-plan progress" in text
+    assert "overall: 1/2 merged" in text          # PR-base merged, PR-next not_started
+    assert "50%" in text
+    assert "[phase1_wave1] 0/1" in text            # PR-next phase, 0 merged
+    assert "<- NEXT" in text                       # PR-next is eligible next
+    assert "PR-next" in text
