@@ -13,6 +13,7 @@ pkg_check_modules(libcurl REQUIRED IMPORTED_TARGET libcurl>=7.81)
 add_library(nssf_runtime STATIC
     tls_context.c
     oauth2_jwks.c
+    oauth2_outbound.c
     oauth2_scope_check.c)
 
 target_include_directories(nssf_runtime PUBLIC
