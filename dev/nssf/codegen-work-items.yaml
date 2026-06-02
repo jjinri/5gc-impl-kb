@@ -338,6 +338,11 @@ items:
     depends_on:
       - WI-schema-bootstrap
       - WI-tls-bootstrap
+      # WI-level consistency (amendment 2026-06-02, PR-A ratification): dispatcher
+      # 가 outbound OAuth2 (sbi_client_stack token attach) 를 사용하므로 WI-level
+      # 도 PR-level (pr-slicing PR-phase2-notification-dispatcher.depends_on) 와
+      # 정합. M4 (#128) merged 후 추가.
+      - WI-outbound-oauth2
     inputs:
       - design/nssf/module-decomposition/NotificationDispatcher.md
       - design/nssf/architecture/state-persistence.md (retry queue strategy)
