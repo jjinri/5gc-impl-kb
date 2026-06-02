@@ -415,6 +415,30 @@ prs:
       - phase2_integration_options
     estimated_loc: 1500
 
+  # M4 batch backlog (amendment 2026-06-02, PR-B). route-registration = 최상위
+  # 우선, notification-dispatcher 전 dispatch (operator). dispatcher 가 본 slice
+  # 에 depends → picker 가 route-registration 먼저 picks.
+  - id: PR-phase2-availability-route-registration
+    title: 'feat(nssf): WI-availability-route-registration — NSSAIAvailability 4 handler → server/router + main.c 배선'
+    phase: phase2
+    work_items:
+      - WI-availability-route-registration
+    scope_files:
+      - src/nssf/server/router.{h,c}
+      - src/nssf/main.c
+      - tests/nssf/integration/test_nssaiavailability_route_*.c
+    depends_on:
+      - PR-phase2-availability-handlers
+      - PR-phase1-wave1-nsselection-handler
+    status: not_started
+    required_checks: []   # CI full(pytest+build+ctest); route integration = SKIP-PASS w/o env
+    estimated_loc: 600
+    notes: |
+      availability-handlers slice 가 standalone 모듈로 구현(route 미배선)한 것을
+      server/router dispatch table + main.c deps 에 slot-in. OPTIONS 204-vs-
+      contract-200 reconcile 포함 (handler 응답이 contract 와 실제 상이 — 본
+      slice 에서 결정). M4 무의존 (default self-merge).
+
   - id: PR-phase2-notification-dispatcher
     title: 'feat(nssf): WI-notification-dispatcher — retry_queue + outbound TLS'
     phase: phase2
@@ -428,10 +452,14 @@ prs:
       - PR-phase1-wave1-schema-bootstrap
       - PR-phase1-wave1-tls-bootstrap
       - PR-phase2-outbound-oauth2
+      # route-registration 먼저 (operator order). + retry_queue real enqueue
+      # consumer = 본 slice (availability-handlers 의 engine change-event seam 소비).
+      - PR-phase2-availability-route-registration
     status: not_started
     required_checks:
       - phase2_retry_queue_enqueue
     estimated_loc: 1000
+    eyeball_stop: true   # M4 attach 첫 consumer — AMF callback/scope/retry 보안민감. self-merge 금지, operator(pane1) eyeball (operator directive 2026-06-02).
 
   # backlog slice — amendment 2026-06-01 (operator 결정, Pane-2 review of PR #115).
   # ADR-0004 M4 (outbound OAuth2 token acquisition/attach) 는 tls-bootstrap
@@ -661,3 +689,50 @@ prs:
       (NSSF wave 1 stale status 정합을 위한 plan amendment 가 orchestrator
       가 자율 작성한 *첫* artifact 가 될 수 있다 — 자율 작동 자체의 자기
       검증).
+
+  # ===== M4 batch backlog slices (amendment 2026-06-02, PR-B) =====
+  # operator carry-list 등록. dispatch 순서/시점 별도 operator 결정. notification-
+  # dispatcher 뒤 plan-order 라 picker 가 dispatcher 보다 먼저 picks 안 함.
+  - id: PR-phase2-oauth2-resilience
+    title: 'feat(nssf): WI-oauth2-resilience — outbound OAuth2 bounded retry + backoff + dead-letter (M4 decision #11)'
+    phase: phase2
+    work_items:
+      - WI-oauth2-resilience
+    scope_files:
+      - src/nssf/runtime/oauth2_outbound.{h,c}
+      - tests/nssf/unit/test_oauth2_outbound_retry.c
+    depends_on:
+      - PR-phase2-outbound-oauth2
+    status: not_started
+    required_checks: []
+    estimated_loc: 400
+    notes: 'M4 #128 accept-defer 한 decision #11 완성 (single-shot fail-closed → bounded retry/backoff + 400/401/403/invalid_scope dead-letter). fail-closed 불변 유지.'
+
+  - id: PR-phase2-config-hardening
+    title: 'feat(nssf): WI-config-hardening — secret_ref env:/file: resolver seam'
+    phase: phase2
+    work_items:
+      - WI-config-hardening
+    scope_files:
+      - src/nssf/runtime/secret_ref_resolver.{h,c}
+      - tests/nssf/unit/test_secret_ref_resolver.c
+    depends_on:
+      - PR-phase2-outbound-oauth2
+    status: not_started
+    required_checks: []
+    estimated_loc: 300
+    notes: 'secret_ref(env:NAME/file:/path) resolver code (M4 advisory A1). mtls default 라 low-pri. 문서 의미 = operator-config-guide.'
+
+  - id: PR-phase5-operator-configuration-guide
+    title: 'docs(nssf): WI-operator-config-guide — operator configuration guide'
+    phase: phase5
+    work_items:
+      - WI-operator-config-guide
+    scope_files:
+      - design/nssf/operator-configuration-guide.md
+    depends_on:
+      - PR-phase2-outbound-oauth2
+    status: not_started
+    required_checks: []
+    estimated_loc: 300
+    notes: 'deferred backlog (memory project_nssf_deferred_plan_slices). tls/mtls/oauth2_inbound/oauth2_outbound config 키 + nf_instance_id + dev PKI + NRF token_url/cert paths + secret_ref 의미.'

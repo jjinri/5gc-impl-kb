@@ -149,6 +149,10 @@ phases:
       - WI-availability-handlers
       - WI-outbound-oauth2
       - WI-notification-dispatcher
+      # M4 batch backlog (amendment 2026-06-02, PR-B)
+      - WI-availability-route-registration
+      - WI-oauth2-resilience
+      - WI-config-hardening
     status: not_started
     entry_gate: phase1_wave1.exit_gate PASS
     exit_gate:
@@ -204,6 +208,8 @@ phases:
     description: metric/log/trace seam production-capable signal emit.
     work_items:
       - WI-observability-finalize
+      # M4 batch backlog (amendment 2026-06-02, PR-B)
+      - WI-operator-config-guide
     status: not_started
     entry_gate: phase4.exit_gate PASS
     exit_gate:
