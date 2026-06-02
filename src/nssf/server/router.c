@@ -33,6 +33,9 @@
 #include <uv.h>
 
 #include "nf_problem_details_wrapper.h"
+#include "nssaiavailability_delete_handler.h"
+#include "nssaiavailability_patch_handler.h"
+#include "nssaiavailability_put_handler.h"
 #include "problem_details.h"
 
 /* cJSON for serializing the router-level ProblemDetails (404/405/500). */
@@ -40,11 +43,18 @@
 
 #define NSSF_CT_PROBLEM_JSON  "application/problem+json"
 
+#define ROUTE_NSSELECTION       "/network-slice-information"
+#define ROUTE_NSSAIAVAIL        "/nssai-availability"
+#define ROUTE_NSSAIAVAIL_ID     "/nssai-availability/"  /* prefix + {nfId}. */
+
 struct nssf_router {
-    nssf_nsselection_deps_t deps;  /* copied by value; members borrowed. */
+    nssf_router_deps_t deps;  /* copied by value; members borrowed. */
 };
 
-nssf_router_t *nssf_router_create(const nssf_nsselection_deps_t *deps)
+/* Defined in the server half below; used by the {nfId} path-param copy. */
+static void *xstrndup(const uint8_t *src, size_t len);
+
+nssf_router_t *nssf_router_create(const nssf_router_deps_t *deps)
 {
     if (deps == NULL) {
         return NULL;
@@ -66,6 +76,7 @@ void nssf_router_free(nssf_router_t *router)
 static int emit_problem(nssf_router_response_t *out, problem_details_t *pd,
                         int fallback_status)
 {
+    out->allow[0] = '\0';  /* error responses carry no Allow header. */
     if (pd == NULL) {
         out->status = fallback_status;
         out->content_type = NSSF_CT_PROBLEM_JSON;
@@ -81,10 +92,36 @@ static int emit_problem(nssf_router_response_t *out, problem_details_t *pd,
     return out->status;
 }
 
-/* True when `path` (up to query) equals `route` exactly. */
+/* True when `path` (its first path_len bytes, query already split off) equals
+ * the literal `route` exactly. */
 static bool path_matches(const char *path, size_t path_len, const char *route)
 {
     return strlen(route) == path_len && memcmp(route, path, path_len) == 0;
+}
+
+/*
+ * When `route_path` (the query-stripped :path, length route_len) is under the
+ * "/nssai-availability/" prefix, return the borrowed {nfId} segment start and its
+ * length. Returns false (no path param) when the path is not under the prefix or
+ * carries an empty / further-nested nfId.
+ */
+static bool match_nssaiavail_id(const char *route_path, size_t route_len,
+                                const char **nf_id_out, size_t *nf_id_len_out)
+{
+    const size_t prefix_len = sizeof(ROUTE_NSSAIAVAIL_ID) - 1;
+    if (route_len <= prefix_len ||
+        memcmp(route_path, ROUTE_NSSAIAVAIL_ID, prefix_len) != 0) {
+        return false;
+    }
+    const char *seg = route_path + prefix_len;
+    size_t seg_len = route_len - prefix_len;
+    /* A nested path ("/nssai-availability/{nfId}/...") is not this route. */
+    if (memchr(seg, '/', seg_len) != NULL) {
+        return false;
+    }
+    *nf_id_out = seg;
+    *nf_id_len_out = seg_len;
+    return true;
 }
 
 int nssf_router_dispatch(const nssf_router_t *router,
@@ -100,6 +137,7 @@ int nssf_router_dispatch(const nssf_router_t *router,
     out->status = 0;
     out->content_type = NULL;
     out->body = NULL;
+    out->allow[0] = '\0';
 
     if (router == NULL || req->path == NULL || req->method == NULL) {
         return emit_problem(out, nf_problem_details_make_500(NULL, req ? req->path : NULL), 500);
@@ -111,17 +149,24 @@ int nssf_router_dispatch(const nssf_router_t *router,
     const char *raw_query = (qmark != NULL) ? qmark + 1 : NULL;
 
     /*
-     * Route table. One row today — GET /network-slice-information. The match is
-     * path-first so a known path with the wrong method answers 405 (Allow),
-     * unknown paths answer 404.
+     * Route table. The match is path-first so a known path with the wrong method
+     * answers 405 (Allow), unknown paths answer 404. Registering a handler is one
+     * row, no server-I/O changes — each row builds its per-handler deps from the
+     * router's combined deps and transfers body ownership into out.
      */
-    if (path_matches(req->path, route_len, "/network-slice-information")) {
+
+    /* GET /network-slice-information → NSSelectionGet. */
+    if (path_matches(req->path, route_len, ROUTE_NSSELECTION)) {
         if (strcmp(req->method, "GET") != 0) {
             return emit_problem(out,
                                 nf_problem_details_make_405(NULL, req->path),
                                 405);
         }
 
+        nssf_nsselection_deps_t deps = {
+            .jwks_cache = router->deps.jwks_cache,
+            .engine = router->deps.selection_engine,
+        };
         nssf_nsselection_request_t hreq = {
             .authorization = req->authorization,
             .raw_query = raw_query,
@@ -129,13 +174,135 @@ int nssf_router_dispatch(const nssf_router_t *router,
             .max_uri_len = req->max_uri_len,
         };
         nssf_nsselection_response_t hres = {0};
-        nssf_nsselection_get_handle(&hreq, &router->deps, &hres);
+        nssf_nsselection_get_handle(&hreq, &deps, &hres);
 
-        /* Hand ownership of the handler body to the router response. */
         out->status = hres.status;
         out->content_type = hres.content_type;
-        out->body = hres.body;   /* transferred — do not free hres here. */
+        out->body = hres.body;   /* ownership transferred. */
         return out->status;
+    }
+
+    /* OPTIONS /nssai-availability → NSSAIAvailabilityOptions (no nfId). */
+    if (path_matches(req->path, route_len, ROUTE_NSSAIAVAIL)) {
+        if (strcmp(req->method, "OPTIONS") != 0) {
+            return emit_problem(out,
+                                nf_problem_details_make_405(NULL, req->path),
+                                405);
+        }
+
+        nssf_nssaiavailability_options_deps_t deps = {
+            .jwks_cache = router->deps.jwks_cache,
+            .engine = router->deps.availability_engine,
+        };
+        nssf_nssaiavailability_options_request_t hreq = {
+            .authorization = req->authorization,
+            .request_target = req->path,
+            .max_uri_len = req->max_uri_len,
+        };
+        nssf_nssaiavailability_options_response_t hres = {0};
+        nssf_nssaiavailability_options_handle(&hreq, &deps, &hres);
+
+        out->status = hres.status;
+        out->content_type = hres.content_type;
+        out->body = hres.body;   /* ownership transferred. */
+        /* Carry the Allow header value the server emits on success. */
+        memcpy(out->allow, hres.allow, sizeof(out->allow));
+        return out->status;
+    }
+
+    /* {PUT,PATCH,DELETE} /nssai-availability/{nfId}. */
+    const char *nf_id = NULL;
+    size_t nf_id_len = 0;
+    if (match_nssaiavail_id(req->path, route_len, &nf_id, &nf_id_len)) {
+        /* The {nfId} segment is borrowed from req->path (not NUL-terminated at
+         * the segment boundary); the per-handler request needs a NUL-terminated
+         * copy. */
+        char *nf_id_z = xstrndup((const uint8_t *)nf_id, nf_id_len);
+        if (nf_id_z == NULL) {
+            return emit_problem(out, nf_problem_details_make_500(NULL, req->path), 500);
+        }
+
+        if (strcmp(req->method, "PUT") == 0) {
+            nssf_nssaiavailability_put_deps_t deps = {
+                .jwks_cache = router->deps.jwks_cache,
+                .engine = router->deps.availability_engine,
+            };
+            nssf_nssaiavailability_put_request_t hreq = {
+                .authorization = req->authorization,
+                .nf_id = nf_id_z,
+                .content_type = req->content_type,
+                .body = req->body,
+                .content_length = req->content_length,
+                .has_content_length = req->has_content_length,
+                .max_body_len = req->max_body_len,
+                .request_target = req->path,
+                .max_uri_len = req->max_uri_len,
+            };
+            nssf_nssaiavailability_put_response_t hres = {0};
+            nssf_nssaiavailability_put_handle(&hreq, &deps, &hres);
+            out->status = hres.status;
+            out->content_type = hres.content_type;
+            out->body = hres.body;   /* ownership transferred. */
+            free(nf_id_z);
+            return out->status;
+        }
+
+        if (strcmp(req->method, "PATCH") == 0) {
+            nssf_nssaiavailability_patch_deps_t deps = {
+                .jwks_cache = router->deps.jwks_cache,
+                .engine = router->deps.availability_engine,
+            };
+            /*
+             * The PATCH routing Tai is not a transport header — an RFC 6902 array
+             * does not embed it. With no transport source the router passes NULL;
+             * the engine classifies a NULL/absent Tai as 400 (the handler's own
+             * contract). A later slice that introduces a Tai source wires it here.
+             */
+            nssf_nssaiavailability_patch_request_t hreq = {
+                .authorization = req->authorization,
+                .nf_id = nf_id_z,
+                .content_type = req->content_type,
+                .body = req->body,
+                .tai = NULL,
+                .content_length = req->content_length,
+                .has_content_length = req->has_content_length,
+                .max_body_len = req->max_body_len,
+                .request_target = req->path,
+                .max_uri_len = req->max_uri_len,
+            };
+            nssf_nssaiavailability_patch_response_t hres = {0};
+            nssf_nssaiavailability_patch_handle(&hreq, &deps, &hres);
+            out->status = hres.status;
+            out->content_type = hres.content_type;
+            out->body = hres.body;   /* ownership transferred. */
+            free(nf_id_z);
+            return out->status;
+        }
+
+        if (strcmp(req->method, "DELETE") == 0) {
+            nssf_nssaiavailability_delete_deps_t deps = {
+                .jwks_cache = router->deps.jwks_cache,
+                .engine = router->deps.availability_engine,
+            };
+            nssf_nssaiavailability_delete_request_t hreq = {
+                .authorization = req->authorization,
+                .nf_id = nf_id_z,
+                .request_target = req->path,
+                .max_uri_len = req->max_uri_len,
+            };
+            nssf_nssaiavailability_delete_response_t hres = {0};
+            nssf_nssaiavailability_delete_handle(&hreq, &deps, &hres);
+            out->status = hres.status;
+            out->content_type = hres.content_type;
+            out->body = hres.body;   /* ownership transferred. */
+            free(nf_id_z);
+            return out->status;
+        }
+
+        free(nf_id_z);
+        return emit_problem(out,
+                            nf_problem_details_make_405(NULL, req->path),
+                            405);
     }
 
     /* No route matched. */
@@ -338,19 +505,26 @@ static int submit_response(nghttp2_session *session, nssf_conn_t *conn,
     snprintf(status_str, sizeof(status_str), "%d", rres.status);
     const char *ct = rres.content_type ? rres.content_type : "application/json";
 
-    const nghttp2_nv hdrs[] = {
-        { (uint8_t *)":status", (uint8_t *)status_str, 7, strlen(status_str),
-          NGHTTP2_NV_FLAG_NONE },
-        { (uint8_t *)"content-type", (uint8_t *)ct, 12, strlen(ct),
-          NGHTTP2_NV_FLAG_NONE },
-    };
+    /* OPTIONS success answers with an Allow header (rres.allow non-empty) and no
+     * content-type (empty body); every other response carries content-type. */
+    bool has_allow = (rres.allow[0] != '\0');
+    nghttp2_nv hdrs[3];
+    size_t nhdrs = 0;
+    hdrs[nhdrs++] = (nghttp2_nv){ (uint8_t *)":status", (uint8_t *)status_str, 7,
+                                  strlen(status_str), NGHTTP2_NV_FLAG_NONE };
+    if (has_allow) {
+        hdrs[nhdrs++] = (nghttp2_nv){ (uint8_t *)"allow", (uint8_t *)rres.allow, 5,
+                                      strlen(rres.allow), NGHTTP2_NV_FLAG_NONE };
+    } else {
+        hdrs[nhdrs++] = (nghttp2_nv){ (uint8_t *)"content-type", (uint8_t *)ct, 12,
+                                      strlen(ct), NGHTTP2_NV_FLAG_NONE };
+    }
 
     nghttp2_data_provider prd = {
         .source = { .ptr = sc },
         .read_callback = resp_read_cb,
     };
-    int rv = nghttp2_submit_response(session, sc->stream_id, hdrs,
-                                     sizeof(hdrs) / sizeof(hdrs[0]), &prd);
+    int rv = nghttp2_submit_response(session, sc->stream_id, hdrs, nhdrs, &prd);
     if (rv != 0) {
         return NGHTTP2_ERR_CALLBACK_FAILURE;
     }

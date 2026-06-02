@@ -8,12 +8,16 @@
  *   1. The router — a thin (method, path) → handler dispatch table. One decoded
  *      HTTP/2 request becomes an nssf_router_request_t; nssf_router_dispatch()
  *      matches the route and invokes the handler, producing an
- *      nssf_router_response_t the server streams back. Phase 1 wave 1 registers
- *      exactly one route — GET /network-slice-information →
- *      nssf_nsselection_get_handle. Future handlers (NSSAIAvailability*,
- *      Subscription) slot into the table without touching the server I/O code
- *      (request-flow.md §module dispatch). An unmatched method/path answers
- *      404 / 405 here so the server never needs route knowledge.
+ *      nssf_router_response_t the server streams back. Registered routes:
+ *        GET    /network-slice-information   → nssf_nsselection_get_handle
+ *        PUT    /nssai-availability/{nfId}   → nssf_nssaiavailability_put_handle
+ *        PATCH  /nssai-availability/{nfId}   → nssf_nssaiavailability_patch_handle
+ *        DELETE /nssai-availability/{nfId}   → nssf_nssaiavailability_delete_handle
+ *        OPTIONS /nssai-availability         → nssf_nssaiavailability_options_handle
+ *      Future handlers (Subscription) slot into the table without touching the
+ *      server I/O code (request-flow.md §module dispatch). An unmatched
+ *      method/path answers 404 / 405 here so the server never needs route
+ *      knowledge.
  *
  *   2. The server — the nghttp2/libuv/OpenSSL event-loop transport that decodes
  *      requests into the router and streams responses back. It is kept next to
@@ -24,40 +28,79 @@
 #ifndef NSSF_SERVER_ROUTER_H
 #define NSSF_SERVER_ROUTER_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
+#include "availability_engine.h"
+#include "nssaiavailability_options_handler.h"  /* NSSF_NSSAIAVAIL_ALLOW_LEN */
 #include "nsselection_get_handler.h"
+#include "oauth2_jwks.h"
 #include "tls_context.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-/* Decoded inbound request the server hands the router. All borrowed. */
+/*
+ * Decoded inbound request the server hands the router. All borrowed.
+ *
+ * NSSelectionGet (GET, no body) needs only method/path/authorization/max_uri_len.
+ * The mutating NSSAIAvailability routes (PUT/PATCH) additionally need the request
+ * body + its media type + declared length so the router can build the per-handler
+ * request envelope (the body-bearing handlers run their own 411/413/415 checks).
+ * The body fields default to absent (NULL body, 0 length, has_content_length
+ * false) for the bodyless routes.
+ */
 typedef struct {
     const char *method;         /* :method pseudo-header, e.g. "GET". */
     const char *path;           /* :path pseudo-header incl. query, e.g.
                                    "/network-slice-information?tai=...". */
     const char *authorization;  /* "Authorization" header value, or NULL. */
     size_t max_uri_len;         /* operator-configured :path length cap (0=off). */
+
+    const char *content_type;   /* request body media type, or NULL. */
+    const char *body;           /* request body (borrowed, NUL-terminated), NULL. */
+    size_t content_length;      /* declared Content-Length, when present. */
+    bool has_content_length;    /* whether a Content-Length header was present. */
+    size_t max_body_len;        /* operator-configured body cap (0=off). */
 } nssf_router_request_t;
 
-/* Router response — owns body (free with nssf_router_response_free). */
+/*
+ * Router response — owns body (free with nssf_router_response_free).
+ *
+ * `allow` carries the OPTIONS Allow-header value (empty string when the route
+ * produces no Allow header); the server emits it as the `Allow` response header.
+ */
 typedef struct {
     int status;
     const char *content_type;   /* static string — not freed. */
     char *body;                 /* heap JSON body, or NULL. */
+    char allow[NSSF_NSSAIAVAIL_ALLOW_LEN];  /* Allow header value, or "" (none). */
 } nssf_router_response_t;
 
 /*
- * Shared handler dependencies (JWKS cache + SelectionEngine), wired at bootstrap
- * and borrowed by every dispatch. The router copies nothing it keeps.
+ * Combined handler dependencies wired at bootstrap and borrowed by every
+ * dispatch. The router copies the struct by value (members stay borrowed) and
+ * builds each per-handler deps_t internally from these — it does NOT mutate the
+ * caller's per-handler deps types.
+ *
+ *   jwks_cache         — inbound OAuth2 bearer validator (shared by all routes).
+ *   selection_engine   — SelectionEngine for NSSelectionGet. NULL → that route
+ *                        answers 500.
+ *   availability_engine — AvailabilityEngine for the NSSAIAvailability routes.
+ *                        NULL → those routes answer 500.
  */
+typedef struct {
+    nssf_jwks_cache_t *jwks_cache;
+    nssf_selection_engine_t *selection_engine;
+    nssf_availability_engine_t *availability_engine;
+} nssf_router_deps_t;
+
 typedef struct nssf_router nssf_router_t;
 
-/* Build a router over the shared handler dependencies. NULL on OOM/NULL deps. */
-nssf_router_t *nssf_router_create(const nssf_nsselection_deps_t *deps);
+/* Build a router over the combined handler dependencies. NULL on OOM/NULL deps. */
+nssf_router_t *nssf_router_create(const nssf_router_deps_t *deps);
 
 /* Tear down a router (idempotent on NULL). Does not free the dependencies. */
 void nssf_router_free(nssf_router_t *router);

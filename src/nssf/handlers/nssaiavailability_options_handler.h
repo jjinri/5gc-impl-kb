@@ -11,11 +11,11 @@
  *   security: TLS (ADR-0004) + OAuth2 scope nnssf-nssaiavailability (M3 inbound)
  *
  * No request body and no persistence — the response is metadata only. The
- * handler answers 204 with an `Allow` header value listing the supported methods
- * (e.g. "PUT, PATCH, DELETE, OPTIONS"). The integration probe asserts the
- * `Allow:` header exact match.
+ * handler answers 200 (empty body, contract success status) with an `Allow`
+ * header value listing the supported methods (e.g. "PUT, PATCH, DELETE,
+ * OPTIONS"). The integration probe asserts the `Allow:` header exact match.
  *
- * Transport-agnostic: a later server-wiring step fills the request struct, calls
+ * Transport-agnostic: the server-wiring step fills the request struct, calls
  * nssf_nssaiavailability_options_handle(), and emits `out.allow` as the `Allow`
  * response header. The security gate runs BEFORE the engine call.
  *
@@ -57,12 +57,12 @@ typedef struct {
 #define NSSF_NSSAIAVAIL_ALLOW_LEN 64
 
 /*
- * Outbound response. status ∈ {204, 401, 403, 414, 429, 500}.
+ * Outbound response. status ∈ {200, 401, 403, 414, 429, 500}.
  *
  *   allow — NUL-terminated Allow-header value the engine produced. Emitted as
- *           the `Allow` response header on 204. Empty on any error.
- *   content_type — static; "application/problem+json" for errors, NULL for 204.
- *   body  — heap-allocated (errors) or NULL (204).
+ *           the `Allow` response header on 200. Empty on any error.
+ *   content_type — static; "application/problem+json" for errors, NULL for 200.
+ *   body  — heap-allocated (errors) or NULL (200).
  */
 typedef struct {
     int status;
@@ -82,7 +82,7 @@ typedef struct {
  *   1. security gate — bearer + scope nnssf-nssaiavailability. Deny → 401/403.
  *   2. request-target length cap → 414.
  *   3. AvailabilityEngine::options() → Allow value into out->allow.
- *   4. 204 with the Allow header (or 500 on a buffer/engine error).
+ *   4. 200 (empty body) with the Allow header (or 500 on a buffer/engine error).
  *
  * `req`, `deps`, `out` non-NULL. Returns the chosen status (also in out->status).
  */

@@ -129,6 +129,40 @@ foreach(_verb put patch delete options)
              COMMAND test_nssaiavailability_${_verb}_integration)
 endforeach()
 
+# Phase 2 WI-availability-route-registration — router-driven dispatch integration.
+#
+# Drives nssf_router_dispatch() DIRECTLY (no socket, no nghttp2 server, no DB) over
+# the combined nssf_router_deps_t (jwks_cache + selection_engine + availability_
+# engine), all wired from in-test seams: JWKS seeded offline from an in-test RSA
+# key (libjwt signs the bearer), both engines over nssf_availability_repo_new_
+# inmemory + zero-init seams. So the (method, path) dispatch table — every route
+# reaches its handler, 405 on a wrong method, 404 on an unknown path / missing
+# {nfId}, OPTIONS 200 + Allow — runs UNCONDITIONALLY in CI. The router is the same
+# translation unit (nssf_server) the live nghttp2 server calls, so in-process
+# dispatch IS the coverage (no live-socket SKIP needed). Must register BEFORE the
+# find_package(PostgreSQL)/return() guard so it builds where libpq is absent.
+# ctest -R nssf_nssaiavailability_route_ 매칭 (nssf_nssaiavailability_route_dispatch).
+add_executable(test_nssaiavailability_route_dispatch
+    test_nssaiavailability_route_dispatch.c)
+
+target_link_libraries(test_nssaiavailability_route_dispatch
+    PRIVATE
+        unity
+        nssf_server
+        nssf_engine
+        nssf_runtime
+        nssf_generated
+        PkgConfig::libjwt
+        OpenSSL::SSL
+        OpenSSL::Crypto
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_nssaiavailability_route_dispatch PRIVATE c_std_11)
+
+add_test(NAME nssf_nssaiavailability_route_dispatch
+         COMMAND test_nssaiavailability_route_dispatch)
+
 # Phase 2 WI-outbound-oauth2 — NRF token-acquire integration test (ADR-0004 M4).
 #
 # End-to-end client_credentials acquire/attach against a MOCK NRF token endpoint,

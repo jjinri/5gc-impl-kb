@@ -12,7 +12,7 @@
  *                  inmemory(); options() is pure metadata (no I/O, no event), so
  *                  no row seeding is needed. Zero-init seams.
  *
- * So 204 + Allow value containing PUT/PATCH/DELETE/OPTIONS / 401 / 403 run
+ * So 200 + Allow value containing PUT/PATCH/DELETE/OPTIONS / 401 / 403 run
  * UNCONDITIONALLY in CI. The live `Allow:`-header HTTP probe (route registration
  * deferred to a server-wiring slice) is SKIP-PASS when env absent. Never FAIL for
  * missing env.
@@ -247,9 +247,9 @@ static void fixture_free(fixture_t *fx)
     nssf_jwks_cache_free(fx->cache);
 }
 
-/* ── 204 + Allow value (in-process, unconditional) ────────────────────────── */
+/* ── 200 + Allow value (in-process, unconditional) ────────────────────────── */
 
-static void test_options_204_allow_in_process(void)
+static void test_options_200_allow_in_process(void)
 {
     fixture_t fx;
     fixture_init(&fx);
@@ -265,9 +265,9 @@ static void test_options_204_allow_in_process(void)
     memset(&out, 0, sizeof(out));
     int status = nssf_nssaiavailability_options_handle(&req, &deps, &out);
 
-    TEST_ASSERT_EQUAL_INT(204, status);
-    TEST_ASSERT_EQUAL_INT(204, out.status);
-    TEST_ASSERT_NULL_MESSAGE(out.body, "204 carries no body");
+    TEST_ASSERT_EQUAL_INT(200, status);
+    TEST_ASSERT_EQUAL_INT(200, out.status);
+    TEST_ASSERT_NULL_MESSAGE(out.body, "OPTIONS carries no body");
 
     /* The Allow value must advertise every supported method. */
     TEST_ASSERT_TRUE_MESSAGE(strstr(out.allow, "PUT") != NULL, "Allow must list PUT");
@@ -361,7 +361,7 @@ int main(void)
         return 1;
     }
     UNITY_BEGIN();
-    RUN_TEST(test_options_204_allow_in_process);
+    RUN_TEST(test_options_200_allow_in_process);
     RUN_TEST(test_options_401_no_bearer);
     RUN_TEST(test_options_403_wrong_scope);
     RUN_TEST(test_options_allow_probe_or_skip);
