@@ -213,6 +213,59 @@ target_compile_features(test_selection_engine_redirect PRIVATE c_std_11)
 add_test(NAME nssf_selection_engine_redirect
          COMMAND test_selection_engine_redirect)
 
+# Phase 2 WI-availability-engine — AvailabilityEngine NSSAIAvailability CRUD
+#   (replace / patch / delete + cascade-event seam).
+# 세 unit test 가 replace(dedup/204/400/G-11 default) / patch(RFC 6902 ops·415·
+# atomicity·404·PATCHED event) / delete(NO_CONTENT + DELETED cascade event,
+# after=NULL · NOT_FOUND) 를 검증한다. availability 는
+# nssf_availability_repo_new_inmemory() seed + stub change-event seam — DB/network
+# 없이 CI 에서 무조건 실행. nssf_engine 이 availability_engine + availability_repo
+# (cJSON 전이) 를 노출한다. ctest -R nssf_availability_engine_ 로 3개 매칭.
+add_executable(test_availability_engine_replace
+    unit/test_availability_engine_replace.c)
+
+target_link_libraries(test_availability_engine_replace
+    PRIVATE
+        unity
+        nssf_engine
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_availability_engine_replace PRIVATE c_std_11)
+
+add_test(NAME nssf_availability_engine_replace
+         COMMAND test_availability_engine_replace)
+
+add_executable(test_availability_engine_patch
+    unit/test_availability_engine_patch.c)
+
+target_link_libraries(test_availability_engine_patch
+    PRIVATE
+        unity
+        nssf_engine
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_availability_engine_patch PRIVATE c_std_11)
+
+add_test(NAME nssf_availability_engine_patch
+         COMMAND test_availability_engine_patch)
+
+add_executable(test_availability_engine_delete_cascade
+    unit/test_availability_engine_delete_cascade.c)
+
+target_link_libraries(test_availability_engine_delete_cascade
+    PRIVATE
+        unity
+        nssf_engine
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_availability_engine_delete_cascade PRIVATE c_std_11)
+
+add_test(NAME nssf_availability_engine_delete_cascade
+         COMMAND test_availability_engine_delete_cascade)
+
 # Phase 1 wave 1 WI-schema-bootstrap — PostgreSQL bootstrap integration test.
 # libpq fixture, ctest -R nssf_schema_bootstrap 매칭. libpq 부재 또는
 # POSTGRES_* env 미주입 시 SKIP PASS 로 회피.
