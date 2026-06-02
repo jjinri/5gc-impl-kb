@@ -375,11 +375,15 @@ prs:
     scope_files:
       - src/nssf/engine/availability_engine.{h,c}
       - tests/nssf/unit/test_availability_engine_*.c
+      # build-glue (amendment 2026-06-02, PR #124 — 선례 #120/#122).
+      - src/nssf/engine/CMakeLists.txt
+      - tests/nssf/CMakeLists.txt
     depends_on:
       - PR-phase1-wave1-nsselection-handler
       - PR-codegen-nssaiavailability-extension
-    status: not_started
-    required_checks: []  # phase2 진입 시 verification-matrix 의 phase2 checks 활성
+    status: merged
+    merged_pr: 'https://github.com/jjinri/5gc-impl-kb/pull/124'
+    required_checks: []  # phase2 진입 시 verification-matrix 의 phase2 checks 활성 (handler slice)
     estimated_loc: 1000
 
   - id: PR-phase2-availability-handlers
