@@ -89,6 +89,46 @@ target_compile_features(test_nsselection_get_errors PRIVATE c_std_11)
 add_test(NAME nssf_nsselection_get_errors
          COMMAND test_nsselection_get_errors)
 
+# Phase 2 WI-availability-handlers — NSSAIAvailability Put/Patch/Delete/Options
+# inbound integration tests. Each drives its handler IN-PROCESS — no socket, no
+# DB: JWKS seeded offline from an in-test RSA key (libjwt signs the bearer with
+# scope nnssf-nssaiavailability), the AvailabilityEngine over
+# nssf_availability_repo_new_inmemory + zero-init seams (NULL publish — the
+# phase2 deferred enqueue/cascade no-op). So the gate + status coverage (200 +
+# 401/403/404/411/413/415/400 + 204 + Allow) runs UNCONDITIONALLY in CI (real
+# coverage). The PG-fixture row probe + live `Allow:` HTTP probe variants are
+# SKIP PASS when probe env (NSSF_DB_CONNINFO / NSSF_BIND_* / NSSF_TLS_* /
+# NSSF_OAUTH2_JWKS_URL) is absent — the readiness-check CI has neither a PG
+# service nor a live server (route registration deferred to a server-wiring
+# slice). ctest -R nssf_nssaiavailability_<verb>_integration 로 매칭 (gate NAME
+# pattern nssf_nssaiavailability_put / _patch / _delete / _options _integration).
+#
+# Must register BEFORE the find_package(PostgreSQL)/return() guard below so they
+# build + run even where libpq is absent.
+foreach(_verb put patch delete options)
+    add_executable(test_nssaiavailability_${_verb}_integration
+        test_nssaiavailability_${_verb}_integration.c)
+
+    target_link_libraries(test_nssaiavailability_${_verb}_integration
+        PRIVATE
+            unity
+            nssf_handlers
+            nssf_engine
+            nssf_runtime
+            nssf_generated
+            PkgConfig::libjwt
+            OpenSSL::SSL
+            OpenSSL::Crypto
+            nssf_sanitizers
+            nssf_warnings)
+
+    target_compile_features(test_nssaiavailability_${_verb}_integration
+        PRIVATE c_std_11)
+
+    add_test(NAME nssf_nssaiavailability_${_verb}_integration
+             COMMAND test_nssaiavailability_${_verb}_integration)
+endforeach()
+
 # Phase 1 wave 1 WI-schema-bootstrap integration test.
 #
 # libpq + psql 의존. PostgreSQL service container 미배치 환경 (현 CI) 에서는
