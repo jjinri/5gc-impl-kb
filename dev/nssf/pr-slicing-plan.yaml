@@ -348,11 +348,19 @@ prs:
       - src/nssf/main.c
       - tests/nssf/integration/test_nsselection_get_*.c
       - tests/nssf/contract/test_nsselection_response_schema.c
+      # build-glue (amendment 2026-06-02, PR #122 — 선례 #115/#117/#120).
+      # 코드 lane: root CMake (codegen-work-items expected_files 와 정합).
+      # test lane: contract/ 신규 dir + 기존 test CMake 등록.
+      - src/nssf/CMakeLists.txt
+      - tests/nssf/CMakeLists.txt
+      - tests/nssf/integration/CMakeLists.txt
+      - tests/nssf/contract/CMakeLists.txt
     depends_on:
       - PR-phase1-wave1-selection-engine
       - PR-phase1-wave1-tls-bootstrap
       - PR-phase1-wave1-problem-details-wrapper
-    status: not_started
+    status: merged
+    merged_pr: 'https://github.com/jjinri/5gc-impl-kb/pull/122'
     required_checks:
       - phase1_wave1_integration_nsselection_get_happy
       - phase1_wave1_integration_nsselection_get_errors
