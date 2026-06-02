@@ -703,6 +703,10 @@ prs:
       - tests/nssf/unit/test_oauth2_outbound_retry.c
     depends_on:
       - PR-phase2-outbound-oauth2
+      # gating fix (amendment 2026-06-02, PR-C, Pane-2): resilience 는
+      # dispatcher consumer 후. picker 가 route-registration/dispatcher 보다
+      # 먼저 새던 M4-edge 재현 차단.
+      - PR-phase2-notification-dispatcher
     status: not_started
     required_checks: []
     estimated_loc: 400
@@ -718,6 +722,9 @@ prs:
       - tests/nssf/unit/test_secret_ref_resolver.c
     depends_on:
       - PR-phase2-outbound-oauth2
+      # gating fix (amendment 2026-06-02, PR-C): secret_ref resolver 급하지 않음
+      # — dispatcher 뒤로. (M4-edge gating 재현 차단.)
+      - PR-phase2-notification-dispatcher
     status: not_started
     required_checks: []
     estimated_loc: 300
@@ -732,6 +739,9 @@ prs:
       - design/nssf/operator-configuration-guide.md
     depends_on:
       - PR-phase2-outbound-oauth2
+      # gating fix (amendment 2026-06-02, PR-C): phase5 gate (spec 대로) —
+      # observability-finalize 뒤로 정렬. phase5 deferred doc.
+      - PR-phase5-observability-finalize
     status: not_started
     required_checks: []
     estimated_loc: 300
