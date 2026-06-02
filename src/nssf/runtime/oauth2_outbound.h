@@ -13,8 +13,10 @@
  *     for http://127.0.0.1 mock NRF token endpoints.
  *   - TLS peer + hostname verification is MANDATORY on the token POST
  *     (CURLOPT_SSL_VERIFYPEER=1, CURLOPT_SSL_VERIFYHOST=2). Never disabled.
- *   - Redirects are NOT followed by default (CURLOPT_FOLLOWLOCATION=0); a 307/308
- *     fails closed unless redirect-follow is explicitly opted in under policy.
+ *   - Redirects are NEVER followed (CURLOPT_FOLLOWLOCATION=0 always); a 3xx
+ *     Location on the token endpoint fails closed. The redirect-policy config is
+ *     VALIDATED (guardrails) but follow behavior is NOT implemented in this slice
+ *     — no-follow is the guaranteed transport behavior.
  *   - fail-closed: when enabled, a token-acquire failure FORBIDS the outbound
  *     call. No unauthenticated outbound is ever emitted.
  *   - Secret hygiene: the config carries a secret_ref (an indirection handle),
@@ -54,17 +56,19 @@ typedef enum nssf_oauth2_auth_method {
 } nssf_oauth2_auth_method_t;
 
 /*
- * Redirect policy. By default redirects are NOT followed and a 3xx
- * Location response on the token endpoint is a config error (fail-closed).
- * follow_redirect must be explicitly set to opt in; even then the policy below
- * is enforced and 301/302/303 remain FORBIDDEN (only 307/308 may be followed,
- * max one hop, https-only, same-host unless host_change_allowlist permits).
+ * Redirect policy (RESERVED config — guardrails only). The transport NEVER
+ * follows redirects (CURLOPT_FOLLOWLOCATION=0 always); a 3xx Location on the
+ * token endpoint fails closed. follow_redirect and the fields below are
+ * VALIDATED at construction (forbidden combinations are rejected) but the
+ * follow behavior is NOT implemented in this slice. These fields are reserved
+ * for a future redirect-follow capability; setting follow_redirect does NOT
+ * cause any redirect to be followed today.
  */
 typedef struct nssf_oauth2_redirect_policy {
-    bool follow_redirect;                  /* default false → CURLOPT_FOLLOWLOCATION=0. */
-    uint32_t max_hops;                      /* enforced ceiling 1 when opted in. */
-    bool allow_host_change;                 /* host change requires allowlist. */
-    const char *const *host_change_allowlist; /* permitted new hosts; caller-owned. */
+    bool follow_redirect;                  /* reserved; no-follow is always enforced. */
+    uint32_t max_hops;                      /* validated ceiling 1; reserved. */
+    bool allow_host_change;                 /* host change requires allowlist; reserved. */
+    const char *const *host_change_allowlist; /* permitted new hosts; caller-owned; reserved. */
     size_t host_change_allowlist_len;
 } nssf_oauth2_redirect_policy_t;
 
@@ -75,6 +79,15 @@ typedef struct nssf_oauth2_redirect_policy {
  * No field carries a plaintext secret. secret_ref is an indirection handle the
  * deployment resolves out-of-band (env/vault/file); it is never logged and its
  * resolution is the caller's responsibility via the secret resolver seam.
+ *
+ * secret_ref semantics (A1): secret_ref is intended as a REFERENCE (e.g.
+ * "env:NRF_CLIENT_SECRET" or "file:/run/secrets/nrf"), resolved to the real
+ * secret by a resolver seam the deployment supplies BEFORE constructing this
+ * config. TODO(secret-resolver-seam): a dedicated resolver is the intended
+ * mechanism and is out of scope for this slice — not built here. Until that seam
+ * lands, any literal value placed here is DEV-ONLY; mTLS (auth_method default)
+ * is the production path and carries no secret, so this is mitigated. Whatever
+ * the form, the value is never logged.
  */
 typedef struct nssf_oauth2_outbound_config {
     bool enabled;                  /* M5 toggle. When false, dev no-attach path. */
@@ -82,7 +95,7 @@ typedef struct nssf_oauth2_outbound_config {
     const char *nf_instance_id;    /* canonical identity (decision 2). required. */
 
     nssf_oauth2_auth_method_t auth_method; /* default MTLS. */
-    const char *secret_ref;        /* indirection handle, NOT the secret value. */
+    const char *secret_ref;        /* reference handle (env:/file:), NOT the value; dev-only if literal. */
     bool allow_secret_auth_in_production; /* false → secret auth REFUSED (decision 3). */
 
     /* mTLS client material for the token POST — config-sourced paths only. */
@@ -141,8 +154,11 @@ typedef int (*nssf_oauth2_token_transport_fn)(
  * fields take their decision-mandated defaults (refresh 60s, max_ttl 3600s,
  * connect 2s, request 5s). Returns NULL on invalid/ inconsistent config:
  *   - mtls + secret material simultaneously → REJECT (decision 12),
+ *   - mtls auth_method without client_cert_path AND client_key_path → REJECT
+ *     (fail-fast — a production MTLS handle must be able to present a cert),
  *   - secret auth requested while allow_secret_auth_in_production==false → REJECT,
- *   - follow_redirect opted in with a forbidden policy → REJECT.
+ *   - follow_redirect set with a forbidden policy → REJECT (config guardrail
+ *     only; redirects are never actually followed).
  */
 nssf_oauth2_outbound_t *nssf_oauth2_outbound_create(
     const nssf_oauth2_outbound_config_t *cfg);
@@ -170,9 +186,12 @@ void nssf_oauth2_outbound_set_transport(nssf_oauth2_outbound_t *ob,
  * scope_override, when non-NULL, overrides cfg->default_scope for this call
  * (per-target scope seam — decision 4); NULL uses the default.
  *
- * On NSSF_OAUTH2_OK, *out_bearer (when non-NULL) is set to a BORROWED token
- * string owned by the cache — valid until the next acquire/free on this handle;
- * the caller must NOT free it and should copy if it needs to outlive the call.
+ * On NSSF_OAUTH2_OK, *out_bearer is set to an OWNED, malloc'd copy of the bearer
+ * string — the CALLER MUST free() it. WHY owned (not borrowed): the cache is
+ * mutex-guarded and a later refresh on this handle frees/replaces the cached
+ * buffer, so returning a borrowed pointer across the lock would be a concurrent
+ * use-after-free. out_bearer MUST be non-NULL; it is set to NULL on any
+ * non-OK return.
  *
  * Returns NSSF_OAUTH2_ABORT on any acquire/validation failure while enabled
  * (fail-closed: no unauthenticated outbound), or NSSF_OAUTH2_NO_ATTACH when the
@@ -181,13 +200,15 @@ void nssf_oauth2_outbound_set_transport(nssf_oauth2_outbound_t *ob,
 nssf_oauth2_outbound_status_t nssf_oauth2_outbound_acquire(
     nssf_oauth2_outbound_t *ob,
     const char *scope_override,
-    const char **out_bearer);
+    char **out_bearer);
 
 /*
  * Outbound bearer attach entry. Acquires (lazy/cached) a token and, on success,
  * appends "Authorization: Bearer <token>" to *headers (a curl_slist the caller
  * owns; *headers may start NULL and is updated on append). scope_override as in
- * acquire.
+ * acquire. The header line is built under the cache lock so no token pointer
+ * escapes the critical section (the curl_slist owns its own copy) — this is the
+ * UAF-safe path and needs no caller free of the bearer.
  *
  * Returns NSSF_OAUTH2_OK on attach, NSSF_OAUTH2_ABORT to signal the caller to
  * ABORT the outbound (fail-closed), or NSSF_OAUTH2_NO_ATTACH when disabled (the

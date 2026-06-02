@@ -5,7 +5,9 @@
  * NSSF_GENERATED_BOUNDARY_STUB: none — handwritten runtime module.
  *
  * The token POST uses libcurl with TLS peer + hostname verification always on
- * (M2) and redirect-follow off (decision 5). OpenSSL (via libcurl) owns TLS and
+ * (M2) and redirect-follow always off (decision 5 — no-follow guaranteed; the
+ * redirect-policy config is validated only, follow is not implemented).
+ * OpenSSL (via libcurl) owns TLS and
  * libjwt-adjacent crypto is not needed here — the only token introspection is a
  * non-crypto base64url+JSON read of the JWS "exp" to avoid caching an already
  * expired token (decision 10). No primitive is hand-rolled (M6).
@@ -369,10 +371,17 @@ static bool resolve_expiry(const owned_config_t *cfg, const char *body,
 /* ---- form body + basic auth (no secret value logged) ---- */
 
 /*
- * Build the application/x-www-form-urlencoded body. Decision 1:
- * grant_type=client_credentials&scope=...; for SECRET_POST the secret_ref is
- * conveyed as the form client_secret (test/explicit). The scope is the only
- * caller-variable token; identity/secret are not logged by this module.
+ * Build the application/x-www-form-urlencoded body. Decision 1/2:
+ * grant_type=client_credentials&scope=...&nfInstanceId=<uuid>; for SECRET_POST
+ * the secret_ref is conveyed as the form client_secret (test/explicit). The
+ * scope is the only caller-variable token; identity/secret are not logged by
+ * this module.
+ *
+ * WHY nfInstanceId (not client_id): per 3GPP 29.510 Nnrf_AccessToken
+ * AccessTokenReq the canonical NF identity field in the token-request body is
+ * `nfInstanceId`. The HTTP Basic *username* mapping for client_secret_basic is a
+ * separate auth-policy concern (see refresh_locked) and does not change the
+ * 29.510 body field name.
  */
 static char *build_form_body(const owned_config_t *cfg, const char *scope)
 {
@@ -388,7 +397,6 @@ static char *build_form_body(const owned_config_t *cfg, const char *scope)
         esc_secret = curl_easy_escape(tmp, cfg->secret_ref, 0);
     }
 
-    /* nfInstanceId is the canonical identity carried as client_id (decision 2). */
     size_t cap = 64;
     cap += esc_scope ? strlen(esc_scope) : 0;
     cap += esc_id ? strlen(esc_id) : 0;
@@ -400,8 +408,9 @@ static char *build_form_body(const owned_config_t *cfg, const char *scope)
         if (esc_scope != NULL) {
             n += snprintf(body + n, cap - (size_t)n, "&scope=%s", esc_scope);
         }
+        /* 29.510 AccessTokenReq canonical identity field is nfInstanceId. */
         if (esc_id != NULL) {
-            n += snprintf(body + n, cap - (size_t)n, "&client_id=%s", esc_id);
+            n += snprintf(body + n, cap - (size_t)n, "&nfInstanceId=%s", esc_id);
         }
         if (esc_secret != NULL) {
             n += snprintf(body + n, cap - (size_t)n, "&client_secret=%s", esc_secret);
@@ -442,9 +451,10 @@ static size_t sink_write(char *ptr, size_t size, size_t nmemb, void *userp)
 
 /*
  * The production token transport. TLS peer + hostname verification are MANDATORY
- * and never disabled; redirects are NOT followed (decision 5/9, ADR-0004 M2).
- * basic_auth (user:pass for client_secret_basic) is set via CURLOPT_USERPWD and
- * is never logged.
+ * and never disabled; redirects are NEVER followed (CURLOPT_FOLLOWLOCATION=0
+ * always — decision 5/9, ADR-0004 M2; the redirect-policy config is reserved and
+ * not acted on here). basic_auth (user:pass for client_secret_basic) is set via
+ * CURLOPT_USERPWD and is never logged.
  */
 static int libcurl_transport(const nssf_oauth2_outbound_t *ob,
                              const char *token_url,
@@ -504,7 +514,7 @@ static int libcurl_transport(const nssf_oauth2_outbound_t *ob,
         curl_easy_setopt(curl, CURLOPT_USERPWD, basic_auth);
     }
 
-    /* Redirects NOT followed by default (decision 5). */
+    /* Redirects NEVER followed — no-follow guaranteed (decision 5). */
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0L);
 
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT,
@@ -611,15 +621,45 @@ static int refresh_locked(nssf_oauth2_outbound_t *ob, const char *scope)
     return rc;
 }
 
+/*
+ * Caller holds ob->lock. Ensures a fresh cached token (lazy refresh) and, on
+ * success, returns an OWNED malloc'd copy of the bearer in *out_copy (the caller
+ * frees). WHY a copy under the lock: refresh_locked may free/replace
+ * ob->cached_token on a later call, so a pointer into the cache must never
+ * escape the lock — copying inside the critical section is the UAF-safe contract
+ * for the thread-safe API. Returns 0 on success, nonzero (fail-closed) on
+ * refresh failure or OOM.
+ */
+static int acquire_owned_copy_locked(nssf_oauth2_outbound_t *ob,
+                                     const char *scope, char **out_copy)
+{
+    *out_copy = NULL;
+    time_t now = time(NULL);
+    if (!cached_token_fresh_locked(ob, now)) {
+        if (refresh_locked(ob, scope) != 0) {
+            return -1; /* fail-closed: no unauth outbound. */
+        }
+    }
+    if (ob->cached_token == NULL) {
+        return -1;
+    }
+    char *copy = strdup(ob->cached_token);
+    if (copy == NULL) {
+        return -1;
+    }
+    *out_copy = copy;
+    return 0;
+}
+
 nssf_oauth2_outbound_status_t nssf_oauth2_outbound_acquire(
     nssf_oauth2_outbound_t *ob,
     const char *scope_override,
-    const char **out_bearer)
+    char **out_bearer)
 {
     if (out_bearer != NULL) {
         *out_bearer = NULL;
     }
-    if (ob == NULL) {
+    if (ob == NULL || out_bearer == NULL) {
         return NSSF_OAUTH2_ABORT;
     }
     if (!ob->cfg.enabled) {
@@ -630,22 +670,14 @@ nssf_oauth2_outbound_status_t nssf_oauth2_outbound_acquire(
         scope_override != NULL ? scope_override : ob->cfg.default_scope;
 
     pthread_mutex_lock(&ob->lock);
-    time_t now = time(NULL);
-    if (!cached_token_fresh_locked(ob, now)) {
-        if (refresh_locked(ob, scope) != 0) {
-            pthread_mutex_unlock(&ob->lock);
-            return NSSF_OAUTH2_ABORT; /* fail-closed: no unauth outbound. */
-        }
-    }
-    const char *token = ob->cached_token;
+    char *owned = NULL;
+    int rc = acquire_owned_copy_locked(ob, scope, &owned);
     pthread_mutex_unlock(&ob->lock);
 
-    if (token == NULL) {
+    if (rc != 0 || owned == NULL) {
         return NSSF_OAUTH2_ABORT;
     }
-    if (out_bearer != NULL) {
-        *out_bearer = token; /* borrowed — owned by the cache. */
-    }
+    *out_bearer = owned; /* OWNED — caller must free(). */
     return NSSF_OAUTH2_OK;
 }
 
@@ -657,24 +689,40 @@ nssf_oauth2_outbound_status_t nssf_oauth2_outbound_attach_bearer(
     if (ob == NULL || headers == NULL) {
         return NSSF_OAUTH2_ABORT;
     }
-
-    const char *bearer = NULL;
-    nssf_oauth2_outbound_status_t st =
-        nssf_oauth2_outbound_acquire(ob, scope_override, &bearer);
-    if (st != NSSF_OAUTH2_OK || bearer == NULL) {
-        return st; /* ABORT (fail-closed) or NO_ATTACH (disabled). */
+    if (!ob->cfg.enabled) {
+        return NSSF_OAUTH2_NO_ATTACH; /* dev no-attach path (decision 7). */
     }
 
-    size_t n = sizeof("Authorization: Bearer ") + strlen(bearer);
-    char *line = malloc(n);
-    if (line == NULL) {
-        return NSSF_OAUTH2_ABORT;
+    const char *scope =
+        scope_override != NULL ? scope_override : ob->cfg.default_scope;
+
+    /*
+     * Build the full "Authorization: Bearer <token>" line INSIDE the lock so the
+     * cached-token pointer never escapes the critical section (UAF-safe). The
+     * curl_slist_append below copies the line, so once appended under lock the
+     * header is independent of the cache buffer.
+     */
+    pthread_mutex_lock(&ob->lock);
+    char *owned = NULL;
+    int rc = acquire_owned_copy_locked(ob, scope, &owned);
+    struct curl_slist *appended = NULL;
+    if (rc == 0 && owned != NULL) {
+        size_t n = sizeof("Authorization: Bearer ") + strlen(owned);
+        char *line = malloc(n);
+        if (line != NULL) {
+            snprintf(line, n, "Authorization: Bearer %s", owned);
+            appended = curl_slist_append(*headers, line);
+            free(line);
+        }
     }
-    snprintf(line, n, "Authorization: Bearer %s", bearer);
-    struct curl_slist *appended = curl_slist_append(*headers, line);
-    free(line);
+    free(owned);
+    pthread_mutex_unlock(&ob->lock);
+
+    if (rc != 0) {
+        return NSSF_OAUTH2_ABORT; /* fail-closed (refresh failed). */
+    }
     if (appended == NULL) {
-        return NSSF_OAUTH2_ABORT;
+        return NSSF_OAUTH2_ABORT; /* OOM on the header line. */
     }
     *headers = appended;
     return NSSF_OAUTH2_OK;
@@ -685,11 +733,21 @@ nssf_oauth2_outbound_status_t nssf_oauth2_outbound_attach_bearer(
 /*
  * Validate the consistency mandates that have no defaults:
  *   - mtls + secret material simultaneously → reject (decision 12),
+ *   - mtls in production WITHOUT cert+key → reject (fail-fast, see below),
  *   - secret auth requested while production forbids it → reject (decision 3),
  *   - follow_redirect opted in with a forbidden policy → reject (decision 5).
+ *
+ * require_mtls_material is true for the production ctor and false for the
+ * test-only loopback ctor. WHY the split: a production MTLS handle that silently
+ * lacks a client cert/key would build successfully and then fail to present a
+ * certificate at TLS time — a silent security downgrade. The production ctor
+ * therefore fails-fast. The test-only loopback ctor relaxes this so unit tests
+ * can drive the cache against a mock NRF without real cert files on disk.
+ *
  * Returns true when the config is acceptable.
  */
-static bool config_is_consistent(const nssf_oauth2_outbound_config_t *cfg)
+static bool config_is_consistent(const nssf_oauth2_outbound_config_t *cfg,
+                                 bool require_mtls_material)
 {
     if (cfg->token_url == NULL || cfg->token_url[0] == '\0') {
         return false;
@@ -699,15 +757,28 @@ static bool config_is_consistent(const nssf_oauth2_outbound_config_t *cfg)
     }
 
     bool has_secret = cfg->secret_ref != NULL && cfg->secret_ref[0] != '\0';
-    bool has_mtls_material =
-        (cfg->client_cert_path != NULL && cfg->client_cert_path[0] != '\0') ||
-        (cfg->client_key_path != NULL && cfg->client_key_path[0] != '\0');
+    bool has_cert =
+        cfg->client_cert_path != NULL && cfg->client_cert_path[0] != '\0';
+    bool has_key =
+        cfg->client_key_path != NULL && cfg->client_key_path[0] != '\0';
+    bool has_mtls_material = has_cert || has_key;
 
     /* Decision 12: mTLS and client_secret are mutually exclusive. */
     if (cfg->auth_method == NSSF_OAUTH2_AUTH_MTLS && has_secret) {
         return false;
     }
     if (method_uses_secret(cfg->auth_method) && has_mtls_material) {
+        return false;
+    }
+
+    /*
+     * Fail-fast: a production MTLS handle MUST carry both a client cert and key,
+     * else it cannot present a client certificate at the TLS handshake. The
+     * test-only loopback ctor passes require_mtls_material=false to allow a
+     * mock/loopback override without cert files.
+     */
+    if (cfg->auth_method == NSSF_OAUTH2_AUTH_MTLS && require_mtls_material &&
+        !(has_cert && has_key)) {
         return false;
     }
 
@@ -720,7 +791,11 @@ static bool config_is_consistent(const nssf_oauth2_outbound_config_t *cfg)
         return false; /* secret method without a secret_ref is incoherent. */
     }
 
-    /* Decision 5: redirect-follow opt-in policy guardrails. */
+    /*
+     * Decision 5: redirect-policy guardrails (config validation only — redirects
+     * are never actually followed; these checks reject incoherent reserved
+     * config, they do not enable follow behavior).
+     */
     if (cfg->redirect.follow_redirect) {
         if (cfg->redirect.max_hops > 1) {
             return false; /* ceiling is one hop. */
@@ -762,7 +837,11 @@ static nssf_oauth2_outbound_t *create_with_scheme_policy(
     } else if (!has_prefix_ci(cfg->token_url, "https://")) {
         return NULL; /* production: https-only ENFORCED (decision 9). */
     }
-    if (!config_is_consistent(cfg)) {
+    /*
+     * Production (allow_insecure_loopback==false) requires real mTLS cert+key
+     * for an MTLS handle; the test-only loopback ctor relaxes that requirement.
+     */
+    if (!config_is_consistent(cfg, /*require_mtls_material=*/!allow_insecure_loopback)) {
         return NULL;
     }
 
