@@ -183,6 +183,31 @@ decisions:
     version_pin_required: true
     version_pin_artifact: infra/<nf>/codegen/openapi-generator-cli.config.yaml
 
+  # oauth2_outbound — M4 outbound OAuth2 token client (ADR-0004 의무 4).
+  # 신규 dependency 아님 — 기존 ratified libcurl(JWKS transport 재사용) + libjwt
+  # (JWS exp 검증) 위에 구현. 본 entry 는 12 ratified implementation decision 의
+  # 기계 ratify evidence (engineering-design.md sbi_client_stack.m4_impl_ratified
+  # mirror). ADR-0004 baseline mandate 는 미편집 (baseline vs evidence 분리).
+  - slot: oauth2_outbound
+    package: 'libcurl + libjwt (reuse — no new dependency)'
+    rationale: |
+      PR #128 (merged 2026-06-02, operator+Pane-2 eyeball, rework round 1).
+      12 ratified decision: (1) Content-Type x-www-form-urlencoded; (2) canonical
+      identity=nfInstanceId (client_id non-first-class); (3) prod auth_method=mtls
+      default + client_secret override gated allow_secret_auth_in_production=false,
+      client_secret_basic 우선; (4) default scope 'nnrf-disc nnrf-nfm' + per-target
+      override seam; (5) redirect no-follow default (307/308 fail-closed; opt-in
+      reserved/not-impl); (6) token cache refresh_buffer 60s/max_ttl 3600s; (7)
+      fail-closed (token 실패→outbound 금지); (8) secret_ref only (no value
+      log/commit); (9) token_url https-only + @/# reject + TLS peer+host verify;
+      (10) 200+access_token+token_type=Bearer + JWS exp + clock_skew 60s, else
+      fail-closed; (11) timeout connect 2s/request 5s [retry/dead-letter accept-
+      defer → PR-phase2-oauth2-resilience]; (12) mTLS+client_secret reject.
+    license: 'MIT (libcurl) / MPL-2.0 (libjwt) — 기존 ratified'
+    container_externalized: true
+    vendored: false
+    ratification_source: 'PR #128 operator+Pane-2 eyeball ratify (2026-06-02)'
+
 # ─── Dependency aggregate ─────────────────────────────────────────────
 # 본 섹션은 cmake-dependencies.yaml 의 source 다. find_package / pkg-config
 # wrapper 가 본 list 의 system package 를 lookup.
