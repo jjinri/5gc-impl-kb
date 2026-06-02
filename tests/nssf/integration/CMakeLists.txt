@@ -129,6 +129,33 @@ foreach(_verb put patch delete options)
              COMMAND test_nssaiavailability_${_verb}_integration)
 endforeach()
 
+# Phase 2 WI-outbound-oauth2 — NRF token-acquire integration test (ADR-0004 M4).
+#
+# End-to-end client_credentials acquire/attach against a MOCK NRF token endpoint,
+# wired through the test-only loopback ctor (nssf_oauth2_outbound_create_insecure,
+# http://127.0.0.1 — mirrors test_jwks_fetch.c's insecure ctor) + the mock token-
+# transport seam. No socket, no live NRF, no DB — runs UNCONDITIONALLY in CI. The
+# live real-NRF acquire (NSSF_NRF_TOKEN_URL) is SKIP-PASS when that env is absent.
+# curl_slist + curl/curl.h come transitively from nssf_runtime (PUBLIC libcurl).
+#
+# Must register BEFORE the find_package(PostgreSQL)/return() guard below so it
+# builds + runs where libpq is absent. ctest -R nssf_oauth2_outbound 매칭
+# (nssf_oauth2_outbound_token_acquire).
+add_executable(test_nrf_token_acquire
+    test_nrf_token_acquire.c)
+
+target_link_libraries(test_nrf_token_acquire
+    PRIVATE
+        unity
+        nssf_runtime
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_nrf_token_acquire PRIVATE c_std_11)
+
+add_test(NAME nssf_oauth2_outbound_token_acquire
+         COMMAND test_nrf_token_acquire)
+
 # Phase 1 wave 1 WI-schema-bootstrap integration test.
 #
 # libpq + psql 의존. PostgreSQL service container 미배치 환경 (현 CI) 에서는

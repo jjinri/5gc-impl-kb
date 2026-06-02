@@ -128,6 +128,29 @@ target_compile_features(test_oauth2_scope_check PRIVATE c_std_11)
 add_test(NAME nssf_oauth2_scope_check
          COMMAND test_oauth2_scope_check)
 
+# Phase 2 WI-outbound-oauth2 — outbound OAuth2 client_credentials token acquire
+# + bearer attach (ADR-0004 M4). Driven entirely through the mock token-transport
+# seam (nssf_oauth2_outbound_set_transport) — no network, no DB, no live NRF, so
+# the 12 ratified decisions (acquire/attach/TTL-cache/refresh-buffer/cap/
+# fail-closed/scope-override/https-only/mTLS-vs-secret/secret-prod-gate) run
+# UNCONDITIONALLY in CI. curl_slist + curl/curl.h come transitively from
+# nssf_runtime (PUBLIC libcurl). ctest -R nssf_oauth2_outbound 매칭
+# (nssf_oauth2_outbound_attach).
+add_executable(test_oauth2_outbound_attach
+    unit/test_oauth2_outbound_attach.c)
+
+target_link_libraries(test_oauth2_outbound_attach
+    PRIVATE
+        unity
+        nssf_runtime
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_oauth2_outbound_attach PRIVATE c_std_11)
+
+add_test(NAME nssf_oauth2_outbound_attach
+         COMMAND test_oauth2_outbound_attach)
+
 # Phase 1 wave 1 WI-availability-repo — AvailabilityRepository in-memory test
 # seam round-trip. DB 의존 없음 (nssf_availability_repo_new_inmemory). cJSON 은
 # nssf_repository 의 PUBLIC nssf_generated 의존으로 전이. ctest -R
