@@ -20,6 +20,13 @@
  *   https-only ctor reject (http / '@' / '#'); valid https → ok    — #9
  *   mTLS + secret_ref simultaneously → create NULL                 — #12
  *   secret-auth production gate; SECRET_BASIC via HTTP Basic       — #3,#2
+ *   production MTLS fail-fast: missing cert/key → NULL (loopback   — #2
+ *     ctor relaxes); canonical identity is nfInstanceId not client_id
+ *
+ * Owned-copy contract (B3): nssf_oauth2_outbound_acquire writes an OWNED malloc'd
+ * bearer copy into *out_bearer (char **) — every successful acquire here free()s
+ * it (LeakSan-clean). Cache reuse is proven by transport call-count, not pointer
+ * identity (two cached acquires now return distinct buffers).
  */
 
 #define _POSIX_C_SOURCE 200809L
@@ -142,6 +149,15 @@ static nssf_oauth2_outbound_config_t base_cfg(void)
     cfg.nf_instance_id = "nssf-0a1b2c3d-instance";
     cfg.auth_method = NSSF_OAUTH2_AUTH_MTLS;
     cfg.default_scope = "nnrf-disc nnrf-nfm";
+    /*
+     * B2 fail-fast: the PRODUCTION ctor now REQUIRES both client_cert_path AND
+     * client_key_path for an MTLS handle (else it cannot present a client cert
+     * at the TLS handshake → NULL). The mock transport bypasses real curl, so
+     * these paths need not point at existing files. Secret-method tests clear
+     * these (mTLS material is mutually exclusive with secret auth — decision 12).
+     */
+    cfg.client_cert_path = "/dev/null/dummy-client.pem";
+    cfg.client_key_path = "/dev/null/dummy-client.key";
     /* numeric fields left 0 → decision defaults (refresh 60 / max_ttl 3600). */
     return cfg;
 }
@@ -166,13 +182,14 @@ static void test_acquire_happy_and_attach_bearer(void)
         "{\"access_token\":\"opaque-bearer-aaa\",\"token_type\":\"Bearer\","
         "\"expires_in\":300}";
 
-    const char *bearer = NULL;
+    char *bearer = NULL;
     nssf_oauth2_outbound_status_t st =
         nssf_oauth2_outbound_acquire(ob, NULL, &bearer);
     TEST_ASSERT_EQUAL_INT(NSSF_OAUTH2_OK, st);
     TEST_ASSERT_NOT_NULL(bearer);
     TEST_ASSERT_EQUAL_STRING("opaque-bearer-aaa", bearer);
     TEST_ASSERT_EQUAL_INT(1, g_mock.calls);
+    free(bearer); /* B3: acquire returns an OWNED copy — caller must free. */
 
     /* attach appends exactly "Authorization: Bearer <token>". */
     struct curl_slist *headers = NULL;
@@ -203,15 +220,22 @@ static void test_ttl_cache_reuse_within_ttl(void)
         "{\"access_token\":\"tok-1\",\"token_type\":\"Bearer\","
         "\"expires_in\":300}"; /* well outside the 60s refresh buffer. */
 
-    const char *b1 = NULL;
+    char *b1 = NULL;
     TEST_ASSERT_EQUAL_INT(NSSF_OAUTH2_OK,
                           nssf_oauth2_outbound_acquire(ob, NULL, &b1));
-    const char *b2 = NULL;
+    char *b2 = NULL;
     TEST_ASSERT_EQUAL_INT(NSSF_OAUTH2_OK,
                           nssf_oauth2_outbound_acquire(ob, NULL, &b2));
-    /* second acquire reused the cache — transport called exactly once. */
+    /*
+     * Second acquire reused the cache — proven by the transport call-count (==1),
+     * NOT by pointer identity: each acquire now returns an INDEPENDENT owned copy
+     * (B3 UAF fix), so b1 and b2 are distinct buffers with equal value.
+     */
     TEST_ASSERT_EQUAL_INT(1, g_mock.calls);
+    TEST_ASSERT_EQUAL_STRING("tok-1", b1);
     TEST_ASSERT_EQUAL_STRING("tok-1", b2);
+    free(b1); /* B3: each owned copy freed independently. */
+    free(b2);
     nssf_oauth2_outbound_free(ob);
 }
 
@@ -227,7 +251,7 @@ static void test_refresh_buffer_triggers_refresh_near_expiry(void)
     g_mock.reply_body =
         "{\"access_token\":\"tok-near\",\"token_type\":\"Bearer\","
         "\"expires_in\":30}";
-    const char *b1 = NULL;
+    char *b1 = NULL;
     TEST_ASSERT_EQUAL_INT(NSSF_OAUTH2_OK,
                           nssf_oauth2_outbound_acquire(ob, NULL, &b1));
     TEST_ASSERT_EQUAL_INT(1, g_mock.calls);
@@ -235,12 +259,14 @@ static void test_refresh_buffer_triggers_refresh_near_expiry(void)
     g_mock.reply_body =
         "{\"access_token\":\"tok-fresh\",\"token_type\":\"Bearer\","
         "\"expires_in\":300}";
-    const char *b2 = NULL;
+    char *b2 = NULL;
     TEST_ASSERT_EQUAL_INT(NSSF_OAUTH2_OK,
                           nssf_oauth2_outbound_acquire(ob, NULL, &b2));
     /* within-buffer token forced a refresh on the second call. */
     TEST_ASSERT_EQUAL_INT(2, g_mock.calls);
     TEST_ASSERT_EQUAL_STRING("tok-fresh", b2);
+    free(b1); /* B3: each owned copy freed. */
+    free(b2);
     nssf_oauth2_outbound_free(ob);
 }
 
@@ -262,13 +288,15 @@ static void test_server_ttl_capped_to_max_ttl(void)
     g_mock.reply_body =
         "{\"access_token\":\"tok-cap\",\"token_type\":\"Bearer\","
         "\"expires_in\":7200}";
-    const char *b1 = NULL;
+    char *b1 = NULL;
     TEST_ASSERT_EQUAL_INT(NSSF_OAUTH2_OK,
                           nssf_oauth2_outbound_acquire(ob, NULL, &b1));
-    const char *b2 = NULL;
+    char *b2 = NULL;
     TEST_ASSERT_EQUAL_INT(NSSF_OAUTH2_OK,
                           nssf_oauth2_outbound_acquire(ob, NULL, &b2));
     TEST_ASSERT_EQUAL_INT(2, g_mock.calls);
+    free(b1); /* B3: each owned copy freed. */
+    free(b2);
     nssf_oauth2_outbound_free(ob);
 }
 
@@ -283,10 +311,10 @@ static void test_token_type_not_bearer_fail_closed(void)
     g_mock.reply_body =
         "{\"access_token\":\"opaque\",\"token_type\":\"mac\","
         "\"expires_in\":300}";
-    const char *bearer = NULL;
+    char *bearer = NULL;
     TEST_ASSERT_EQUAL_INT(NSSF_OAUTH2_ABORT,
                           nssf_oauth2_outbound_acquire(ob, NULL, &bearer));
-    TEST_ASSERT_NULL(bearer);
+    TEST_ASSERT_NULL(bearer); /* NULL on non-OK — nothing to free. */
 
     /* attach must NOT append anything on fail-closed. */
     struct curl_slist *headers = NULL;
@@ -304,10 +332,10 @@ static void test_token_type_missing_fail_closed(void)
     g_mock.reply_status = 200;
     g_mock.reply_body =
         "{\"access_token\":\"opaque\",\"expires_in\":300}"; /* no token_type. */
-    const char *bearer = NULL;
+    char *bearer = NULL;
     TEST_ASSERT_EQUAL_INT(NSSF_OAUTH2_ABORT,
                           nssf_oauth2_outbound_acquire(ob, NULL, &bearer));
-    TEST_ASSERT_NULL(bearer);
+    TEST_ASSERT_NULL(bearer); /* NULL on non-OK — nothing to free. */
     nssf_oauth2_outbound_free(ob);
 }
 
@@ -321,10 +349,10 @@ static void test_missing_access_token_fail_closed(void)
     g_mock.reply_status = 200;
     g_mock.reply_body =
         "{\"token_type\":\"Bearer\",\"expires_in\":300}"; /* no access_token. */
-    const char *bearer = NULL;
+    char *bearer = NULL;
     TEST_ASSERT_EQUAL_INT(NSSF_OAUTH2_ABORT,
                           nssf_oauth2_outbound_acquire(ob, NULL, &bearer));
-    TEST_ASSERT_NULL(bearer);
+    TEST_ASSERT_NULL(bearer); /* NULL on non-OK — nothing to free. */
     nssf_oauth2_outbound_free(ob);
 }
 
@@ -345,11 +373,11 @@ static void test_jws_exp_past_not_cached(void)
     g_mock.reply_status = 200;
     g_mock.reply_body = body;
 
-    const char *bearer = NULL;
+    char *bearer = NULL;
     /* JWS exp in the past → resolve_expiry returns false → not cached. */
     TEST_ASSERT_EQUAL_INT(NSSF_OAUTH2_ABORT,
                           nssf_oauth2_outbound_acquire(ob, NULL, &bearer));
-    TEST_ASSERT_NULL(bearer);
+    TEST_ASSERT_NULL(bearer); /* NULL on non-OK — nothing to free. */
     free(jws);
     nssf_oauth2_outbound_free(ob);
 }
@@ -370,10 +398,11 @@ static void test_jws_exp_future_is_cached(void)
     g_mock.reply_status = 200;
     g_mock.reply_body = body;
 
-    const char *bearer = NULL;
+    char *bearer = NULL;
     TEST_ASSERT_EQUAL_INT(NSSF_OAUTH2_OK,
                           nssf_oauth2_outbound_acquire(ob, NULL, &bearer));
     TEST_ASSERT_NOT_NULL(bearer);
+    free(bearer); /* B3: acquire returns an OWNED copy — caller must free. */
     free(jws);
     nssf_oauth2_outbound_free(ob);
 }
@@ -387,10 +416,10 @@ static void test_non200_status_fail_closed(void)
 
     g_mock.reply_status = 500;
     g_mock.reply_body = "{\"error\":\"server_error\"}";
-    const char *bearer = NULL;
+    char *bearer = NULL;
     TEST_ASSERT_EQUAL_INT(NSSF_OAUTH2_ABORT,
                           nssf_oauth2_outbound_acquire(ob, NULL, &bearer));
-    TEST_ASSERT_NULL(bearer);
+    TEST_ASSERT_NULL(bearer); /* NULL on non-OK — nothing to free. */
 
     /* never an unauthenticated attach. */
     struct curl_slist *headers = NULL;
@@ -406,10 +435,10 @@ static void test_transport_error_fail_closed(void)
     nssf_oauth2_outbound_t *ob = make_handle(&cfg);
 
     g_mock.force_error = 1; /* simulate network/TLS failure. */
-    const char *bearer = NULL;
+    char *bearer = NULL;
     TEST_ASSERT_EQUAL_INT(NSSF_OAUTH2_ABORT,
                           nssf_oauth2_outbound_acquire(ob, NULL, &bearer));
-    TEST_ASSERT_NULL(bearer);
+    TEST_ASSERT_NULL(bearer); /* NULL on non-OK — nothing to free. */
     nssf_oauth2_outbound_free(ob);
 }
 
@@ -421,11 +450,11 @@ static void test_disabled_no_attach_no_abort(void)
     cfg.enabled = false; /* dev no-attach path. */
     nssf_oauth2_outbound_t *ob = make_handle(&cfg);
 
-    const char *bearer = NULL;
+    char *bearer = NULL;
     nssf_oauth2_outbound_status_t st =
         nssf_oauth2_outbound_acquire(ob, NULL, &bearer);
     TEST_ASSERT_EQUAL_INT(NSSF_OAUTH2_NO_ATTACH, st);
-    TEST_ASSERT_NULL(bearer);
+    TEST_ASSERT_NULL(bearer); /* NULL on non-OK — nothing to free. */
     /* transport never invoked when disabled. */
     TEST_ASSERT_EQUAL_INT(0, g_mock.calls);
 
@@ -449,7 +478,7 @@ static void test_default_scope_in_form_body(void)
     g_mock.reply_body =
         "{\"access_token\":\"tok\",\"token_type\":\"Bearer\","
         "\"expires_in\":300}";
-    const char *bearer = NULL;
+    char *bearer = NULL;
     TEST_ASSERT_EQUAL_INT(NSSF_OAUTH2_OK,
                           nssf_oauth2_outbound_acquire(ob, NULL, &bearer));
 
@@ -459,6 +488,15 @@ static void test_default_scope_in_form_body(void)
                                 "grant_type=client_credentials"));
     TEST_ASSERT_NOT_NULL(
         strstr(g_mock.last_form_body, "scope=nnrf-disc%20nnrf-nfm"));
+    /*
+     * B1: canonical identity is the 29.510 AccessTokenReq `nfInstanceId` field,
+     * NOT the OAuth2 `client_id` form param (decision 2). Assert the correct
+     * field is present and the wrong one is absent.
+     */
+    TEST_ASSERT_NOT_NULL(
+        strstr(g_mock.last_form_body, "nfInstanceId=nssf-0a1b2c3d-instance"));
+    TEST_ASSERT_NULL(strstr(g_mock.last_form_body, "client_id="));
+    free(bearer); /* B3: acquire returns an OWNED copy — caller must free. */
     nssf_oauth2_outbound_free(ob);
 }
 
@@ -471,7 +509,7 @@ static void test_scope_override_changes_request(void)
     g_mock.reply_body =
         "{\"access_token\":\"tok-ov\",\"token_type\":\"Bearer\","
         "\"expires_in\":300}";
-    const char *bearer = NULL;
+    char *bearer = NULL;
     TEST_ASSERT_EQUAL_INT(
         NSSF_OAUTH2_OK,
         nssf_oauth2_outbound_acquire(ob, "nnrf-disc", &bearer));
@@ -480,6 +518,7 @@ static void test_scope_override_changes_request(void)
     TEST_ASSERT_NOT_NULL(strstr(g_mock.last_form_body, "scope=nnrf-disc"));
     TEST_ASSERT_NULL(
         strstr(g_mock.last_form_body, "scope=nnrf-disc%20nnrf-nfm"));
+    free(bearer); /* B3: acquire returns an OWNED copy — caller must free. */
     nssf_oauth2_outbound_free(ob);
 }
 
@@ -525,6 +564,31 @@ static void test_create_rejects_mtls_with_secret(void)
     TEST_ASSERT_NULL(nssf_oauth2_outbound_create(&cfg));
 }
 
+/* ============ B2: production MTLS fail-fast requires cert+key (#2) ========= */
+
+static void test_mtls_requires_cert_key_in_production(void)
+{
+    /*
+     * B2 fail-fast vs test-relax split (locks the contract both ways):
+     *   - PRODUCTION ctor + auth_method==MTLS + NO cert/key → NULL. A production
+     *     MTLS handle that cannot present a client certificate is rejected at
+     *     construction (it could never authenticate to the NRF token endpoint).
+     *   - The TEST-ONLY loopback ctor relaxes that requirement so mock/loopback
+     *     suites need no real cert files → NOT NULL for the same (cert-less) cfg.
+     */
+    nssf_oauth2_outbound_config_t cfg = base_cfg();
+    cfg.auth_method = NSSF_OAUTH2_AUTH_MTLS;
+    cfg.client_cert_path = NULL; /* no cert. */
+    cfg.client_key_path = NULL;  /* no key. */
+    TEST_ASSERT_NULL(nssf_oauth2_outbound_create(&cfg));
+
+    /* loopback test ctor accepts the same cert-less MTLS cfg over http://127… */
+    cfg.token_url = "http://127.0.0.1:8080/oauth2/token";
+    nssf_oauth2_outbound_t *ob = nssf_oauth2_outbound_create_insecure(&cfg);
+    TEST_ASSERT_NOT_NULL(ob);
+    nssf_oauth2_outbound_free(ob);
+}
+
 /* ====================== secret-auth production gate (#3) ================== */
 
 static void test_secret_auth_rejected_when_production_forbids(void)
@@ -533,6 +597,9 @@ static void test_secret_auth_rejected_when_production_forbids(void)
     cfg.auth_method = NSSF_OAUTH2_AUTH_SECRET_BASIC;
     cfg.secret_ref = "vault://nssf/nrf-client-secret";
     cfg.allow_secret_auth_in_production = false; /* production forbids. */
+    /* secret auth carries NO mTLS material (mutually exclusive — decision 12). */
+    cfg.client_cert_path = NULL;
+    cfg.client_key_path = NULL;
     TEST_ASSERT_NULL(nssf_oauth2_outbound_create(&cfg));
 }
 
@@ -542,13 +609,16 @@ static void test_secret_basic_uses_http_basic_not_body(void)
     cfg.auth_method = NSSF_OAUTH2_AUTH_SECRET_BASIC;
     cfg.secret_ref = "s3cr3t-ref";
     cfg.allow_secret_auth_in_production = true; /* explicit opt-in. */
+    /* secret auth carries NO mTLS material (mutually exclusive — decision 12). */
+    cfg.client_cert_path = NULL;
+    cfg.client_key_path = NULL;
     nssf_oauth2_outbound_t *ob = make_handle(&cfg);
 
     g_mock.reply_status = 200;
     g_mock.reply_body =
         "{\"access_token\":\"tok\",\"token_type\":\"Bearer\","
         "\"expires_in\":300}";
-    const char *bearer = NULL;
+    char *bearer = NULL;
     TEST_ASSERT_EQUAL_INT(NSSF_OAUTH2_OK,
                           nssf_oauth2_outbound_acquire(ob, NULL, &bearer));
 
@@ -558,6 +628,7 @@ static void test_secret_basic_uses_http_basic_not_body(void)
                              g_mock.last_basic_auth);
     TEST_ASSERT_NULL(strstr(g_mock.last_form_body, "s3cr3t-ref"));
     TEST_ASSERT_NULL(strstr(g_mock.last_form_body, "client_secret"));
+    free(bearer); /* B3: acquire returns an OWNED copy — caller must free. */
     nssf_oauth2_outbound_free(ob);
 }
 
@@ -583,6 +654,7 @@ int main(void)
     RUN_TEST(test_create_rejects_fragment_hash);
     RUN_TEST(test_create_accepts_valid_https);
     RUN_TEST(test_create_rejects_mtls_with_secret);
+    RUN_TEST(test_mtls_requires_cert_key_in_production);
     RUN_TEST(test_secret_auth_rejected_when_production_forbids);
     RUN_TEST(test_secret_basic_uses_http_basic_not_body);
     return UNITY_END();

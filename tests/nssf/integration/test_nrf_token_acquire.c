@@ -12,7 +12,8 @@
  *
  *   loopback ctor accepts http://127.0.0.1; rejects non-loopback / '@'   — ctor
  *   form body is x-www-form-urlencoded grant_type=client_credentials     — #1
- *   identity carried as client_id=<nf_instance_id>                       — #2
+ *   identity carried as nfInstanceId=<nf_instance_id> (29.510, NOT       — #2
+ *     the OAuth2 client_id form param — B1 fix)
  *   acquire → attach round-trip yields Authorization: Bearer <token>     — #1
  *   307 redirect response → fail-closed / no-follow (ABORT, no attach)   — #5
  *
@@ -117,11 +118,17 @@ static void test_client_credentials_acquire_and_attach_roundtrip(void)
         nssf_oauth2_outbound_attach_bearer(ob, NULL, &headers);
     TEST_ASSERT_EQUAL_INT(NSSF_OAUTH2_OK, st);
 
-    /* x-www-form-urlencoded grant + canonical identity (decisions 1 + 2). */
+    /*
+     * x-www-form-urlencoded grant + canonical identity (decisions 1 + 2).
+     * B1: the 29.510 Nnrf_AccessToken AccessTokenReq carries the NF identity in
+     * the `nfInstanceId` field, NOT the OAuth2 `client_id` form param. Assert the
+     * correct field is present and the wrong one never appears in the body.
+     */
     TEST_ASSERT_NOT_NULL(
         strstr(g_nrf.form_body, "grant_type=client_credentials"));
     TEST_ASSERT_NOT_NULL(
-        strstr(g_nrf.form_body, "client_id=nssf-instance-77ce-4f2a"));
+        strstr(g_nrf.form_body, "nfInstanceId=nssf-instance-77ce-4f2a"));
+    TEST_ASSERT_NULL(strstr(g_nrf.form_body, "client_id="));
     /* request reached the loopback token endpoint. */
     TEST_ASSERT_NOT_NULL(strstr(g_nrf.url, "127.0.0.1"));
 
@@ -155,10 +162,10 @@ static void test_redirect_307_fails_closed(void)
     g_nrf.reply_status = 307; /* Temporary Redirect — not followed. */
     g_nrf.reply_body = "";
 
-    const char *bearer = NULL;
+    char *bearer = NULL;
     TEST_ASSERT_EQUAL_INT(NSSF_OAUTH2_ABORT,
                           nssf_oauth2_outbound_acquire(ob, NULL, &bearer));
-    TEST_ASSERT_NULL(bearer);
+    TEST_ASSERT_NULL(bearer); /* NULL on non-OK — nothing to free. */
 
     struct curl_slist *headers = NULL;
     TEST_ASSERT_EQUAL_INT(NSSF_OAUTH2_ABORT,
