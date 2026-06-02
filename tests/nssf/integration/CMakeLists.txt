@@ -190,6 +190,41 @@ target_compile_features(test_nrf_token_acquire PRIVATE c_std_11)
 add_test(NAME nssf_oauth2_outbound_token_acquire
          COMMAND test_nrf_token_acquire)
 
+# Phase 2 WI-notification-dispatcher — NotificationDispatcher outbound POST + G-08
+# minimal-retry integration test.
+#
+# The CONSUMER side: dequeue a retry_queue row and POST it to an AMF callback URI,
+# driven ENTIRELY through the mock TRANSPORT seam
+# (nssf_notification_dispatcher_set_transport) over the in-memory store + a
+# loopback oauth handle with a mock NRF token transport. No socket, no real AMF, no
+# live NRF, no DB — runs UNCONDITIONALLY in CI. Asserts the dispatch-status
+# contract: 200→SENT (one POST, correlation+traceparent headers, Bearer when oauth
+# enabled), 5xx→200 / transport-error→200 retried EXACTLY once (G-08, no
+# exponential/multi-loop), 5xx-twice→DROPPED, 404→DROPPED with no retry, oauth
+# attach ABORT→FORBIDDEN with ZERO POSTs and the row re-armed (fail-closed). TLS
+# hardening is exercised through the seam (a forced transport error == TLS/conn
+# failure → retriable) since the mock cannot read curl opts directly.
+#
+# nssf_dispatcher PUBLIC-links nssf_runtime/nssf_engine/nssf_generated + libpq +
+# libcurl, so oauth2_outbound.h + curl/curl.h come transitively. Must register
+# BEFORE the find_package(PostgreSQL)/return() guard below so it builds + runs
+# where libpq is absent. ctest -R nssf_notification_dispatcher_ 매칭
+# (nssf_notification_dispatcher_outbound).
+add_executable(test_notification_dispatcher_outbound
+    test_notification_dispatcher_outbound.c)
+
+target_link_libraries(test_notification_dispatcher_outbound
+    PRIVATE
+        unity
+        nssf_dispatcher
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_notification_dispatcher_outbound PRIVATE c_std_11)
+
+add_test(NAME nssf_notification_dispatcher_outbound
+         COMMAND test_notification_dispatcher_outbound)
+
 # Phase 1 wave 1 WI-schema-bootstrap integration test.
 #
 # libpq + psql 의존. PostgreSQL service container 미배치 환경 (현 CI) 에서는
