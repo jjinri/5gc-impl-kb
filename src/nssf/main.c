@@ -2,9 +2,10 @@
  * main.c — NSSF process bootstrap (WI-nsselection-handler).
  *
  * Wiring order (runtime-model.md §lifecycle): TLS context → JWKS cache →
- * AvailabilityRepository → SelectionEngine → router → nghttp2/libuv server.
- * Graceful shutdown on SIGINT/SIGTERM: stop the listener, drain in-flight
- * streams, then close TLS context / token cache / DB pool in order.
+ * AvailabilityRepository → SelectionEngine + AvailabilityEngine → router →
+ * nghttp2/libuv server. Graceful shutdown on SIGINT/SIGTERM: stop the listener,
+ * drain in-flight streams, then close TLS context / token cache / DB pool in
+ * order.
  *
  * Every secret-bearing input comes from the environment (operator config) — no
  * hardcoded cert paths, conninfo, or JWKS URL (ADR-0004 M2/M7).
@@ -16,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "availability_engine.h"
 #include "availability_repository.h"
 #include "oauth2_jwks.h"
 #include "router.h"
@@ -67,6 +69,7 @@ int main(void)
     nssf_jwks_cache_t *jwks = NULL;
     nssf_availability_repo_t *repo = NULL;
     nssf_selection_engine_t *engine = NULL;
+    nssf_availability_engine_t *avail_engine = NULL;
     nssf_router_t *router = NULL;
     nssf_server_t *server = NULL;
 
@@ -127,10 +130,25 @@ int main(void)
         goto cleanup;
     }
 
-    /* 5. Router over the shared handler dependencies. */
-    nssf_nsselection_deps_t deps = {
+    /*
+     * 4b. AvailabilityEngine over the same repository with zero-initialized seams.
+     * The NSSAIAvailability CRUD routes are M4-independent: the change-event
+     * publish seam (the deferred SubscriptionStore/NotificationDispatcher cascade)
+     * is NULL here, so a committed mutation publishes nothing — no consumer is
+     * registered in phase2 and there is no outbound notification egress.
+     */
+    nssf_availability_engine_seams_t avail_seams = {0};
+    avail_engine = nssf_availability_engine_new(repo, &avail_seams);
+    if (avail_engine == NULL) {
+        fprintf(stderr, "nssf: availability engine init failed\n");
+        goto cleanup;
+    }
+
+    /* 5. Router over the combined handler dependencies. */
+    nssf_router_deps_t deps = {
         .jwks_cache = jwks,
-        .engine = engine,
+        .selection_engine = engine,
+        .availability_engine = avail_engine,
     };
     router = nssf_router_create(&deps);
     if (router == NULL) {
@@ -154,7 +172,8 @@ int main(void)
     signal(SIGTERM, on_signal);
     signal(SIGPIPE, SIG_IGN);
 
-    fprintf(stderr, "nssf: serving GET /network-slice-information on %s:%u\n",
+    fprintf(stderr,
+            "nssf: serving NSSelection + NSSAIAvailability routes on %s:%u\n",
             bind_addr ? bind_addr : "0.0.0.0", (unsigned)port);
 
     if (nssf_server_run(server) == 0) {
@@ -167,6 +186,7 @@ cleanup:
     g_server = NULL;
     nssf_server_free(server);
     nssf_router_free(router);
+    nssf_availability_engine_free(avail_engine);
     nssf_selection_engine_free(engine);
     nssf_availability_repo_free(repo);
     nssf_jwks_cache_free(jwks);

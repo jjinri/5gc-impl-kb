@@ -1,9 +1,13 @@
 /*
  * nssaiavailability_options_handler.c — NSSAIAvailabilityOptions inbound handler.
  *
- * Security-gate-first, then AvailabilityEngine::options metadata, then 204 with
+ * Security-gate-first, then AvailabilityEngine::options metadata, then 200 with
  * the Allow header value. No body, no persistence. Transport-agnostic — same
  * path drives tests, no socket.
+ *
+ * Success status is 200 ("OK", null schema) to match handoff/nssf/contract.yaml
+ * api/NSSAIAvailabilityOptions responses — the OPTIONS method-metadata answer is
+ * a 200 with an empty body and an Allow header, not a 204.
  */
 
 #include "nssaiavailability_options_handler.h"
@@ -121,8 +125,9 @@ int nssf_nssaiavailability_options_handle(
         return emit_problem(out, nf_problem_details_make_500(NULL, req->request_target), 500);
     }
 
-    /* 4. 204 No Content with the Allow header value the caller emits. */
-    out->status = 204;
+    /* 4. 200 OK (empty body) with the Allow header value the caller emits — the
+     *    contract success status for the method-metadata answer. */
+    out->status = 200;
     out->content_type = NULL;
     out->body = NULL;
     return out->status;
