@@ -217,3 +217,8 @@ add_test(NAME nssf_selection_engine_redirect
 # libpq fixture, ctest -R nssf_schema_bootstrap 매칭. libpq 부재 또는
 # POSTGRES_* env 미주입 시 SKIP PASS 로 회피.
 add_subdirectory(integration)
+
+# Phase 1 wave 1 WI-nsselection-handler — NSSelectionGet contract test
+# (response-schema conformance). 별도 contract/ subdirectory. unity 타깃은 본
+# scope 에서 정의되어 하위에서 가시.
+add_subdirectory(contract)

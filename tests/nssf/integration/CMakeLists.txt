@@ -36,6 +36,59 @@ target_compile_features(test_jwks_fetch PRIVATE c_std_11)
 add_test(NAME nssf_oauth2_jwks_fetch
          COMMAND test_jwks_fetch)
 
+# Phase 1 wave 1 WI-nsselection-handler — NSSelectionGet inbound integration
+# tests (happy + errors). Both drive nssf_nsselection_get_handle IN-PROCESS — no
+# socket, no DB: JWKS seeded offline from an in-test RSA key (libjwt signs the
+# bearer), availability from nssf_availability_repo_new_inmemory, body-sourced
+# subscribed NSSAI + zero-init seams. So the golden path + 401/403/404/414/500
+# run UNCONDITIONALLY in CI (real coverage). The PG-fixture / live nghttp2 probe
+# variants are SKIP PASS when probe env (NSSF_DB_CONNINFO / NSSF_BIND_* /
+# NSSF_TLS_* / NSSF_OAUTH2_JWKS_URL) is absent — the readiness-check CI has
+# neither a PG service nor a live server. ctest -R nssf_nsselection_get_happy /
+# nssf_nsselection_get_errors 로 매칭 (gate NAME pattern nssf_nsselection_.*_happy
+# / nssf_nsselection_.*_errors).
+add_executable(test_nsselection_get_happy
+    test_nsselection_get_happy.c)
+
+target_link_libraries(test_nsselection_get_happy
+    PRIVATE
+        unity
+        nssf_handlers
+        nssf_engine
+        nssf_runtime
+        nssf_generated
+        PkgConfig::libjwt
+        OpenSSL::SSL
+        OpenSSL::Crypto
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_nsselection_get_happy PRIVATE c_std_11)
+
+add_test(NAME nssf_nsselection_get_happy
+         COMMAND test_nsselection_get_happy)
+
+add_executable(test_nsselection_get_errors
+    test_nsselection_get_errors.c)
+
+target_link_libraries(test_nsselection_get_errors
+    PRIVATE
+        unity
+        nssf_handlers
+        nssf_engine
+        nssf_runtime
+        nssf_generated
+        PkgConfig::libjwt
+        OpenSSL::SSL
+        OpenSSL::Crypto
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_nsselection_get_errors PRIVATE c_std_11)
+
+add_test(NAME nssf_nsselection_get_errors
+         COMMAND test_nsselection_get_errors)
+
 # Phase 1 wave 1 WI-schema-bootstrap integration test.
 #
 # libpq + psql 의존. PostgreSQL service container 미배치 환경 (현 CI) 에서는
