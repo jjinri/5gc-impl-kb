@@ -447,13 +447,22 @@ prs:
       - src/nssf/runtime/CMakeLists.txt
       - tests/nssf/unit/test_oauth2_outbound_attach.c
       - tests/nssf/integration/test_nrf_token_acquire.c
+      # build-glue (amendment 2026-06-02, PR #128 — 선례 #122/#124/#126).
+      - tests/nssf/CMakeLists.txt
+      - tests/nssf/integration/CMakeLists.txt
     depends_on:
       - PR-phase1-wave1-tls-bootstrap
       # phase-order gate (amendment 2026-06-01, operator): M4(phase2) 가 picker
       # topo sort 에서 phase1_wave1 미완 상태로 앞으로 새던 버그 차단. phase1_wave1
       # tail(nsselection-handler) 뒤로 정렬 강제 — M4 는 phase1_wave1 완료 후 도달.
       - PR-phase1-wave1-nsselection-handler
-    status: not_started
+    status: merged
+    merged_pr: 'https://github.com/jjinri/5gc-impl-kb/pull/128'
+    # M4 EYEBALL slice — operator(pane1) eyeball + Pane-2 review. rework round 1
+    # (Pane-2 blocker 3건: nfInstanceId body / mtls cert-key fail-fast / token UAF)
+    # fix 후 merge 승인. 12 ratified decision 구현(#11 retry/dead-letter = accept-
+    # defer, resilience follow-up). ADR-0004/eng ratification amendment = operator
+    # batch 대기 (3-trigger, 자율 amend 금지).
     required_checks:
       - pytest_full_suite
     estimated_loc: 900
