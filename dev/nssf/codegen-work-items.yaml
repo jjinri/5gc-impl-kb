@@ -497,3 +497,74 @@ items:
       - tests/nssf/unit/test_observability_trace.c
     verification_commands:
       - ctest --test-dir build -R nssf_observability_
+
+  # ===== M4 batch backlog WIs (amendment 2026-06-02, PR-B) =====
+  # operator carry-list 등록. backlog — 본 PR 은 plan 등록만, dispatch 별도.
+  - id: WI-availability-route-registration
+    owner_lane: code
+    depends_on:
+      - WI-availability-handlers
+      - WI-nsselection-handler
+    inputs:
+      - src/nssf/server/router.{h,c} (nsselection slice 의 dispatch 테이블 — phase2 handler slot-in)
+      - dev/nssf/api-implementation-matrix.md (NSSAIAvailability rows)
+    expected_files:
+      - src/nssf/server/router.{h,c}
+      - src/nssf/main.c
+    acceptance:
+      - NSSAIAvailability 4 handler (Put/Patch/Delete/Options) 가 server/router 에 route 등록 + main.c deps 배선.
+      - 'router deps 가 availability_engine + jwks_cache 보유 (nsselection deps 확장).'
+      - 'OPTIONS success status = contract.yaml(200) 과 정합 reconcile (handler 204 vs contract 200 — 본 slice 에서 결정/정합).'
+    tests:
+      - tests/nssf/integration/test_nssaiavailability_route_*.c
+    verification_commands:
+      - ctest --test-dir build -R nssf_nssaiavailability_route_
+  - id: WI-oauth2-resilience
+    owner_lane: code
+    depends_on:
+      - WI-outbound-oauth2
+    inputs:
+      - src/nssf/runtime/oauth2_outbound.{h,c} (M4 single-shot fail-closed)
+      - dev/nssf/_implementation_run_state.yaml (m4 decision #11 accept-defer)
+    expected_files:
+      - src/nssf/runtime/oauth2_outbound.{h,c}
+    acceptance:
+      - 'decision #11 완성 — network/timeout/5xx/429 = bounded retry + exponential backoff.'
+      - '400/401/403/invalid_scope = dead-letter/alert (no blind retry).'
+      - 'retry 중 unauthenticated outbound 금지 (fail-closed 불변).'
+    tests:
+      - tests/nssf/unit/test_oauth2_outbound_retry.c
+    verification_commands:
+      - ctest --test-dir build -R nssf_oauth2_outbound_retry
+  - id: WI-config-hardening
+    owner_lane: code
+    depends_on:
+      - WI-outbound-oauth2
+    inputs:
+      - src/nssf/runtime/oauth2_outbound.h (secret_ref reference handle TODO seam)
+      - engineering/nssf/engineering-design.md (configuration_management.secret_strategy ref-only)
+    expected_files:
+      - src/nssf/runtime/secret_ref_resolver.{h,c}
+    acceptance:
+      - 'secret_ref env:NAME / file:/path resolver seam 구현 (값 직접 보유 금지).'
+      - 'resolver 실패 = fail-fast; resolved secret 메모리 scrub.'
+    tests:
+      - tests/nssf/unit/test_secret_ref_resolver.c
+    verification_commands:
+      - ctest --test-dir build -R nssf_secret_ref_resolver
+  - id: WI-operator-config-guide
+    owner_lane: code
+    depends_on:
+      - WI-tls-bootstrap
+      - WI-outbound-oauth2
+    inputs:
+      - engineering/nssf/engineering-design.md (configuration_management security config keys)
+      - dev/nssf/_implementation_run_state.yaml (m4 ratified decisions)
+    expected_files:
+      - design/nssf/operator-configuration-guide.md
+    acceptance:
+      - 'operator config surface 문서화 — tls/mtls/oauth2_inbound/oauth2_outbound 키 + nf_instance_id + dev PKI + NRF token_url/cert paths + secret_ref(env:/file:) 의미.'
+    tests:
+      - 'design/nssf/operator-configuration-guide.md — doc review: config 키 완전성 + 보안 의미 operator 검수 (docs slice, code test 없음).'
+    verification_commands:
+      - 'test -f design/nssf/operator-configuration-guide.md'

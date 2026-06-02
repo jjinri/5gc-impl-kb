@@ -481,6 +481,10 @@ phase_policy:
         - WI-availability-handlers
         - WI-outbound-oauth2
         - WI-notification-dispatcher
+        # M4 batch backlog (amendment 2026-06-02, PR-B)
+        - WI-availability-route-registration
+        - WI-oauth2-resilience
+        - WI-config-hardening
     phase3:
       description: "subscription, PR G 후속"
       work_items:
@@ -496,6 +500,8 @@ phase_policy:
       description: "hardening, PR G 후속"
       work_items:
         - WI-observability-finalize
+        # M4 batch backlog (amendment 2026-06-02, PR-B)
+        - WI-operator-config-guide
 
 # ─── 6. gaps ─────────────────────────────────────────────────────────
 # Source: design/policies/gaps.yaml (categories) + dev/nssf/
