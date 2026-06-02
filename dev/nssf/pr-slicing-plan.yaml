@@ -394,9 +394,20 @@ prs:
     scope_files:
       - src/nssf/handlers/nssaiavailability_*_handler.{h,c}
       - tests/nssf/integration/test_nssaiavailability_*_integration.c
+      # build-glue (amendment 2026-06-02, PR #126 — 선례 #122/#124).
+      - src/nssf/handlers/CMakeLists.txt
+      - tests/nssf/integration/CMakeLists.txt
     depends_on:
       - PR-phase2-availability-engine
-    status: not_started
+    status: merged
+    merged_pr: 'https://github.com/jjinri/5gc-impl-kb/pull/126'
+    # deferred-in-slice (PR #126, M4-independent boundary):
+    #  1. route-registration (server/router.{h,c} + main.c wiring) — 핸들러는
+    #     standalone in-process 모듈로 구현, route slot-in 은 server-wiring 후속.
+    #  2. retry_queue enqueue — AvailabilityEngine change-event seam 으로 defer
+    #     (real enqueue = SubscriptionStore[phase3] + NotificationDispatcher[M4]).
+    #  advisory: OPTIONS success 204+Allow vs contract.yaml 200 — contract
+    #     transcription 후속 reconcile (reviewer non-drift 판정).
     required_checks:
       - phase2_integration_put
       - phase2_integration_patch
