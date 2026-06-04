@@ -15,6 +15,12 @@
  * dispatcher polling/worker loop in this layer would promote the G-08 fail-
  * closed hot-loop gap to a BLOCKER (open-gaps-and-assumptions G-08 addendum,
  * 2026-06-04). The store stays call-driven so G-08 remains deferred.
+ *
+ * Fan-out resolve+enqueue (nssf_subscription_store_fanout_change) is the
+ * engine→store→dispatcher cascade activation (B3 close): it scans the live
+ * subscriptions, matches each persisted filter against a committed change event,
+ * and enqueues ONE retry_queue row per match. It is store-layer matching ONLY —
+ * no outbound POST, no loop; the caller drives ONE dispatch afterwards.
  */
 #include "subscription_store.h"
 
@@ -43,6 +49,14 @@ typedef struct {
     int (*replace)(nssf_subscription_store_t *, const char *id,
                    const char *callback_uri, const cJSON *filter,
                    const char *expiry_at);
+    /* invoke `cb` for each live (non-tombstoned) row's id/callback_uri/filter
+     * (all borrowed, valid only during the call). cb returns 0 to continue, -1
+     * to abort. Returns 0 on a full scan, -1 on a store/callback error. */
+    int (*for_each_live)(nssf_subscription_store_t *,
+                         int (*cb)(void *ctx, const char *id,
+                                   const char *callback_uri,
+                                   const cJSON *filter),
+                         void *ctx);
     void (*destroy)(nssf_subscription_store_t *);
 } nssf_subscription_vtable_t;
 
@@ -642,6 +656,43 @@ cleanup:
     return rc;
 }
 
+static int pg_for_each_live(nssf_subscription_store_t *s,
+                            int (*cb)(void *ctx, const char *id,
+                                      const char *callback_uri,
+                                      const cJSON *filter),
+                            void *ctx)
+{
+    pg_store_t *self = (pg_store_t *)s;
+    /* Snapshot the live rows in one read. The fan-out match runs per-row in the
+     * caller; this is a naive scan (SubscriptionStore.md filter-match: naive scan
+     * or JSONB GIN — the index is a later perf tuning, not a correctness need). */
+    const char *sql =
+        "SELECT id, callback_url, filter FROM subscription "
+        "WHERE tombstone = FALSE";
+    PGresult *res = PQexecParams(self->conn, sql, 0, NULL, NULL, NULL, NULL, 0);
+    if (PQresultStatus(res) != PGRES_TUPLES_OK) {
+        PQclear(res);
+        return -1;
+    }
+    int rc = 0;
+    int rows = PQntuples(res);
+    for (int i = 0; i < rows; ++i) {
+        const char *id = PQgetvalue(res, i, 0);
+        const char *cb_uri = PQgetisnull(res, i, 1) ? NULL : PQgetvalue(res, i, 1);
+        cJSON *filter = PQgetisnull(res, i, 2)
+                            ? NULL
+                            : cJSON_Parse(PQgetvalue(res, i, 2));
+        int r = cb(ctx, id, cb_uri, filter);
+        cJSON_Delete(filter);
+        if (r != 0) {
+            rc = -1;
+            break;
+        }
+    }
+    PQclear(res);
+    return rc;
+}
+
 static void pg_destroy(nssf_subscription_store_t *s)
 {
     pg_store_t *self = (pg_store_t *)s;
@@ -657,6 +708,7 @@ static const nssf_subscription_vtable_t PG_VTABLE = {
     .remove = pg_remove,
     .tombstone = pg_tombstone,
     .replace = pg_replace,
+    .for_each_live = pg_for_each_live,
     .destroy = pg_destroy,
 };
 
@@ -820,6 +872,29 @@ static int mem_replace(nssf_subscription_store_t *s, const char *id,
     return 0;
 }
 
+static int mem_for_each_live(nssf_subscription_store_t *s,
+                             int (*cb)(void *ctx, const char *id,
+                                       const char *callback_uri,
+                                       const cJSON *filter),
+                             void *ctx)
+{
+    mem_store_t *self = (mem_store_t *)s;
+    /* Iterate over a snapshot count: the callback enqueues only and never mutates
+     * the store, and tombstone (set on a DELETED match) flips a flag in place
+     * without reordering, so a forward index scan stays valid. */
+    size_t n = self->count;
+    for (size_t i = 0; i < n; ++i) {
+        const nssf_subscription_record_t *r = &self->items[i];
+        if (r->tombstone) {
+            continue;
+        }
+        if (cb(ctx, r->id, r->callback_uri, r->filter) != 0) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
 static void mem_destroy(nssf_subscription_store_t *s)
 {
     mem_store_t *self = (mem_store_t *)s;
@@ -836,6 +911,7 @@ static const nssf_subscription_vtable_t MEM_VTABLE = {
     .remove = mem_remove,
     .tombstone = mem_tombstone,
     .replace = mem_replace,
+    .for_each_live = mem_for_each_live,
     .destroy = mem_destroy,
 };
 
@@ -989,8 +1065,8 @@ nssf_sub_result_e nssf_subscription_store_on_availability_deleted(
     }
     /* Soft-delete (tombstone) — the schema FK cascades pending retry_queue rows
      * on a later hard delete. Idempotent. The engine change-event → store →
-     * dispatcher fan-out integration is DEFERRED (operator directive); this API
-     * exists so a later slice can call it. It is NOT registered anywhere here. */
+     * dispatcher fan-out (nssf_subscription_store_fanout_change) calls this for
+     * each matched subscription on a DELETED change event. */
     return (store->vt->tombstone(store, subscription_id) == 0)
                ? NSSF_SUB_OK
                : NSSF_SUB_ERROR;
@@ -1009,4 +1085,109 @@ nssf_sub_result_e nssf_subscription_store_get(
         return NSSF_SUB_NOT_FOUND;
     }
     return (g == 0) ? NSSF_SUB_OK : NSSF_SUB_ERROR;
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+ * fan-out resolve + enqueue — engine→store→dispatcher cascade (B3 close)
+ * ════════════════════════════════════════════════════════════════════════ */
+
+/*
+ * Does a persisted subscription `filter` match a change event? The filter is the
+ * create document (or its /filter subtree) as the Post handler persisted it; the
+ * only routing key it carries today is an optional `tai` (set_snapshot_key_from_filter
+ * already reads plmnId/tai from this same shape). MATCH RULE (minimal + correct
+ * for the persisted shape — no filter-grammar expansion):
+ *   - a filter with NO `tai` constraint is a broad subscription → matches any TAI;
+ *   - a filter WITH a `tai` matches only when it equals the event's tai
+ *     (cJSON_Compare, case-sensitive). When the event carries no tai (NULL), a
+ *     tai-constrained filter cannot match.
+ * The changed nfId is not a filter dimension in this shape, so it is not matched
+ * on (it rides in the payload for the receiver). WHY no spec re-derivation: the
+ * shape comes from the existing Post handler + SubscriptionStore.md filter-match
+ * decision, not from re-reading the OpenAPI.
+ */
+static bool filter_matches_event(const cJSON *filter,
+                                 const nssf_availability_change_event_t *ev)
+{
+    if (filter == NULL) {
+        return true; /* no persisted constraint → broad subscriber. */
+    }
+    cJSON *ftai = cJSON_GetObjectItemCaseSensitive((cJSON *)filter, "tai");
+    if (ftai == NULL) {
+        return true; /* no tai constraint → matches any TAI. */
+    }
+    if (ev->tai == NULL) {
+        return false; /* tai-constrained filter, event has no tai. */
+    }
+    return cJSON_Compare(ftai, ev->tai, 1) != 0;
+}
+
+/* Per-row fan-out context threaded through for_each_live. */
+typedef struct {
+    nssf_subscription_store_t *store;
+    nssf_retry_store_t *retry_store;
+    const nssf_availability_change_event_t *ev;
+    int enqueued;        /* count of rows enqueued so far. */
+    bool tombstone_match; /* DELETED → tombstone each matched subscription. */
+} fanout_ctx_t;
+
+/*
+ * for_each_live callback — one live subscription. Enqueues EXACTLY ONE retry_queue
+ * row per match (real UUID + callbackUri + event-shaped payload) and, on a DELETED
+ * change, tombstones the matched subscription. Returns 0 to continue the scan; a
+ * best-effort per-row failure (bad callbackUri, payload OOM, enqueue error) is
+ * SKIPPED, not fatal — the scan continues so one poison row never blocks the rest.
+ */
+static int fanout_one(void *vctx, const char *id, const char *callback_uri,
+                      const cJSON *filter)
+{
+    fanout_ctx_t *ctx = (fanout_ctx_t *)vctx;
+    if (id == NULL || !filter_matches_event(filter, ctx->ev)) {
+        return 0;
+    }
+    /* B1 URL gate at enqueue time — never enqueue an un-postable callbackUri (the
+     * same shared policy the dispatcher enforces before attach+POST). */
+    if (callback_uri == NULL ||
+        !nssf_notification_dispatcher_callback_url_allowed(callback_uri)) {
+        return 0;
+    }
+
+    char *payload = build_snapshot_payload(id);
+    if (payload == NULL) {
+        return 0; /* best-effort: skip this row, continue the scan. */
+    }
+    int rc = nssf_retry_store_enqueue(ctx->retry_store, id, callback_uri,
+                                      payload, NULL);
+    free(payload);
+    if (rc == 0) {
+        ++ctx->enqueued;
+    }
+
+    /* DELETED change → soft-delete the affected subscription so a pending row
+     * cascades per the schema FK on a later hard delete (Acceptance #4). */
+    if (ctx->tombstone_match) {
+        (void)ctx->store->vt->tombstone(ctx->store, id);
+    }
+    return 0;
+}
+
+int nssf_subscription_store_fanout_change(
+    nssf_subscription_store_t *store,
+    nssf_retry_store_t *retry_store,
+    const nssf_availability_change_event_t *ev)
+{
+    if (store == NULL || retry_store == NULL || ev == NULL) {
+        return -1;
+    }
+    fanout_ctx_t ctx = {
+        .store = store,
+        .retry_store = retry_store,
+        .ev = ev,
+        .enqueued = 0,
+        .tombstone_match = (ev->change_type == NSSF_AVAIL_CHANGE_DELETED),
+    };
+    if (store->vt->for_each_live(store, fanout_one, &ctx) != 0) {
+        return -1;
+    }
+    return ctx.enqueued;
 }

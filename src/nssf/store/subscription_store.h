@@ -33,6 +33,7 @@
 
 #include "cJSON.h"
 
+#include "availability_engine.h"
 #include "availability_repository.h"
 #include "notification_dispatcher.h"
 
@@ -163,16 +164,41 @@ nssf_sub_result_e nssf_subscription_store_patch(
 
 /*
  * Acceptance #4 — cascade tombstone of the subscriptions affected by a deleted
- * nf/availability. This is the STORE API only; the deferral boundary forbids
- * wiring the engine change-event seam → store → dispatcher fan-out into main.c
- * in this slice. A later integration slice resolves the affected subscriptions
- * and calls this; here it tombstones (soft-deletes) the subscription identified
- * by `subscription_id` so a pending retry_queue row cascades per the schema FK.
- * Idempotent on an absent/already-tombstoned row. Returns NSSF_SUB_OK on
- * success, NSSF_SUB_ERROR on a store failure.
+ * nf/availability. Tombstones (soft-deletes) the subscription identified by
+ * `subscription_id` so a pending retry_queue row cascades per the schema FK on a
+ * later hard delete. Idempotent on an absent/already-tombstoned row. Returns
+ * NSSF_SUB_OK on success, NSSF_SUB_ERROR on a store failure. The fan-out
+ * integration (nssf_subscription_store_fanout_change) calls this for each matched
+ * subscription on a DELETED change event.
  */
 nssf_sub_result_e nssf_subscription_store_on_availability_deleted(
     nssf_subscription_store_t *store, const char *subscription_id);
+
+/*
+ * Fan-out resolve + enqueue — the engine→store→dispatcher cascade activation
+ * (PR-phase3-fanout-integration, closes the B3 deferred fan-out). Resolves a
+ * committed AvailabilityEngine change event to the set of LIVE (non-tombstoned)
+ * subscriptions whose persisted `filter` matches, and for EACH match enqueues
+ * EXACTLY ONE retry_queue row carrying the real subscription UUID + that
+ * subscription's callbackUri + an nssf_event_notification-shaped payload, via the
+ * borrowed `retry_store` (nssf_retry_store_enqueue). A subscription whose
+ * callbackUri fails the shared B1 URL gate
+ * (nssf_notification_dispatcher_callback_url_allowed) is skipped (never enqueue an
+ * un-postable target). On a DELETED change event each matched subscription is also
+ * tombstoned (on_availability_deleted contract / schema FK cascade).
+ *
+ * This is STORE-LAYER MATCHING ONLY — it performs no outbound POST and starts no
+ * loop. The caller (main.c publish trampoline) triggers ONE call-driven
+ * dispatch_pending after this returns. `ev` is borrowed (the engine's snapshots
+ * are valid only for the call); nothing is retained. `retry_store` is borrowed.
+ *
+ * Returns the count of rows enqueued (>= 0), or -1 on a store error. A NULL
+ * store/retry_store/ev returns -1; a no-match event returns 0.
+ */
+int nssf_subscription_store_fanout_change(
+    nssf_subscription_store_t *store,
+    nssf_retry_store_t *retry_store,
+    const nssf_availability_change_event_t *ev);
 
 /*
  * Read one live (non-tombstoned) subscription by id. On success returns
