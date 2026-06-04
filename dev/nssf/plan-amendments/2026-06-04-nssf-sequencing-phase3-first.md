@@ -50,14 +50,23 @@ operator + Pane-2(codex) 수렴 결정 = **phase3-first**. B3 fan-out / subscrip
 - `PR-phase2-oauth2-resilience`, `PR-phase2-config-hardening`: depends_on += `PR-phase3-fanout-integration` (gate). + reliability 제약 note.
 - `PR-phase4-dispatcher-resilience`, `PR-phase2-dispatcher-enqueue-hardening`, `PR-phase2-dispatcher-body-strict-json`: depends_on += `PR-phase3-fanout-integration` (gate — D+1 deferred 가 subscription-handlers 앞에 surface 하던 것 차단).
 
-### 3.3 reliability 제약 (open-gaps 기록)
+### 3.3 reliability 제약 — depends_on ENFORCED (round-2)
 
-`open-gaps-and-assumptions.md` G-08 USER addendum 에 추가 — fan-out 이 main.c 배선으로 live outbound 활성화 시 token transient failure 가 single-shot. polling loop 없음 + fail-closed/queue 보존이라 security blocker 아니나, **Phase-4/e2e 전 또는 dispatcher worker loop 도입 전 oauth2-resilience(+config-hardening) 반드시 close** (F3/G-08). 위 depends_on gate 가 이 순서를 plan 으로 강제.
+`open-gaps-and-assumptions.md` G-08 USER addendum 에 기록 — fan-out 이 main.c 배선으로 live outbound 활성화 시 token transient failure 가 single-shot. polling loop 없음 + fail-closed/queue 보존이라 security blocker 아니나, **Phase-4/e2e 전 또는 dispatcher worker loop 도입 전 oauth2-resilience(+config-hardening) 반드시 close** (F3/G-08).
+
+round-1 은 이 invariant 를 *note 로만* 두고 depends_on 강제를 안 했다 — codex topo sim 결과 fan-out 머지 후 picker next = `PR-phase4-contract-tests` 로, oauth2-resilience close 전에 Phase-4 진입이 가능해 invariant 위반이었다. **round-2 는 hard depends_on 으로 강제**한다.
+
+### 3.5 round-2 fix (depends_on-enforced reliability gate)
+
+- `PR-phase4-contract-tests` / `PR-phase4-security-tests` / `PR-phase4-e2e-tests`: depends_on += `PR-phase2-oauth2-resilience` + `PR-phase2-config-hardening`. → Phase-4/e2e gate slice 는 resilience close 전 picker surface 불가.
+- `PR-phase4-dispatcher-resilience`: depends_on += `PR-phase2-oauth2-resilience` + `PR-phase2-config-hardening` (note-only 의존 제거 → hard dep). worker loop 도입 slice 라 resilience 선행 필수.
+- cycle 검사 통과 (drift `pr_slice_consistency` Kahn): oauth2-resilience → fan-out → subscription-handlers → subscription-store 체인은 phase4/dispatcher-resilience 를 참조 안 함 → 무사이클.
+- topo 검증: oauth2-resilience(24)/config-hardening(25) < phase4-contract(28)/security(29)/e2e(30)/dispatcher-resilience(31). invariant topo-enforced.
 
 ### 3.4 cascade
 
-- picker(--no-gh) next = `PR-phase3-subscription-handlers` (검증 완료 — oauth2-resilience 아님).
-- 신규/수정 모두 기존 `WI-notification-dispatcher` 재사용 → codegen-work-items / agent-execution-plan / readiness-config 무변. drift validator 5/5 PASS.
+- picker(--no-gh) next = `PR-phase3-subscription-handlers` (round-2 후에도 유지 — subscription-handlers 는 deps 추가 없음, 최단 ready).
+- 신규/수정 모두 기존 `WI-notification-dispatcher` 재사용 → codegen-work-items / agent-execution-plan / readiness-config 무변. drift validator 5/5 PASS (cycle 없음).
 - verification-matrix 영향 없음 (fan-out required_checks []).
 - engineering-design / dependency-decisions 영향 없음 (eng_frozen 무변). ADR 신설 없음. ADR-0004 영향 없음.
 

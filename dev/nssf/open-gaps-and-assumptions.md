@@ -73,7 +73,7 @@ assumption: 5
 `PR-phase3-fanout-integration` 가 engine→store→dispatcher publish-seam 을 main.c 에 배선하면 (B3 not-ready path 대체) live subscription 의 outbound 가 활성화된다. 이 시점부터 outbound OAuth2 token 의 transient failure (5xx/timeout/429) 가 **single-shot** 으로 처리된다 (#135 G-08 minimum — 한 차례 재시도 후 stop). 현재는 polling loop 없음 + fail-closed/queue 보존이라 **security blocker 아님** (token 없으면 outbound 금지, row 유실 없음).
 
 - **명문화된 제약**. `PR-phase2-oauth2-resilience` (+ `PR-phase2-config-hardening`) 는 **Phase-4/e2e 진입 전 또는 dispatcher worker/polling loop 도입 전 반드시 close** 해야 한다 (F3/G-08 연결). 그 전까지 fan-out 은 call-driven single-shot 으로 동작한다.
-- **plan 강제**. 위 backlog 는 `PR-phase3-fanout-integration` depends_on gate 로 phase3 integration 뒤에만 picker surface 되며, dispatcher worker loop 슬라이스(`PR-phase4-dispatcher-resilience`)도 동일 anchor 뒤다 — operator 가 Phase-4 진입 전 resilience close 를 enforce 한다.
+- **plan 강제 (depends_on-ENFORCED, round-2)**. 위 backlog 는 `PR-phase3-fanout-integration` depends_on gate 로 phase3 integration 뒤에만 picker surface 된다. 추가로 **모든 Phase-4/e2e gate slice (`PR-phase4-contract-tests` / `PR-phase4-security-tests` / `PR-phase4-e2e-tests`) 와 worker-loop slice (`PR-phase4-dispatcher-resilience`) 의 depends_on 에 `PR-phase2-oauth2-resilience` + `PR-phase2-config-hardening` 를 hard dependency 로 추가**했다 (round-1 의 note-only → round-2 enforced). topo 검증: oauth2-resilience/config-hardening 가 모든 phase4 slice 앞에 정렬, cycle 없음 (drift PASS). 즉 resilience close 전엔 Phase-4 진입 자체가 picker 상 불가능하다.
 <!-- USER:summary-body:end -->
 
 ## References

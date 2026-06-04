@@ -602,6 +602,10 @@ prs:
       - tests/nssf/contract/**
     depends_on:
       - PR-phase3-subscription-handlers
+      # reliability gate (amendment 2026-06-04 round-2, depends_on-enforced): Phase-4
+      # 진입 전 outbound resilience close 필수 (F3/G-08 — note-only 가 아니라 hard dep).
+      - PR-phase2-oauth2-resilience
+      - PR-phase2-config-hardening
     status: not_started
     required_checks:
       - phase4_contract_matrix
@@ -616,6 +620,10 @@ prs:
       - tests/nssf/security/**
     depends_on:
       - PR-phase3-subscription-handlers
+      # reliability gate (amendment 2026-06-04 round-2, depends_on-enforced): Phase-4
+      # 진입 전 outbound resilience close 필수 (F3/G-08).
+      - PR-phase2-oauth2-resilience
+      - PR-phase2-config-hardening
     status: not_started
     required_checks:
       - phase4_security_baseline_evidence
@@ -630,6 +638,10 @@ prs:
       - tests/nssf/e2e/**
     depends_on:
       - PR-phase3-subscription-handlers
+      # reliability gate (amendment 2026-06-04 round-2, depends_on-enforced): Phase-4
+      # /e2e 진입 전 outbound resilience close 필수 (F3/G-08).
+      - PR-phase2-oauth2-resilience
+      - PR-phase2-config-hardening
     status: not_started
     required_checks:
       - phase4_e2e_scenarios
@@ -833,10 +845,13 @@ prs:
       - tests/nssf/**/test_notification_dispatcher_*.c
     depends_on:
       - PR-phase2-notification-dispatcher
-      # sequencing gate (amendment 2026-06-04, phase3-first): phase3 integration
-      # (fan-out) 후로 정렬. ⚠ 본 slice 가 worker loop 도입 시 RELIABILITY 제약 —
-      # PR-phase2-oauth2-resilience 선행 close 필수 (F3/G-08).
       - PR-phase3-fanout-integration
+      # RELIABILITY gate (amendment 2026-06-04 round-2, depends_on-ENFORCED): 본 slice
+      # 가 dispatcher worker/polling loop 를 도입하므로, oauth2-resilience(M4 backoff/
+      # dead-letter)가 *선행 close* 되어야 한다 (F3/G-08 hot-loop blocker 방지). note-
+      # only 가 아니라 hard depends_on 으로 강제.
+      - PR-phase2-oauth2-resilience
+      - PR-phase2-config-hardening
     status: deferred
     required_checks: []
     estimated_loc: 500
@@ -844,11 +859,12 @@ prs:
       G-08 + F3 fold. trigger=Phase 4 hardening. #135 는 G-08 minimum (동기 dispatch
       + 한 차례 재시도) 만 구현; 본 slice 가 fail-closed NSSF_DISPATCH_FORBIDDEN
       bounded retry + exponential backoff/jitter + max-attempts + dead-letter table
-      를 채운다. fail-closed 불변 유지. ⚠ #135 의 caller-contract "caller MUST NOT
+      를 채운다. fail-closed 불변 유지. #135 의 caller-contract "caller MUST NOT
       tight-loop on FORBIDDEN/retriable" (.h dispatch_pending doc) — 본 slice 가
-      dispatcher polling/worker loop 를 추가하면 G-08 hot-loop 가 blocker 로 승격
-      (open-gaps G-08 annotate 참조). WI-dispatcher-resilience first-class 승격은
-      readiness regen follow-up.
+      dispatcher polling/worker loop 를 추가하면 G-08 hot-loop 가 blocker 로 승격하므로
+      oauth2-resilience/config-hardening 을 depends_on 으로 선행 강제 (위 참조,
+      open-gaps G-08 annotate). WI-dispatcher-resilience first-class 승격은 readiness
+      regen follow-up.
 
   - id: PR-phase2-dispatcher-enqueue-hardening
     title: 'feat(nssf): dispatcher enqueue defense-in-depth — callback_uri NULL/invalid hard-reject'
