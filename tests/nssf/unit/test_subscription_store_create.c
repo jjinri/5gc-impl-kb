@@ -101,7 +101,7 @@ static void test_create_persists_filter_and_yields_id(void)
     memset(id, 0xAB, sizeof(id)); /* prove create overwrites with a real id. */
     nssf_sub_result_e r = nssf_subscription_store_create(
         store, "https://amf.example.com/nssai-avail/notify", filter,
-        NSSF_SUBSCRIPTION_DEFAULT_EXPIRY_SECONDS, id);
+        NULL, NULL, NSSF_SUBSCRIPTION_DEFAULT_EXPIRY_SECONDS, id);
 
     TEST_ASSERT_EQUAL_INT_MESSAGE(NSSF_SUB_OK, r, "create 가 OK 반환 실패");
     /* a v4 UUID text is exactly 36 chars + NUL → Location header source. */
@@ -150,7 +150,7 @@ static void test_create_applies_default_24h_expiry(void)
     char id[37];
     nssf_sub_result_e r = nssf_subscription_store_create(
         store, "https://amf.example.com/cb", filter,
-        NSSF_SUBSCRIPTION_DEFAULT_EXPIRY_SECONDS, id);
+        NULL, NULL, NSSF_SUBSCRIPTION_DEFAULT_EXPIRY_SECONDS, id);
     time_t after = time(NULL);
     TEST_ASSERT_EQUAL_INT(NSSF_SUB_OK, r);
 
@@ -189,7 +189,7 @@ static void test_create_honors_explicit_expiry(void)
     TEST_ASSERT_EQUAL_INT(
         NSSF_SUB_OK, nssf_subscription_store_create(
                          store, "https://amf.example.com/cb", filter,
-                         one_hour, id));
+                         NULL, NULL, one_hour, id));
     time_t after = time(NULL);
 
     nssf_subscription_record_t rec;
@@ -226,7 +226,7 @@ static void test_create_without_seam_persists_no_dispatch(void)
     char id[37];
     nssf_sub_result_e r = nssf_subscription_store_create(
         store, "https://amf.example.com/cb", filter,
-        NSSF_SUBSCRIPTION_DEFAULT_EXPIRY_SECONDS, id);
+        NULL, NULL, NSSF_SUBSCRIPTION_DEFAULT_EXPIRY_SECONDS, id);
     TEST_ASSERT_EQUAL_INT_MESSAGE(
         NSSF_SUB_OK, r, "seam 미설치 create 가 OK 반환 실패 (no-collaborator path)");
     TEST_ASSERT_EQUAL_size_t(36, strlen(id));

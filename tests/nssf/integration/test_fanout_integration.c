@@ -118,17 +118,29 @@ static cJSON *make_tai_filter(const char *mcc, const char *mnc, const char *tac)
 
 /* Persist a subscription via the store API (NO snapshot seam installed → no
  * initial-snapshot enqueue). Fills out_id with the real generated UUID. The
- * filter is borrowed (the store deep-copies what it keeps); the caller frees it. */
-static void create_sub(nssf_subscription_store_t *store, const char *callback_uri,
-                       const cJSON *filter, char out_id[37])
+ * filter is borrowed (the store deep-copies what it keeps); the caller frees it.
+ * amf_id/amf_set_id are the DOCX-GAP-001 subscriber identity — borrowed, either
+ * may be NULL (legacy/null-identity → no self-suppression). */
+static void create_sub_id(nssf_subscription_store_t *store,
+                          const char *callback_uri, const cJSON *filter,
+                          const char *amf_id, const char *amf_set_id,
+                          char out_id[37])
 {
     nssf_sub_result_e r = nssf_subscription_store_create(
-        store, callback_uri, filter, NSSF_SUBSCRIPTION_DEFAULT_EXPIRY_SECONDS,
-        out_id);
+        store, callback_uri, filter, amf_id, amf_set_id,
+        NSSF_SUBSCRIPTION_DEFAULT_EXPIRY_SECONDS, out_id);
     TEST_ASSERT_EQUAL_INT_MESSAGE(NSSF_SUB_OK, r,
                                   "subscription create 가 실패함");
     TEST_ASSERT_TRUE_MESSAGE(out_id[0] != '\0',
                              "create 가 real UUID 를 out_id 에 채우지 않음");
+}
+
+/* Identity-agnostic create (NULL,NULL identity) — preserves the prior behavior
+ * of the pre-GAP-001 call sites (null identity = no self-suppression). */
+static void create_sub(nssf_subscription_store_t *store, const char *callback_uri,
+                       const cJSON *filter, char out_id[37])
+{
+    create_sub_id(store, callback_uri, filter, NULL, NULL, out_id);
 }
 
 /* Build a borrowed change event. `tai` may be NULL (no-tai event). */
@@ -540,6 +552,285 @@ static void test_single_dispatch_per_publish_no_drain(void)
 }
 
 /* ===================================================================
+ * DOCX-GAP-001 self-notification suppression (5 mandatory cases)
+ *
+ * The NSSF must NOT echo a change notification back to the AMF that caused the
+ * availability update. The suppression predicate (subscription_store.c):
+ *   suppress ⇔ ev->nf_id != NULL && subscriber_amf_id != NULL &&
+ *              strcmp(subscriber_amf_id, ev->nf_id) == 0
+ * Suppression is ENQUEUE-SKIP ONLY — never a match/cleanup skip. amfSetId-only
+ * subscribers (amf_id == NULL) are NEVER suppressed. The change event's nf_id is
+ * the originating AMF identity (make_event's first arg).
+ * =================================================================== */
+
+/* GAP-001 #1 — same amf_id → SUPPRESSED. A broad/matching subscriber whose
+ * persisted amf_id == the change event's nf_id is the originator → its
+ * notification enqueue is SKIPPED (0 rows / 0 POSTs for that sub). */
+static void test_gap001_same_amf_id_suppressed(void)
+{
+    nssf_subscription_store_t *store = nssf_subscription_store_new_inmemory();
+    TEST_ASSERT_NOT_NULL(store);
+    nssf_retry_store_t *retry = nssf_retry_store_new_inmemory();
+    TEST_ASSERT_NOT_NULL(retry);
+
+    /* the subscriber IS the AMF that will cause the change (same nfId). */
+    const char *self_amf = "amf-self-001";
+    char sub_id[37];
+    cJSON *filter = make_broad_filter(); /* broad → matches the event. */
+    create_sub_id(store, "https://amf.example.com/cb", filter, self_amf, NULL,
+                  sub_id);
+    cJSON_Delete(filter);
+
+    /* a REPLACED change ORIGINATING from that same AMF (ev->nf_id == self_amf). */
+    cJSON *ev_tai = make_tai("001", "01", "000001");
+    nssf_availability_change_event_t ev =
+        make_event(self_amf, NSSF_AVAIL_CHANGE_REPLACED, ev_tai);
+
+    int enq = nssf_subscription_store_fanout_change(store, retry, &ev);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        0, enq, "self-AMF (same amf_id) 가 suppress 되지 않고 enqueue 됨 (echo)");
+
+    /* the queue is EMPTY — no row, hence no POST can ever fire for the self-AMF. */
+    nssf_retry_item_t none;
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        0, nssf_retry_store_dequeue(retry, &none),
+        "self-suppress 됐어야 하는데 retry row 가 enqueue 됨 (mock POST count != 0)");
+    nssf_retry_item_clear(&none);
+
+    /* the subscription is STILL live (suppress is enqueue-skip, NOT a delete). */
+    nssf_subscription_record_t rec;
+    memset(&rec, 0, sizeof(rec));
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        NSSF_SUB_OK, nssf_subscription_store_get(store, sub_id, &rec),
+        "REPLACED self-suppress 가 sub 를 잘못 제거함 (enqueue-skip 이어야 함)");
+    nssf_subscription_record_clear(&rec);
+
+    cJSON_Delete(ev_tai);
+    nssf_retry_store_free(retry);
+    nssf_subscription_store_free(store);
+}
+
+/* GAP-001 #2 — different amf_id → NOTIFIED. A subscriber whose amf_id differs
+ * from the change originator's nfId must be enqueued and POSTed (no suppression
+ * of foreign AMFs). */
+static void test_gap001_different_amf_id_notified(void)
+{
+    nssf_subscription_store_t *store = nssf_subscription_store_new_inmemory();
+    TEST_ASSERT_NOT_NULL(store);
+    nssf_retry_store_t *retry = nssf_retry_store_new_inmemory();
+    TEST_ASSERT_NOT_NULL(retry);
+
+    /* subscriber is a DIFFERENT AMF than the change originator. */
+    char sub_id[37];
+    cJSON *filter = make_broad_filter();
+    const char *cb = "https://amf-other.example.com/cb";
+    create_sub_id(store, cb, filter, "amf-subscriber-A", NULL, sub_id);
+    cJSON_Delete(filter);
+
+    cJSON *ev_tai = make_tai("001", "01", "000001");
+    nssf_availability_change_event_t ev =
+        make_event("amf-originator-B", NSSF_AVAIL_CHANGE_REPLACED, ev_tai);
+
+    int enq = nssf_subscription_store_fanout_change(store, retry, &ev);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        1, enq, "foreign AMF (different amf_id) 가 enqueue 되지 않음 (over-suppress)");
+
+    /* the enqueued row carries the REAL sub UUID + callbackUri; requeue it so the
+     * dispatcher can drive the actual POST (same pattern as the broad-sub case). */
+    nssf_retry_item_t item;
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        1, nssf_retry_store_dequeue(retry, &item),
+        "foreign-AMF fan-out row 가 큐에 enqueue 되지 않음");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE(sub_id, item.subscription_id,
+                                     "row 가 real subscription UUID 를 담지 않음");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE(cb, item.callback_uri,
+                                     "row 가 sub 의 callbackUri 를 담지 않음");
+    TEST_ASSERT_EQUAL_INT(0, nssf_retry_store_requeue(retry, item.id));
+    nssf_retry_item_clear(&item);
+
+    /* a single dispatch fires exactly one outbound POST (the wired cascade tail). */
+    nssf_notification_dispatcher_t *disp =
+        nssf_notification_dispatcher_new(retry, NULL);
+    TEST_ASSERT_NOT_NULL(disp);
+    nssf_notification_dispatcher_set_transport(disp, amf_mock_transport, &g_amf);
+    nssf_dispatch_result_e dr =
+        nssf_notification_dispatcher_dispatch_pending(disp, NULL);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(NSSF_DISPATCH_SENT, dr,
+                                  "foreign-AMF fan-out row 의 dispatch 가 SENT 아님");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        1, g_amf.calls, "different amf_id 인데 POST 가 1 회 발사되지 않음");
+    TEST_ASSERT_EQUAL_STRING(cb, g_amf.last_uri);
+
+    cJSON_Delete(ev_tai);
+    nssf_notification_dispatcher_free(disp);
+    nssf_retry_store_free(retry);
+    nssf_subscription_store_free(store);
+}
+
+/* GAP-001 #3 — explicit filter subtree + amf_id persisted INDEPENDENT of the
+ * filter. A subscription created WITH a tai filter AND an amf_id must persist the
+ * amf_id (store_get round-trip), and self-suppression still applies. Guards the
+ * "explicit-filter under-suppression" risk: identity is a SEPARATE truth from
+ * the filter JSON. */
+static void test_gap001_explicit_filter_amf_id_persisted(void)
+{
+    nssf_subscription_store_t *store = nssf_subscription_store_new_inmemory();
+    TEST_ASSERT_NOT_NULL(store);
+    nssf_retry_store_t *retry = nssf_retry_store_new_inmemory();
+    TEST_ASSERT_NOT_NULL(retry);
+
+    const char *self_amf = "amf-explicit-filter-001";
+    char sub_id[37];
+    /* an EXPLICIT tai filter subtree (not broad) AND a subscriber identity. */
+    cJSON *filter = make_tai_filter("001", "01", "000001");
+    create_sub_id(store, "https://amf.example.com/cb", filter, self_amf, NULL,
+                  sub_id);
+    cJSON_Delete(filter);
+
+    /* identity is persisted independent of (and alongside) the filter subtree. */
+    nssf_subscription_record_t rec;
+    memset(&rec, 0, sizeof(rec));
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        NSSF_SUB_OK, nssf_subscription_store_get(store, sub_id, &rec),
+        "explicit-filter sub 의 store_get 실패");
+    TEST_ASSERT_NOT_NULL_MESSAGE(
+        rec.amf_id, "filter subtree 가 있으면 amf_id 가 persist 안 됨 (under-suppress)");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE(
+        self_amf, rec.amf_id, "persisted amf_id 가 입력과 다름");
+    /* the filter subtree itself also round-trips (matching truth unchanged). */
+    TEST_ASSERT_NOT_NULL_MESSAGE(rec.filter, "explicit filter 가 persist 안 됨");
+    TEST_ASSERT_NOT_NULL_MESSAGE(
+        cJSON_GetObjectItemCaseSensitive(rec.filter, "tai"),
+        "filter 의 tai subtree 미보존");
+    nssf_subscription_record_clear(&rec);
+
+    /* and self-suppression STILL applies on a matching event from that AMF. */
+    cJSON *ev_tai = make_tai("001", "01", "000001");
+    nssf_availability_change_event_t ev =
+        make_event(self_amf, NSSF_AVAIL_CHANGE_PATCHED, ev_tai);
+    int enq = nssf_subscription_store_fanout_change(store, retry, &ev);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        0, enq,
+        "explicit-filter self-AMF 가 suppress 안 됨 (identity 가 filter 와 묶임)");
+    nssf_retry_item_t none;
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        0, nssf_retry_store_dequeue(retry, &none),
+        "explicit-filter self-suppress 인데 row 가 enqueue 됨");
+    nssf_retry_item_clear(&none);
+
+    cJSON_Delete(ev_tai);
+    nssf_retry_store_free(retry);
+    nssf_subscription_store_free(store);
+}
+
+/* GAP-001 #4 — amfSetId-only → NOT over-suppressed. A subscriber that carries
+ * only an amf_set_id (amf_id == NULL) can never be confirmed as the originating
+ * AMF, so it must STILL be notified even when the change is in that set. Guards
+ * the "set-level over-suppression" risk. */
+static void test_gap001_amf_set_id_only_not_suppressed(void)
+{
+    nssf_subscription_store_t *store = nssf_subscription_store_new_inmemory();
+    TEST_ASSERT_NOT_NULL(store);
+    nssf_retry_store_t *retry = nssf_retry_store_new_inmemory();
+    TEST_ASSERT_NOT_NULL(retry);
+
+    /* amf_set_id set, amf_id NULL → identity insufficient to confirm same-AMF. */
+    char sub_id[37];
+    cJSON *filter = make_broad_filter();
+    const char *cb = "https://amf-set.example.com/cb";
+    create_sub_id(store, cb, filter, NULL, "amf-set-7", sub_id);
+    cJSON_Delete(filter);
+
+    /* persisted: amf_set_id present, amf_id NULL. */
+    nssf_subscription_record_t rec;
+    memset(&rec, 0, sizeof(rec));
+    TEST_ASSERT_EQUAL_INT(NSSF_SUB_OK,
+                          nssf_subscription_store_get(store, sub_id, &rec));
+    TEST_ASSERT_NULL_MESSAGE(rec.amf_id, "amfSetId-only 인데 amf_id 가 채워짐");
+    TEST_ASSERT_NOT_NULL_MESSAGE(rec.amf_set_id, "amf_set_id 가 persist 안 됨");
+    TEST_ASSERT_EQUAL_STRING("amf-set-7", rec.amf_set_id);
+    nssf_subscription_record_clear(&rec);
+
+    /* event originates from SOME AMF (its set could include the subscriber) —
+     * with amf_id NULL the predicate cannot suppress → STILL notified. */
+    cJSON *ev_tai = make_tai("001", "01", "000001");
+    nssf_availability_change_event_t ev =
+        make_event("amf-in-set-7", NSSF_AVAIL_CHANGE_REPLACED, ev_tai);
+    int enq = nssf_subscription_store_fanout_change(store, retry, &ev);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        1, enq, "amfSetId-only subscriber 가 과도하게 suppress 됨 (set-wide drop)");
+
+    drained_row_t rows[4];
+    int n = drain_rows(retry, rows, 4);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, n, "amfSetId-only → 정확히 1 row notify 아님");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE(
+        sub_id, rows[0].sub_id, "notify row 가 해당 sub UUID 가 아님");
+    TEST_ASSERT_EQUAL_STRING(cb, rows[0].callback);
+
+    cJSON_Delete(ev_tai);
+    nssf_retry_store_free(retry);
+    nssf_subscription_store_free(store);
+}
+
+/* GAP-001 #5 — DELETE on self-matched → tombstone RETAINED (the critical proof:
+ * suppress = enqueue-skip, NOT cleanup-skip). A self-matching subscriber
+ * (amf_id == ev->nf_id) on a DELETED change has its enqueue SUPPRESSED, yet the
+ * subscription MUST still be tombstoned (store_get → NOT_FOUND). Guards the
+ * "suppress mis-implemented as match/cleanup-skip" risk. */
+static void test_gap001_delete_self_matched_tombstone_retained(void)
+{
+    nssf_subscription_store_t *store = nssf_subscription_store_new_inmemory();
+    TEST_ASSERT_NOT_NULL(store);
+    nssf_retry_store_t *retry = nssf_retry_store_new_inmemory();
+    TEST_ASSERT_NOT_NULL(retry);
+
+    const char *self_amf = "amf-self-delete-001";
+    char sub_id[37];
+    cJSON *filter = make_broad_filter(); /* broad → matches the DELETED event. */
+    create_sub_id(store, "https://amf.example.com/cb", filter, self_amf, NULL,
+                  sub_id);
+    cJSON_Delete(filter);
+
+    /* live before the change. */
+    nssf_subscription_record_t live;
+    memset(&live, 0, sizeof(live));
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        NSSF_SUB_OK, nssf_subscription_store_get(store, sub_id, &live),
+        "DELETED 전에 self-AMF sub 가 live 로 읽히지 않음");
+    nssf_subscription_record_clear(&live);
+
+    /* a DELETED change ORIGINATING from that same AMF → enqueue suppressed. */
+    cJSON *ev_tai = make_tai("001", "01", "000001");
+    nssf_availability_change_event_t ev =
+        make_event(self_amf, NSSF_AVAIL_CHANGE_DELETED, ev_tai);
+    int enq = nssf_subscription_store_fanout_change(store, retry, &ev);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        0, enq,
+        "DELETED self-AMF 의 enqueue 가 suppress 되지 않음 (echo on delete)");
+
+    /* queue empty — the self-notification was NOT enqueued. */
+    nssf_retry_item_t none;
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        0, nssf_retry_store_dequeue(retry, &none),
+        "DELETED self-suppress 인데 retry row 가 enqueue 됨");
+    nssf_retry_item_clear(&none);
+
+    /* CRITICAL: the cleanup MUST have run anyway — the sub is now tombstoned.
+     * This proves suppression is enqueue-skip, NOT match/cleanup-skip. */
+    nssf_subscription_record_t gone;
+    memset(&gone, 0, sizeof(gone));
+    nssf_sub_result_e gr = nssf_subscription_store_get(store, sub_id, &gone);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        NSSF_SUB_NOT_FOUND, gr,
+        "self-suppress 가 tombstone(cleanup) 까지 skip 함 (enqueue-skip 위반)");
+    nssf_subscription_record_clear(&gone);
+
+    cJSON_Delete(ev_tai);
+    nssf_retry_store_free(retry);
+    nssf_subscription_store_free(store);
+}
+
+/* ===================================================================
  * defensive: NULL args → -1, no-match event → 0 (the documented contract)
  * =================================================================== */
 
@@ -593,6 +884,12 @@ int main(void)
     RUN_TEST(test_callback_gate_skips_only_unpostable);
     RUN_TEST(test_deleted_change_tombstones_matched_sub);
     RUN_TEST(test_single_dispatch_per_publish_no_drain);
+    /* DOCX-GAP-001 self-notification suppression (5 mandatory cases). */
+    RUN_TEST(test_gap001_same_amf_id_suppressed);
+    RUN_TEST(test_gap001_different_amf_id_notified);
+    RUN_TEST(test_gap001_explicit_filter_amf_id_persisted);
+    RUN_TEST(test_gap001_amf_set_id_only_not_suppressed);
+    RUN_TEST(test_gap001_delete_self_matched_tombstone_retained);
     RUN_TEST(test_null_and_nomatch_contract);
     return UNITY_END();
 }

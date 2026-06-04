@@ -265,8 +265,8 @@ static void seed_subscription(nssf_subscription_store_t *store,
 {
     cJSON *filter = make_filter();
     nssf_sub_result_e r = nssf_subscription_store_create(
-        store, callback, filter, NSSF_SUBSCRIPTION_DEFAULT_EXPIRY_SECONDS,
-        out_id);
+        store, callback, filter, NULL, NULL,
+        NSSF_SUBSCRIPTION_DEFAULT_EXPIRY_SECONDS, out_id);
     cJSON_Delete(filter);
     TEST_ASSERT_EQUAL_INT_MESSAGE(NSSF_SUB_OK, r, "seed create failed");
     TEST_ASSERT_EQUAL_size_t(36, strlen(out_id));

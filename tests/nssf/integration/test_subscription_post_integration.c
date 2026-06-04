@@ -291,6 +291,27 @@ static char *make_post_body(const char *callback_uri)
     return s;
 }
 
+/*
+ * NssfEventSubscriptionCreateData-style body carrying the callbackUri, an
+ * EXPLICIT `filter` subtree, AND a subscriber `amfId` at the document ROOT
+ * (DOCX-GAP-001). Proves the handler extracts the subscriber identity from the
+ * body root independent of the filter and persists it via create(). Caller frees.
+ */
+static char *make_post_body_with_amf(const char *callback_uri, const char *amf_id)
+{
+    cJSON *doc = cJSON_CreateObject();
+    cJSON_AddStringToObject(doc, "callbackUri", callback_uri);
+    cJSON_AddStringToObject(doc, "amfId", amf_id);
+    /* an explicit filter subtree (identity must persist INDEPENDENT of it). */
+    cJSON *filter = cJSON_CreateObject();
+    cJSON_AddItemToObject(filter, "tai", make_tai("001", "01", "000001"));
+    cJSON_AddItemToObject(doc, "filter", filter);
+    char *s = cJSON_PrintUnformatted(doc);
+    cJSON_Delete(doc);
+    TEST_ASSERT_NOT_NULL(s);
+    return s;
+}
+
 /* Seed a STUB availability record so the snapshot read returns a non-empty set
  * (mirrors test_subscription_initial_snapshot::seed_availability). */
 static void seed_availability(nssf_availability_repo_t *repo, const char *mcc,
@@ -615,6 +636,63 @@ static void test_post_401_no_bearer(void)
     fixture_free(&fx);
 }
 
+/* ── DOCX-GAP-001 — handler extracts body amfId + EXPLICIT filter → persisted ──
+ * A 201-create whose body carries an `amfId` (subscriber identity) alongside an
+ * explicit `filter` subtree must persist the amf_id on the row (store_get
+ * round-trip), proving the handler→create identity-persist path threads the body
+ * identity independent of the filter. */
+static void test_post_201_persists_body_amf_id_with_filter(void)
+{
+    fixture_t fx;
+    fixture_init(&fx);
+
+    char *auth = make_bearer(NSSF_SCOPE_NSSAIAVAILABILITY);
+    const char *amf_id = "amf-body-identity-001";
+    char *body =
+        make_post_body_with_amf("https://amf.example.com/cb", amf_id);
+
+    nssf_subscription_post_request_t req = {
+        .authorization = auth,
+        .content_type = "application/json",
+        .body = body,
+        .content_length = strlen(body),
+        .has_content_length = true,
+        .max_body_len = 0,
+        .request_target = "/nssai-availability/subscriptions",
+        .max_uri_len = 0,
+    };
+    nssf_subscription_post_deps_t deps = {.jwks_cache = fx.cache,
+                                          .store = fx.store};
+
+    nssf_subscription_post_response_t out;
+    memset(&out, 0, sizeof(out));
+    int status = nssf_subscription_post_handle(&req, &deps, &out);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(201, status, out.body ? out.body : "(null body)");
+
+    const char *slash = strrchr(out.location, '/');
+    TEST_ASSERT_NOT_NULL(slash);
+    const char *new_id = slash + 1;
+    TEST_ASSERT_EQUAL_size_t(36, strlen(new_id));
+
+    /* the subscriber identity from the body root is persisted on the row. */
+    nssf_subscription_record_t rec;
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        NSSF_SUB_OK, nssf_subscription_store_get(fx.store, new_id, &rec),
+        "created row not persisted");
+    TEST_ASSERT_NOT_NULL_MESSAGE(
+        rec.amf_id, "body amfId 가 row 에 persist 안 됨 (handler→create identity 누락)");
+    TEST_ASSERT_EQUAL_STRING_MESSAGE(amf_id, rec.amf_id,
+                                     "persisted amf_id 가 body amfId 와 다름");
+    /* and the explicit filter subtree round-trips too (identity is separate truth). */
+    TEST_ASSERT_NOT_NULL_MESSAGE(rec.filter, "explicit filter 가 persist 안 됨");
+    nssf_subscription_record_clear(&rec);
+
+    nssf_subscription_post_response_free(&out);
+    free(body);
+    free(auth);
+    fixture_free(&fx);
+}
+
 int main(void)
 {
     g_key = EVP_RSA_gen(2048);
@@ -627,6 +705,7 @@ int main(void)
     RUN_TEST(test_post_400_http_callback_no_row_no_dispatch);
     RUN_TEST(test_post_400_userinfo_and_fragment_rejected);
     RUN_TEST(test_post_initial_snapshot_dispatched_exactly_once);
+    RUN_TEST(test_post_201_persists_body_amf_id_with_filter);
     RUN_TEST(test_post_401_no_bearer);
     int rc = UNITY_END();
     EVP_PKEY_free(g_key);
