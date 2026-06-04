@@ -20,6 +20,8 @@ engineering/*/_engineering_status.yaml
 dev/*/_readiness_status.yaml
 # /nf-implement run state (실행 중간 상태 — gitignored, PR E3 schema)
 dev/*/_implementation_run_state.yaml
+# nf-verifier append-only verification log (실행 evidence — 로컬 재생성, source-of-truth policy)
+dev/*/_verification_log.yaml
 
 # /nf-contract-build 산출 (재생성 가능 — design/scripts/build-handoff.py + nf-contract-build SKILL)
 design/*/contract/
