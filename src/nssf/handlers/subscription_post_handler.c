@@ -174,11 +174,28 @@ int nssf_subscription_post_handle(
         filter = doc;                                      /* the whole document. */
     }
 
+    /* Subscriber identity (DOCX-GAP-001 self-notification suppression) — read the
+     * NssfEventSubscriptionCreateData amfId/amfSetId from the document ROOT,
+     * ALWAYS, independent of whether an explicit filter subtree is persisted.
+     * These are the suppression truth, separate from the matching filter; either
+     * may be absent (legacy / null-identity subscriber → never suppressed). */
+    const cJSON *amf_id_j = cJSON_GetObjectItemCaseSensitive(doc, "amfId");
+    const char *amf_id =
+        (cJSON_IsString(amf_id_j) && amf_id_j->valuestring != NULL)
+            ? amf_id_j->valuestring
+            : NULL;
+    const cJSON *amf_set_id_j = cJSON_GetObjectItemCaseSensitive(doc, "amfSetId");
+    const char *amf_set_id =
+        (cJSON_IsString(amf_set_id_j) && amf_set_id_j->valuestring != NULL)
+            ? amf_set_id_j->valuestring
+            : NULL;
+
     /* 4. SubscriptionStore::create() — persists, then performs the ONE
      * call-driven initial-snapshot dispatch via its snapshot seam (NO loop). */
     char id[37] = {0};
     nssf_sub_result_e result =
         nssf_subscription_store_create(deps->store, callback_uri, filter,
+                                       amf_id, amf_set_id,
                                        NSSF_SUBSCRIPTION_DEFAULT_EXPIRY_SECONDS, id);
     cJSON_Delete(doc);
 

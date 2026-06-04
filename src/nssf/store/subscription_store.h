@@ -60,17 +60,20 @@ typedef enum {
 
 /*
  * One row of the `subscription` table. The record OWNS its cJSON `filter` tree
- * and its heap strings (callback_uri); nssf_subscription_record_clear() frees
- * them. `id` is a fixed 36-char UUID text + NUL. `expiry_at` is a heap copy of
- * the RFC 3339 timestamp text (NULL when the column is SQL NULL / lazily
- * defaulted). `has_expiry` distinguishes "no expiry column" from an empty
- * string.
+ * and its heap strings (callback_uri, amf_id, amf_set_id);
+ * nssf_subscription_record_clear() frees them. `id` is a fixed 36-char UUID text
+ * + NUL. `expiry_at` is a heap copy of the RFC 3339 timestamp text (NULL when the
+ * column is SQL NULL / lazily defaulted). `amf_id`/`amf_set_id` are the
+ * subscriber identity (DOCX-GAP-001 suppression source) — a SEPARATE truth from
+ * the filter JSON, persisted ALWAYS and NULL for legacy/null-identity rows.
  */
 typedef struct {
     char id[37];
     char *callback_uri;
     cJSON *filter;
     char *expiry_at;   /* RFC 3339 text, or NULL. */
+    char *amf_id;      /* subscriber AMF nfId, or NULL (suppression key). */
+    char *amf_set_id;  /* subscriber AMF set id, or NULL (no suppression). */
     bool tombstone;
 } nssf_subscription_record_t;
 
@@ -113,6 +116,10 @@ void nssf_subscription_store_set_snapshot_seam(
 /*
  * Acceptance #1 — persist a new subscription with its JSONB filter column.
  * `callback_uri` and `filter` are borrowed (the store copies what it keeps).
+ * `amf_id` and `amf_set_id` are the subscriber identity (DOCX-GAP-001
+ * suppression source) — borrowed, the store copies them, and either may be NULL
+ * (legacy / null-identity subscription). They are persisted ALWAYS, independent
+ * of whether a filter subtree is stored.
  * `expiry_seconds` is the effective lifetime: pass
  * NSSF_SUBSCRIPTION_DEFAULT_EXPIRY_SECONDS when the request omitted
  * validityTime (G-10), or the operator/request value otherwise. A fresh UUID is
@@ -135,6 +142,8 @@ nssf_sub_result_e nssf_subscription_store_create(
     nssf_subscription_store_t *store,
     const char *callback_uri,
     const cJSON *filter,
+    const char *amf_id,
+    const char *amf_set_id,
     long expiry_seconds,
     char out_id[37]);
 

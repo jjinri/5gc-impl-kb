@@ -37,25 +37,33 @@
 /* ── vtable ───────────────────────────────────────────────────────────── */
 
 typedef struct {
-    /* insert a fully-formed row whose id is already chosen by the caller. */
+    /* insert a fully-formed row whose id is already chosen by the caller.
+     * amf_id/amf_set_id are the subscriber identity (borrowed, either may be
+     * NULL) — persisted independent of the filter (DOCX-GAP-001). */
     int (*insert)(nssf_subscription_store_t *, const char *id,
                   const char *callback_uri, const cJSON *filter,
+                  const char *amf_id, const char *amf_set_id,
                   const char *expiry_at);
     int (*get)(nssf_subscription_store_t *, const char *id,
                nssf_subscription_record_t *out); /* 0 found / 1 absent / -1 err */
     int (*remove)(nssf_subscription_store_t *, const char *id);   /* 0 / -1 */
     int (*tombstone)(nssf_subscription_store_t *, const char *id);/* 0 / -1 */
-    /* replace the mutable resource view of an existing row. 0 / 1 absent / -1. */
+    /* replace the mutable resource view of an existing row (filter / callbackUri
+     * / expiry). Subscriber identity (amf_id/amf_set_id) is immutable for the
+     * subscription lifetime and is NOT touched here. 0 / 1 absent / -1. */
     int (*replace)(nssf_subscription_store_t *, const char *id,
                    const char *callback_uri, const cJSON *filter,
                    const char *expiry_at);
-    /* invoke `cb` for each live (non-tombstoned) row's id/callback_uri/filter
-     * (all borrowed, valid only during the call). cb returns 0 to continue, -1
-     * to abort. Returns 0 on a full scan, -1 on a store/callback error. */
+    /* invoke `cb` for each live (non-tombstoned) row's id/callback_uri/filter +
+     * subscriber identity (subscriber_amf_id/subscriber_amf_set_id) — all
+     * borrowed, valid only during the call. cb returns 0 to continue, -1 to
+     * abort. Returns 0 on a full scan, -1 on a store/callback error. */
     int (*for_each_live)(nssf_subscription_store_t *,
                          int (*cb)(void *ctx, const char *id,
                                    const char *callback_uri,
-                                   const cJSON *filter),
+                                   const cJSON *filter,
+                                   const char *subscriber_amf_id,
+                                   const char *subscriber_amf_set_id),
                          void *ctx);
     void (*destroy)(nssf_subscription_store_t *);
 } nssf_subscription_vtable_t;
@@ -80,6 +88,8 @@ void nssf_subscription_record_clear(nssf_subscription_record_t *rec)
     free(rec->callback_uri);
     cJSON_Delete(rec->filter);
     free(rec->expiry_at);
+    free(rec->amf_id);
+    free(rec->amf_set_id);
     memset(rec, 0, sizeof(*rec));
 }
 
@@ -487,6 +497,7 @@ static int pg_cmd(PGconn *conn, const char *sql)
 
 static int pg_insert(nssf_subscription_store_t *s, const char *id,
                      const char *callback_uri, const cJSON *filter,
+                     const char *amf_id, const char *amf_set_id,
                      const char *expiry_at)
 {
     pg_store_t *self = (pg_store_t *)s;
@@ -494,16 +505,20 @@ static int pg_insert(nssf_subscription_store_t *s, const char *id,
     if (filter_txt == NULL) {
         return -1;
     }
-    const char *params[4] = {id, callback_uri, filter_txt, expiry_at};
+    /* amf_id/amf_set_id pass through as NULL param pointers when absent →
+     * SQL NULL (legacy/null-identity subscription, never suppressed). */
+    const char *params[6] = {id, callback_uri, filter_txt, amf_id, amf_set_id,
+                             expiry_at};
     const char *sql =
-        "INSERT INTO subscription (id, callback_url, filter, expiry_at) "
-        "VALUES ($1::uuid, $2, $3::jsonb, $4::timestamptz)";
+        "INSERT INTO subscription "
+        "(id, callback_url, filter, amf_id, amf_set_id, expiry_at) "
+        "VALUES ($1::uuid, $2, $3::jsonb, $4, $5, $6::timestamptz)";
 
     int rc = -1;
     if (pg_cmd(self->conn, "BEGIN") != 0) {
         goto cleanup;
     }
-    PGresult *res = PQexecParams(self->conn, sql, 4, NULL, params,
+    PGresult *res = PQexecParams(self->conn, sql, 6, NULL, params,
                                  NULL, NULL, 0);
     int ok = (PQresultStatus(res) == PGRES_COMMAND_OK);
     PQclear(res);
@@ -530,7 +545,7 @@ static int pg_get(nssf_subscription_store_t *s, const char *id,
     const char *sql =
         "SELECT id, callback_url, filter, "
         "to_char(expiry_at, 'YYYY-MM-DD\"T\"HH24:MI:SS\"Z\"') AS expiry_at, "
-        "tombstone "
+        "amf_id, amf_set_id, tombstone "
         "FROM subscription WHERE id = $1::uuid AND tombstone = FALSE";
 
     PGresult *res = PQexecParams(self->conn, sql, 1, NULL, params,
@@ -558,7 +573,16 @@ static int pg_get(nssf_subscription_store_t *s, const char *id,
         dup_str(&out->expiry_at, PQgetvalue(res, 0, 3)) != 0) {
         goto fail;
     }
-    out->tombstone = (PQgetvalue(res, 0, 4)[0] == 't');
+    /* Subscriber identity — NULL columns stay NULL (legacy/null-identity). */
+    if (!PQgetisnull(res, 0, 4) &&
+        dup_str(&out->amf_id, PQgetvalue(res, 0, 4)) != 0) {
+        goto fail;
+    }
+    if (!PQgetisnull(res, 0, 5) &&
+        dup_str(&out->amf_set_id, PQgetvalue(res, 0, 5)) != 0) {
+        goto fail;
+    }
+    out->tombstone = (PQgetvalue(res, 0, 6)[0] == 't');
     rc = 0;
     PQclear(res);
     return rc;
@@ -659,15 +683,18 @@ cleanup:
 static int pg_for_each_live(nssf_subscription_store_t *s,
                             int (*cb)(void *ctx, const char *id,
                                       const char *callback_uri,
-                                      const cJSON *filter),
+                                      const cJSON *filter,
+                                      const char *subscriber_amf_id,
+                                      const char *subscriber_amf_set_id),
                             void *ctx)
 {
     pg_store_t *self = (pg_store_t *)s;
     /* Snapshot the live rows in one read. The fan-out match runs per-row in the
      * caller; this is a naive scan (SubscriptionStore.md filter-match: naive scan
-     * or JSONB GIN — the index is a later perf tuning, not a correctness need). */
+     * or JSONB GIN — the index is a later perf tuning, not a correctness need).
+     * amf_id/amf_set_id ride alongside for DOCX-GAP-001 self-suppression. */
     const char *sql =
-        "SELECT id, callback_url, filter FROM subscription "
+        "SELECT id, callback_url, filter, amf_id, amf_set_id FROM subscription "
         "WHERE tombstone = FALSE";
     PGresult *res = PQexecParams(self->conn, sql, 0, NULL, NULL, NULL, NULL, 0);
     if (PQresultStatus(res) != PGRES_TUPLES_OK) {
@@ -682,7 +709,11 @@ static int pg_for_each_live(nssf_subscription_store_t *s,
         cJSON *filter = PQgetisnull(res, i, 2)
                             ? NULL
                             : cJSON_Parse(PQgetvalue(res, i, 2));
-        int r = cb(ctx, id, cb_uri, filter);
+        const char *amf_id =
+            PQgetisnull(res, i, 3) ? NULL : PQgetvalue(res, i, 3);
+        const char *amf_set_id =
+            PQgetisnull(res, i, 4) ? NULL : PQgetvalue(res, i, 4);
+        int r = cb(ctx, id, cb_uri, filter, amf_id, amf_set_id);
         cJSON_Delete(filter);
         if (r != 0) {
             rc = -1;
@@ -775,9 +806,11 @@ static long mem_index_of(const mem_store_t *self, const char *id)
     return -1;
 }
 
-/* Fill a zeroed record from explicit fields (deep copy). 0 ok / -1 OOM. */
+/* Fill a zeroed record from explicit fields (deep copy). amf_id/amf_set_id are
+ * the subscriber identity (either may be NULL). 0 ok / -1 OOM. */
 static int record_fill(nssf_subscription_record_t *dst, const char *id,
                        const char *callback_uri, const cJSON *filter,
+                       const char *amf_id, const char *amf_set_id,
                        const char *expiry_at)
 {
     memset(dst, 0, sizeof(*dst));
@@ -787,6 +820,12 @@ static int record_fill(nssf_subscription_record_t *dst, const char *id,
         goto fail;
     }
     if (filter != NULL && (dst->filter = cJSON_Duplicate(filter, 1)) == NULL) {
+        goto fail;
+    }
+    if (dup_str(&dst->amf_id, amf_id) != 0) {
+        goto fail;
+    }
+    if (dup_str(&dst->amf_set_id, amf_set_id) != 0) {
         goto fail;
     }
     if (dup_str(&dst->expiry_at, expiry_at) != 0) {
@@ -800,6 +839,7 @@ fail:
 
 static int mem_insert(nssf_subscription_store_t *s, const char *id,
                       const char *callback_uri, const cJSON *filter,
+                      const char *amf_id, const char *amf_set_id,
                       const char *expiry_at)
 {
     mem_store_t *self = (mem_store_t *)s;
@@ -807,7 +847,8 @@ static int mem_insert(nssf_subscription_store_t *s, const char *id,
         return -1;
     }
     nssf_subscription_record_t rec;
-    if (record_fill(&rec, id, callback_uri, filter, expiry_at) != 0) {
+    if (record_fill(&rec, id, callback_uri, filter, amf_id, amf_set_id,
+                    expiry_at) != 0) {
         return -1;
     }
     self->items[self->count++] = rec;
@@ -825,7 +866,7 @@ static int mem_get(nssf_subscription_store_t *s, const char *id,
     }
     const nssf_subscription_record_t *src = &self->items[idx];
     if (record_fill(out, src->id, src->callback_uri, src->filter,
-                    src->expiry_at) != 0) {
+                    src->amf_id, src->amf_set_id, src->expiry_at) != 0) {
         return -1;
     }
     return 0;
@@ -863,8 +904,11 @@ static int mem_replace(nssf_subscription_store_t *s, const char *id,
     if (idx < 0 || self->items[idx].tombstone) {
         return 1;
     }
+    /* Subscriber identity is immutable across a PATCH (filter/callbackUri/expiry
+     * only) — carry the existing amf_id/amf_set_id into the replacement record. */
     nssf_subscription_record_t fresh;
-    if (record_fill(&fresh, id, callback_uri, filter, expiry_at) != 0) {
+    if (record_fill(&fresh, id, callback_uri, filter, self->items[idx].amf_id,
+                    self->items[idx].amf_set_id, expiry_at) != 0) {
         return -1;
     }
     nssf_subscription_record_clear(&self->items[idx]);
@@ -875,7 +919,9 @@ static int mem_replace(nssf_subscription_store_t *s, const char *id,
 static int mem_for_each_live(nssf_subscription_store_t *s,
                              int (*cb)(void *ctx, const char *id,
                                        const char *callback_uri,
-                                       const cJSON *filter),
+                                       const cJSON *filter,
+                                       const char *subscriber_amf_id,
+                                       const char *subscriber_amf_set_id),
                              void *ctx)
 {
     mem_store_t *self = (mem_store_t *)s;
@@ -888,7 +934,8 @@ static int mem_for_each_live(nssf_subscription_store_t *s,
         if (r->tombstone) {
             continue;
         }
-        if (cb(ctx, r->id, r->callback_uri, r->filter) != 0) {
+        if (cb(ctx, r->id, r->callback_uri, r->filter, r->amf_id,
+               r->amf_set_id) != 0) {
             return -1;
         }
     }
@@ -969,6 +1016,8 @@ nssf_sub_result_e nssf_subscription_store_create(
     nssf_subscription_store_t *store,
     const char *callback_uri,
     const cJSON *filter,
+    const char *amf_id,
+    const char *amf_set_id,
     long expiry_seconds,
     char out_id[37])
 {
@@ -986,7 +1035,10 @@ nssf_sub_result_e nssf_subscription_store_create(
     char expiry_buf[32];
     format_expiry(expiry_seconds, expiry_buf, sizeof(expiry_buf));
 
-    if (store->vt->insert(store, id, callback_uri, filter, expiry_buf) != 0) {
+    /* Subscriber identity is persisted ALWAYS (DOCX-GAP-001), independent of the
+     * filter; amf_id/amf_set_id may be NULL (legacy/null-identity → no suppress). */
+    if (store->vt->insert(store, id, callback_uri, filter, amf_id, amf_set_id,
+                          expiry_buf) != 0) {
         return NSSF_SUB_ERROR;
     }
     memcpy(out_id, id, sizeof(id));
@@ -1132,17 +1184,58 @@ typedef struct {
 } fanout_ctx_t;
 
 /*
- * for_each_live callback — one live subscription. Enqueues EXACTLY ONE retry_queue
- * row per match (real UUID + callbackUri + event-shaped payload) and, on a DELETED
- * change, tombstones the matched subscription. Returns 0 to continue the scan; a
- * best-effort per-row failure (bad callbackUri, payload OOM, enqueue error) is
- * SKIPPED, not fatal — the scan continues so one poison row never blocks the rest.
+ * Self-notification suppression (DOCX-GAP-001). The NSSF must NOT echo a change
+ * notification back to the very AMF that caused the availability update. We
+ * suppress the ENQUEUE ONLY when we can CONFIRM same-AMF identity:
+ *   suppress  ⇔  ev->nf_id != NULL
+ *             &&  subscriber_amf_id != NULL
+ *             &&  strcmp(subscriber_amf_id, ev->nf_id) == 0
+ * An amfSetId-only subscriber (subscriber_amf_id == NULL) is NEVER suppressed —
+ * a set id cannot confirm the same individual AMF, and a set-wide drop would
+ * silence peer AMFs in the same set (set-wide drop risk). Legacy/null-identity
+ * rows (both NULL) are likewise never suppressed.
+ */
+static bool self_notification_suppressed(const char *subscriber_amf_id,
+                                         const nssf_availability_change_event_t *ev)
+{
+    return ev->nf_id != NULL && subscriber_amf_id != NULL &&
+           strcmp(subscriber_amf_id, ev->nf_id) == 0;
+}
+
+/*
+ * for_each_live callback — one live subscription. Order is MATCH → TOMBSTONE
+ * (DELETED) → ENQUEUE-unless-suppressed:
+ *   (a) filter_matches_event → no match: return 0, do nothing.
+ *   (b) on a MATCH + DELETED change: tombstone the matched subscription FIRST.
+ *       Cleanup is MATCH-based, NOT enqueue-based — it MUST run even when the
+ *       enqueue is skipped (bad callbackUri / payload OOM / self-suppress).
+ *   (c) then enqueue EXACTLY ONE retry_queue row UNLESS suppressed by the B1 URL
+ *       gate, a payload OOM, an enqueue error, or DOCX-GAP-001 self-suppression.
+ * Returns 0 to continue the scan; a best-effort per-row enqueue failure is
+ * SKIPPED, not fatal — one poison row never blocks the rest, and the DELETE
+ * tombstone has already happened above.
  */
 static int fanout_one(void *vctx, const char *id, const char *callback_uri,
-                      const cJSON *filter)
+                      const cJSON *filter, const char *subscriber_amf_id,
+                      const char *subscriber_amf_set_id)
 {
+    (void)subscriber_amf_set_id; /* amfSetId-only never suppresses (see predicate). */
     fanout_ctx_t *ctx = (fanout_ctx_t *)vctx;
     if (id == NULL || !filter_matches_event(filter, ctx->ev)) {
+        return 0; /* no match → skip everything (no tombstone, no enqueue). */
+    }
+
+    /* (b) DELETED change → soft-delete the matched subscription so a pending row
+     * cascades per the schema FK on a later hard delete (Acceptance #4). This is
+     * MATCH-based and runs BEFORE the enqueue gates so a skipped enqueue (URL
+     * gate, OOM, or self-suppress) never drops the cleanup. */
+    if (ctx->tombstone_match) {
+        (void)ctx->store->vt->tombstone(ctx->store, id);
+    }
+
+    /* (c) DOCX-GAP-001 — never echo the change back to the originating AMF.
+     * Enqueue-skip ONLY: the tombstone above already ran. */
+    if (self_notification_suppressed(subscriber_amf_id, ctx->ev)) {
         return 0;
     }
     /* B1 URL gate at enqueue time — never enqueue an un-postable callbackUri (the
@@ -1161,12 +1254,6 @@ static int fanout_one(void *vctx, const char *id, const char *callback_uri,
     free(payload);
     if (rc == 0) {
         ++ctx->enqueued;
-    }
-
-    /* DELETED change → soft-delete the affected subscription so a pending row
-     * cascades per the schema FK on a later hard delete (Acceptance #4). */
-    if (ctx->tombstone_match) {
-        (void)ctx->store->vt->tombstone(ctx->store, id);
     }
     return 0;
 }
