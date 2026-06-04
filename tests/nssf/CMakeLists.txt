@@ -289,6 +289,30 @@ target_compile_features(test_availability_engine_delete_cascade PRIVATE c_std_11
 add_test(NAME nssf_availability_engine_delete_cascade
          COMMAND test_availability_engine_delete_cascade)
 
+# Phase 2 WI-notification-dispatcher — NotificationDispatcher retry-queue STORE +
+# PRODUCER seam unit suite. Driven ENTIRELY through the in-memory store backend
+# (nssf_retry_store_new_inmemory) — no DB, no libpq, no network — so the
+# enqueue-on-change acceptance (Put/Patch committed mutation → retry_queue row) +
+# dequeue ordering / SKIP-LOCKED claim / complete-vs-requeue run UNCONDITIONALLY in
+# CI. nssf_dispatcher PUBLIC-links nssf_runtime/nssf_engine/nssf_generated + libpq
+# + libcurl, so cJSON + curl/curl.h + the availability change-event struct come
+# transitively. ctest -R nssf_notification_dispatcher_ 매칭
+# (nssf_notification_dispatcher_queue).
+add_executable(test_notification_dispatcher_queue
+    unit/test_notification_dispatcher_queue.c)
+
+target_link_libraries(test_notification_dispatcher_queue
+    PRIVATE
+        unity
+        nssf_dispatcher
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_notification_dispatcher_queue PRIVATE c_std_11)
+
+add_test(NAME nssf_notification_dispatcher_queue
+         COMMAND test_notification_dispatcher_queue)
+
 # Phase 1 wave 1 WI-schema-bootstrap — PostgreSQL bootstrap integration test.
 # libpq fixture, ctest -R nssf_schema_bootstrap 매칭. libpq 부재 또는
 # POSTGRES_* env 미주입 시 SKIP PASS 로 회피.
