@@ -43,6 +43,7 @@ plan_history:
   - '#105 merged — autonomous-runner PR-C runner skill rewrite + plan-amendment template.'
   - '#106 merged — autonomous-runner PR-D NSSF first dry-run evidence + wave1 status sync.'
   - '#110 merged — PR-codegen-nssaiavailability-extension (first fully-autonomous orchestrator slice, ADR-0005 4-condition self-merge gate). multi-spec emit, model 32→50.'
+  - '#135 merged — PR-phase2-notification-dispatcher (eyeball slice, f6a4e88). retry_queue + outbound TLS + M4 first consumer. operator+Pane-2 eyeball, rework round 1 (B1 URL gate / B2 correlation sanitize / B3 producer not-ready path). F3 → Phase-4 dispatcher-resilience.'
 
 # ─── 2. PR 시퀀스 ─────────────────────────────────────────────────────
 prs:
@@ -460,7 +461,14 @@ prs:
       # route-registration 먼저 (operator order). + retry_queue real enqueue
       # consumer = 본 slice (availability-handlers 의 engine change-event seam 소비).
       - PR-phase2-availability-route-registration
-    status: not_started
+    status: merged
+    merged_pr: 'https://github.com/jjinri/5gc-impl-kb/pull/135'
+    # EYEBALL slice — operator(pane1)+Pane-2(codex) eyeball. rework round 1
+    # (blocker 3건: B1 shared https-only URL gate before bearer attach / B2
+    # correlation CRLF·control·len sanitize / B3 producer nfId↛subscription_id
+    # not-ready path) fix 후 merge (f6a4e88). F7/F4/F2 fix. F3(fail-closed
+    # FORBIDDEN backoff/dead-letter) = Phase-4 defer → PR-phase4-dispatcher-
+    # resilience. carry items = amendment 2026-06-04 plan-amendments/ 참조.
     required_checks:
       - phase2_retry_queue_enqueue
     estimated_loc: 1000
@@ -751,3 +759,70 @@ prs:
     required_checks: []
     estimated_loc: 300
     notes: 'deferred backlog (memory project_nssf_deferred_plan_slices). tls/mtls/oauth2_inbound/oauth2_outbound config 키 + nf_instance_id + dev PKI + NRF token_url/cert paths + secret_ref 의미.'
+
+  # ===== dispatcher eyeball follow-up slices (amendment 2026-06-04, post-#135) =====
+  # operator(pane1)+Pane-2(codex) eyeball outcome 등록. dispatch 순서/시점 별도
+  # operator 결정. 셋 다 dispatcher 만 depends_on + plan-order 말단 → picker 가
+  # phase3/4/5 main sequence + 기존 backlog 뒤로만 후보. status=deferred (picker 는
+  # deferred 를 skip 하지 않으므로 plan-order 말단 배치 + depends_on 으로 gating).
+  # NOTE: 셋 다 work_items = WI-notification-dispatcher (기존 codegen WI 재사용).
+  # first-class WI-dispatcher-resilience 승격은 readiness-config(design/nssf/)
+  # regen 필요 = 본 housekeeping scope(dev/nssf/** + .gitignore) 밖 follow-up.
+  - id: PR-phase4-dispatcher-resilience
+    title: 'feat(nssf): dispatcher resilience — fail-closed backoff + max-attempts + dead-letter (G-08 + F3 fold)'
+    phase: phase4
+    work_items:
+      - WI-notification-dispatcher
+    scope_files:
+      - src/nssf/dispatcher/notification_dispatcher.{h,c}
+      - tests/nssf/**/test_notification_dispatcher_*.c
+    depends_on:
+      - PR-phase2-notification-dispatcher
+    status: deferred
+    required_checks: []
+    estimated_loc: 500
+    notes: |
+      G-08 + F3 fold. trigger=Phase 4 hardening. #135 는 G-08 minimum (동기 dispatch
+      + 한 차례 재시도) 만 구현; 본 slice 가 fail-closed NSSF_DISPATCH_FORBIDDEN
+      bounded retry + exponential backoff/jitter + max-attempts + dead-letter table
+      를 채운다. fail-closed 불변 유지. ⚠ #135 의 caller-contract "caller MUST NOT
+      tight-loop on FORBIDDEN/retriable" (.h dispatch_pending doc) — 본 slice 가
+      dispatcher polling/worker loop 를 추가하면 G-08 hot-loop 가 blocker 로 승격
+      (open-gaps G-08 annotate 참조). WI-dispatcher-resilience first-class 승격은
+      readiness regen follow-up.
+
+  - id: PR-phase2-dispatcher-enqueue-hardening
+    title: 'feat(nssf): dispatcher enqueue defense-in-depth — callback_uri NULL/invalid hard-reject'
+    phase: phase2
+    work_items:
+      - WI-notification-dispatcher
+    scope_files:
+      - src/nssf/dispatcher/notification_dispatcher.{h,c}
+      - tests/nssf/**/test_notification_dispatcher_*.c
+    depends_on:
+      - PR-phase2-notification-dispatcher
+    status: deferred
+    required_checks: []
+    estimated_loc: 150
+    notes: |
+      non-blocking follow-up (a). 원 B3 blocker 는 #135 producer not-ready path 로
+      CLOSED. 본 slice 는 nssf_retry_store_enqueue API 가 callback_uri NULL/invalid
+      를 더 일찍 hard-reject 하는 API-level defense-in-depth. critical path 아님.
+
+  - id: PR-phase2-dispatcher-body-strict-json
+    title: 'feat(nssf): dispatcher F7 strict-valid-JSON body — reject malformed JSON before POST'
+    phase: phase2
+    work_items:
+      - WI-notification-dispatcher
+    scope_files:
+      - src/nssf/dispatcher/notification_dispatcher.{h,c}
+      - tests/nssf/**/test_notification_dispatcher_*.c
+    depends_on:
+      - PR-phase2-notification-dispatcher
+    status: deferred
+    required_checks: []
+    estimated_loc: 150
+    notes: |
+      non-blocking follow-up (b). #135 F7 = null/empty/corrupt-envelope body 는 이미
+      quarantine (null-body POST 금지). 본 slice 는 invalid non-empty JSON string 을
+      application/json 으로 보내는 잔여 창을 strict JSON 검증으로 차단. critical path 아님.
