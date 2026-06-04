@@ -157,6 +157,10 @@ recommended_next_actions:
   immediate_phase3:
     - Add notify-originator-suppression to fanout-integration review checklist before merge if not already implemented.
     - Ensure fanout matching preserves real subscription UUID + callbackUri and also origin NF/requester context.
+  phase3_to_phase4_gate:
+    - After Phase 3 runtime stabilization completes, run DOCX Harness Phase 2 before entering Phase 4.
+    - Convert one-off DOCX prose analysis into a repeatable harness step with scripted candidate extraction, fixed schemas, validation, and gap-to-plan linkage.
+    - Assess DOCX-derived gaps against Phase 1-3 artifacts and create focused backfill PRs before Phase 4 contract/e2e/security matrix expansion.
   phase4_tests:
     - Expand contract/e2e matrix with procedure-specific NSSelection variants and feature-gated notification payloads.
     - Add redirect 307/308 header evidence if redirect support remains in scope.

@@ -127,6 +127,22 @@ DOCX는 NSSelection/NSSAIAvailability API 모두 OAuth2를 사용할 수 있지�
 3. Phase4 test slices에 `DOCX-GAP-002`, `DOCX-GAP-004`, `DOCX-GAP-005`, `DOCX-GAP-007`, `DOCX-GAP-008` 반영.
 4. Operator config guide slice에 `DOCX-GAP-003`, `DOCX-GAP-006`, `DOCX-GAP-009` 반영.
 
+### 5.1 Phase 3 → Phase 4 gate로 남길 일
+
+Phase 3 runtime wiring이 안정화되면, Phase 4 contract/e2e/security test 확장에 들어가기 전에 `DOCX Harness Phase 2`를 별도 gate로 수행한다.
+
+목표:
+
+- 지금처럼 LLM이 직접 DOCX를 읽어 gap을 쓰는 일회성 분석을 반복 가능한 하네스 단계로 바꾼다.
+- `spec-split.py`로 만든 `_extracted/*.md`에서 SHALL/SHOULD/IF/WHEN/NOTE 후보를 script로 추출한다.
+- LLM은 후보를 고정 schema에 맞춰 분류하고, 모든 항목에 `source_ref`, `target_slice`, `status`, `acceptance`를 남긴다.
+- validator가 gap의 open/closed/deferred/not_applicable 상태와 plan/test/operator-guide 연결 여부를 검사한다.
+- Phase 1~3 산출물과 개발 소스에 영향이 있으면 focused backfill PR로 닫은 뒤 Phase 4 test matrix를 확장한다.
+
+이 gate의 이유:
+
+> Phase 4는 테스트 확장 단계이므로, OpenAPI-derived contract만 기준으로 삼으면 절차/조건/운영 예외가 다시 누락될 수 있다. Phase 3 완료 후 Phase 4 전이 DOCX prose 분석을 정식 하네스에 넣기 가장 안전한 시점이다.
+
 ## 6. 결론
 
 DOCX 분석은 “전체 규격 자동 이해”가 아니라 “OpenAPI YAML이 놓치는 설계 조건을 조기 발견하는 장치”로 가장 가치가 크다.

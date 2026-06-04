@@ -6,6 +6,21 @@ status: analysis_only
 note: >-
   This file records DOCX-derived design gaps. It does not amend pr-slicing-plan.yaml or engineering decisions.
   Apply through a later plan-amendment PR after phase3 implementation work is stable.
+phase_gate:
+  id: DOCX-HARNESS-PHASE-2
+  timing: after_phase3_stabilization_before_phase4
+  status: planned
+  purpose: >-
+    Convert DOCX analysis from one-off LLM review into a repeatable harness step before Phase 4 expands
+    contract, e2e, and security matrices.
+  expected_work:
+    - Add scripted DOCX prose candidate extraction from extracted section markdown.
+    - Keep LLM classification constrained by fixed YAML schemas and source references.
+    - Validate gap status, source_refs, target_slice, closure_pr, and acceptance linkage.
+    - Run an impact assessment against Phase 1-3 artifacts and open focused backfill PRs where needed.
+  reminder: >-
+    Do not skip this gate after Phase 3: Phase 4 test expansion should consume DOCX-derived procedure and
+    condition gaps rather than relying only on OpenAPI-derived contracts.
 gaps:
   - id: DOCX-GAP-001
     title: Fan-out must suppress notification to the AMF that triggered the availability update
