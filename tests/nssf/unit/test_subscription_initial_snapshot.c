@@ -162,7 +162,7 @@ static void test_create_dispatches_initial_snapshot_exactly_once(void)
     char id[37];
     nssf_sub_result_e r = nssf_subscription_store_create(
         store, "https://amf.example.com/nssai-avail/notify", filter,
-        NSSF_SUBSCRIPTION_DEFAULT_EXPIRY_SECONDS, id);
+        NULL, NULL, NSSF_SUBSCRIPTION_DEFAULT_EXPIRY_SECONDS, id);
     TEST_ASSERT_EQUAL_INT_MESSAGE(NSSF_SUB_OK, r, "create 가 OK 반환 실패");
     TEST_ASSERT_EQUAL_size_t(36, strlen(id));
 
@@ -231,7 +231,7 @@ static void test_create_without_seam_skips_dispatch(void)
     char id[37];
     nssf_sub_result_e r = nssf_subscription_store_create(
         store, "https://amf.example.com/cb", filter,
-        NSSF_SUBSCRIPTION_DEFAULT_EXPIRY_SECONDS, id);
+        NULL, NULL, NSSF_SUBSCRIPTION_DEFAULT_EXPIRY_SECONDS, id);
     TEST_ASSERT_EQUAL_INT_MESSAGE(
         NSSF_SUB_OK, r,
         "seam 미설치 create 가 OK 반환 실패 (persist, skip dispatch)");

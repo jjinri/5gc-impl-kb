@@ -47,6 +47,16 @@ CREATE TABLE IF NOT EXISTS subscription (
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
+-- subscriber identity — DOCX-GAP-001 self-notification suppression source.
+-- Both NULLABLE: legacy / null-identity subscriptions are allowed and MUST NOT
+-- be suppressed. This is a SEPARATE truth from the `filter` JSONB (matching) —
+-- amf_id/amf_set_id are persisted independent of any stored filter subtree.
+-- ADD COLUMN IF NOT EXISTS keeps the bootstrap forward-only idempotent without a
+-- schema_version bump (the M001 row already covers the subscription table; this
+-- additive NULLABLE column needs no new applied-version marker).
+ALTER TABLE subscription ADD COLUMN IF NOT EXISTS amf_id     TEXT;
+ALTER TABLE subscription ADD COLUMN IF NOT EXISTS amf_set_id TEXT;
+
 CREATE INDEX IF NOT EXISTS subscription_expiry_idx
     ON subscription (expiry_at) WHERE tombstone = FALSE;
 

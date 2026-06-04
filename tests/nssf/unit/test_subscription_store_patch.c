@@ -63,7 +63,7 @@ static void seed_subscription(nssf_subscription_store_t *store, char out_id[37],
 {
     cJSON *filter = make_filter(label);
     nssf_sub_result_e r = nssf_subscription_store_create(
-        store, "https://amf.example.com/cb", filter,
+        store, "https://amf.example.com/cb", filter, NULL, NULL,
         NSSF_SUBSCRIPTION_DEFAULT_EXPIRY_SECONDS, out_id);
     TEST_ASSERT_EQUAL_INT(NSSF_SUB_OK, r);
     cJSON_Delete(filter);

@@ -33,6 +33,7 @@
 
 #include "cJSON.h"
 
+#include "availability_engine.h"
 #include "availability_repository.h"
 #include "notification_dispatcher.h"
 
@@ -59,17 +60,20 @@ typedef enum {
 
 /*
  * One row of the `subscription` table. The record OWNS its cJSON `filter` tree
- * and its heap strings (callback_uri); nssf_subscription_record_clear() frees
- * them. `id` is a fixed 36-char UUID text + NUL. `expiry_at` is a heap copy of
- * the RFC 3339 timestamp text (NULL when the column is SQL NULL / lazily
- * defaulted). `has_expiry` distinguishes "no expiry column" from an empty
- * string.
+ * and its heap strings (callback_uri, amf_id, amf_set_id);
+ * nssf_subscription_record_clear() frees them. `id` is a fixed 36-char UUID text
+ * + NUL. `expiry_at` is a heap copy of the RFC 3339 timestamp text (NULL when the
+ * column is SQL NULL / lazily defaulted). `amf_id`/`amf_set_id` are the
+ * subscriber identity (DOCX-GAP-001 suppression source) — a SEPARATE truth from
+ * the filter JSON, persisted ALWAYS and NULL for legacy/null-identity rows.
  */
 typedef struct {
     char id[37];
     char *callback_uri;
     cJSON *filter;
     char *expiry_at;   /* RFC 3339 text, or NULL. */
+    char *amf_id;      /* subscriber AMF nfId, or NULL (suppression key). */
+    char *amf_set_id;  /* subscriber AMF set id, or NULL (no suppression). */
     bool tombstone;
 } nssf_subscription_record_t;
 
@@ -112,6 +116,10 @@ void nssf_subscription_store_set_snapshot_seam(
 /*
  * Acceptance #1 — persist a new subscription with its JSONB filter column.
  * `callback_uri` and `filter` are borrowed (the store copies what it keeps).
+ * `amf_id` and `amf_set_id` are the subscriber identity (DOCX-GAP-001
+ * suppression source) — borrowed, the store copies them, and either may be NULL
+ * (legacy / null-identity subscription). They are persisted ALWAYS, independent
+ * of whether a filter subtree is stored.
  * `expiry_seconds` is the effective lifetime: pass
  * NSSF_SUBSCRIPTION_DEFAULT_EXPIRY_SECONDS when the request omitted
  * validityTime (G-10), or the operator/request value otherwise. A fresh UUID is
@@ -134,6 +142,8 @@ nssf_sub_result_e nssf_subscription_store_create(
     nssf_subscription_store_t *store,
     const char *callback_uri,
     const cJSON *filter,
+    const char *amf_id,
+    const char *amf_set_id,
     long expiry_seconds,
     char out_id[37]);
 
@@ -163,16 +173,41 @@ nssf_sub_result_e nssf_subscription_store_patch(
 
 /*
  * Acceptance #4 — cascade tombstone of the subscriptions affected by a deleted
- * nf/availability. This is the STORE API only; the deferral boundary forbids
- * wiring the engine change-event seam → store → dispatcher fan-out into main.c
- * in this slice. A later integration slice resolves the affected subscriptions
- * and calls this; here it tombstones (soft-deletes) the subscription identified
- * by `subscription_id` so a pending retry_queue row cascades per the schema FK.
- * Idempotent on an absent/already-tombstoned row. Returns NSSF_SUB_OK on
- * success, NSSF_SUB_ERROR on a store failure.
+ * nf/availability. Tombstones (soft-deletes) the subscription identified by
+ * `subscription_id` so a pending retry_queue row cascades per the schema FK on a
+ * later hard delete. Idempotent on an absent/already-tombstoned row. Returns
+ * NSSF_SUB_OK on success, NSSF_SUB_ERROR on a store failure. The fan-out
+ * integration (nssf_subscription_store_fanout_change) calls this for each matched
+ * subscription on a DELETED change event.
  */
 nssf_sub_result_e nssf_subscription_store_on_availability_deleted(
     nssf_subscription_store_t *store, const char *subscription_id);
+
+/*
+ * Fan-out resolve + enqueue — the engine→store→dispatcher cascade activation
+ * (PR-phase3-fanout-integration, closes the B3 deferred fan-out). Resolves a
+ * committed AvailabilityEngine change event to the set of LIVE (non-tombstoned)
+ * subscriptions whose persisted `filter` matches, and for EACH match enqueues
+ * EXACTLY ONE retry_queue row carrying the real subscription UUID + that
+ * subscription's callbackUri + an nssf_event_notification-shaped payload, via the
+ * borrowed `retry_store` (nssf_retry_store_enqueue). A subscription whose
+ * callbackUri fails the shared B1 URL gate
+ * (nssf_notification_dispatcher_callback_url_allowed) is skipped (never enqueue an
+ * un-postable target). On a DELETED change event each matched subscription is also
+ * tombstoned (on_availability_deleted contract / schema FK cascade).
+ *
+ * This is STORE-LAYER MATCHING ONLY — it performs no outbound POST and starts no
+ * loop. The caller (main.c publish trampoline) triggers ONE call-driven
+ * dispatch_pending after this returns. `ev` is borrowed (the engine's snapshots
+ * are valid only for the call); nothing is retained. `retry_store` is borrowed.
+ *
+ * Returns the count of rows enqueued (>= 0), or -1 on a store error. A NULL
+ * store/retry_store/ev returns -1; a no-match event returns 0.
+ */
+int nssf_subscription_store_fanout_change(
+    nssf_subscription_store_t *store,
+    nssf_retry_store_t *retry_store,
+    const nssf_availability_change_event_t *ev);
 
 /*
  * Read one live (non-tombstoned) subscription by id. On success returns

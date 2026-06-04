@@ -314,6 +314,41 @@ target_compile_features(test_subscription_patch_integration PRIVATE c_std_11)
 add_test(NAME nssf_subscription_submodifypatch_integration
          COMMAND test_subscription_patch_integration)
 
+# Phase 3 PR-phase3-fanout-integration — engine→store→dispatcher fan-out cascade
+# end-to-end (closes the B3 deferred fan-out). Reproduces the LIVE wired cascade
+# through the supported integration seam main.c's (static) fanout_publish()
+# trampoline itself calls: nssf_subscription_store_fanout_change(store, retry, ev)
+# for the store-layer match+enqueue, then ONE nssf_notification_dispatcher_dispatch_
+# pending for the single call-driven dispatch. All in-memory / mock seams
+# (nssf_subscription_store_new_inmemory + nssf_retry_store_new_inmemory + a counting
+# mock transport replying 200) — no socket, no live AMF, no DB → runs
+# UNCONDITIONALLY in CI. Asserts broad-subscriber fan-out (1 row + 1 POST), TAI-
+# scoped match-vs-nonmatch, multi-subscriber distinct UUID+callbackUri rows, the B1
+# callbackUri gate skipping un-postable targets, DELETED→tombstone (store_get
+# NOT_FOUND), and the single-dispatch-per-publish (no busy drain loop) contract.
+#
+# nssf_store PUBLIC-links nssf_dispatcher + nssf_repository + nssf_generated, so
+# subscription_store.h + notification_dispatcher.h + availability_engine.h + cJSON +
+# curl/curl.h come transitively; libcurl is linked directly for the dispatcher
+# transport seam type. Must register BEFORE the find_package(PostgreSQL)/return()
+# guard below so it builds + runs where libpq is absent. ctest -R nssf_fanout 매칭
+# (nssf_fanout_integration).
+add_executable(test_fanout_integration
+    test_fanout_integration.c)
+
+target_link_libraries(test_fanout_integration
+    PRIVATE
+        unity
+        nssf_store
+        PkgConfig::libcurl
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_fanout_integration PRIVATE c_std_11)
+
+add_test(NAME nssf_fanout_integration
+         COMMAND test_fanout_integration)
+
 # Phase 1 wave 1 WI-schema-bootstrap integration test.
 #
 # libpq + psql 의존. PostgreSQL service container 미배치 환경 (현 CI) 에서는
