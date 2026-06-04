@@ -3,6 +3,7 @@ add_subdirectory(runtime)
 add_subdirectory(repository)
 add_subdirectory(engine)
 add_subdirectory(dispatcher)
+add_subdirectory(store)
 add_subdirectory(handlers)
 add_subdirectory(server)
 

@@ -313,6 +313,82 @@ target_compile_features(test_notification_dispatcher_queue PRIVATE c_std_11)
 add_test(NAME nssf_notification_dispatcher_queue
          COMMAND test_notification_dispatcher_queue)
 
+# Phase 3 WI-subscription-store — SubscriptionStore lifecycle unit suite
+# (Subscribe/SubModifyPatch/Unsubscribe + initial-snapshot-on-create dispatch +
+# on_availability_deleted cascade-tombstone). Driven ENTIRELY through the
+# in-memory test seams — nssf_subscription_store_new_inmemory for the store,
+# nssf_retry_store_new_inmemory + nssf_availability_repo_new_inmemory + a mock
+# dispatcher transport for the snapshot seam — so NO libpq, NO PostgreSQL, NO
+# network: the create/patch/cascade acceptance runs UNCONDITIONALLY in CI.
+# nssf_store PUBLIC-links nssf_dispatcher / nssf_repository / nssf_generated, so
+# notification_dispatcher.h + availability_repository.h + cJSON + curl/curl.h
+# come transitively.
+#   - store CRUD names start nssf_subscription_store_ (WI verify: ctest -R
+#     nssf_subscription_store_),
+#   - the required initial-snapshot check is its own target
+#     nssf_subscription_initial_snapshot (proves EXACTLY-ONE dispatch on create).
+add_executable(test_subscription_store_create
+    unit/test_subscription_store_create.c)
+
+target_link_libraries(test_subscription_store_create
+    PRIVATE
+        unity
+        nssf_store
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_subscription_store_create PRIVATE c_std_11)
+
+add_test(NAME nssf_subscription_store_create
+         COMMAND test_subscription_store_create)
+
+add_executable(test_subscription_store_patch
+    unit/test_subscription_store_patch.c)
+
+target_link_libraries(test_subscription_store_patch
+    PRIVATE
+        unity
+        nssf_store
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_subscription_store_patch PRIVATE c_std_11)
+
+add_test(NAME nssf_subscription_store_patch
+         COMMAND test_subscription_store_patch)
+
+add_executable(test_subscription_store_cascade
+    unit/test_subscription_store_cascade.c)
+
+target_link_libraries(test_subscription_store_cascade
+    PRIVATE
+        unity
+        nssf_store
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_subscription_store_cascade PRIVATE c_std_11)
+
+add_test(NAME nssf_subscription_store_cascade
+         COMMAND test_subscription_store_cascade)
+
+# REQUIRED CHECK — ctest -R nssf_subscription_initial_snapshot must PASS:
+# 신규 subscription 진입 시 initial snapshot 을 EXACTLY ONCE dispatch.
+add_executable(test_subscription_initial_snapshot
+    unit/test_subscription_initial_snapshot.c)
+
+target_link_libraries(test_subscription_initial_snapshot
+    PRIVATE
+        unity
+        nssf_store
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_subscription_initial_snapshot PRIVATE c_std_11)
+
+add_test(NAME nssf_subscription_initial_snapshot
+         COMMAND test_subscription_initial_snapshot)
+
 # Phase 1 wave 1 WI-schema-bootstrap — PostgreSQL bootstrap integration test.
 # libpq fixture, ctest -R nssf_schema_bootstrap 매칭. libpq 부재 또는
 # POSTGRES_* env 미주입 시 SKIP PASS 로 회피.
