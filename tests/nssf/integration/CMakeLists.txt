@@ -225,6 +225,95 @@ target_compile_features(test_notification_dispatcher_outbound PRIVATE c_std_11)
 add_test(NAME nssf_notification_dispatcher_outbound
          COMMAND test_notification_dispatcher_outbound)
 
+# Phase 3 WI-subscription-handlers — Subscription Post/Unsubscribe/SubModifyPatch
+# inbound integration tests. Each drives its handler entrypoint IN-PROCESS — no
+# socket, no live DB, no nghttp2 server: JWKS seeded offline from an in-test RSA
+# key (libjwt signs the bearer with scope nnssf-nssaiavailability), the
+# SubscriptionStore over nssf_subscription_store_new_inmemory (the in-memory test
+# seam). The POST test additionally installs the initial-snapshot seam from
+# in-memory collaborators (nssf_retry_store_new_inmemory + a stub availability
+# snapshot via nssf_availability_repo_new_inmemory + a counting dispatcher
+# transport) to assert (a) https callbackUri → 201 + Location + persisted row,
+# (b) http:// / userinfo / fragment callbackUri → 400 with NO row + NO dispatch
+# (shared dispatcher URL-policy reuse), and (c) a successful create dispatches the
+# initial snapshot EXACTLY ONCE (mock POST count == 1, no looped re-dispatch). So
+# the gate + status coverage runs UNCONDITIONALLY in CI (real coverage) with no
+# PG service / live server. The handler libraries PUBLIC-link nssf_store /
+# nssf_dispatcher / nssf_runtime, so subscription_store.h + notification_
+# dispatcher.h + availability_repository.h + cJSON + curl/curl.h come transitively;
+# libcurl is also linked directly for the dispatcher transport seam type used by
+# the POST test. ctest -R nssf_subscription_ 매칭 (gate NAME pattern
+# nssf_subscription_post / _unsubscribe / _submodifypatch _integration).
+#
+# Note: the PATCH test file is test_subscription_patch_integration.c but its ctest
+# target is named nssf_subscription_submodifypatch_integration to match the
+# verification-matrix regex (the 3GPP operation is NSSAIAvailabilitySubModifyPatch).
+#
+# Must register BEFORE the find_package(PostgreSQL)/return() guard below so they
+# build + run where libpq is absent.
+add_executable(test_subscription_post_integration
+    test_subscription_post_integration.c)
+
+target_link_libraries(test_subscription_post_integration
+    PRIVATE
+        unity
+        nssf_handlers
+        nssf_runtime
+        nssf_generated
+        PkgConfig::libjwt
+        PkgConfig::libcurl
+        OpenSSL::SSL
+        OpenSSL::Crypto
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_subscription_post_integration PRIVATE c_std_11)
+
+add_test(NAME nssf_subscription_post_integration
+         COMMAND test_subscription_post_integration)
+
+add_executable(test_subscription_unsubscribe_integration
+    test_subscription_unsubscribe_integration.c)
+
+target_link_libraries(test_subscription_unsubscribe_integration
+    PRIVATE
+        unity
+        nssf_handlers
+        nssf_runtime
+        nssf_generated
+        PkgConfig::libjwt
+        OpenSSL::SSL
+        OpenSSL::Crypto
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_subscription_unsubscribe_integration PRIVATE c_std_11)
+
+add_test(NAME nssf_subscription_unsubscribe_integration
+         COMMAND test_subscription_unsubscribe_integration)
+
+# ctest target NAME = nssf_subscription_submodifypatch_integration (verification-
+# matrix regex) even though the file is test_subscription_patch_integration.c.
+add_executable(test_subscription_patch_integration
+    test_subscription_patch_integration.c)
+
+target_link_libraries(test_subscription_patch_integration
+    PRIVATE
+        unity
+        nssf_handlers
+        nssf_runtime
+        nssf_generated
+        PkgConfig::libjwt
+        OpenSSL::SSL
+        OpenSSL::Crypto
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_subscription_patch_integration PRIVATE c_std_11)
+
+add_test(NAME nssf_subscription_submodifypatch_integration
+         COMMAND test_subscription_patch_integration)
+
 # Phase 1 wave 1 WI-schema-bootstrap integration test.
 #
 # libpq + psql 의존. PostgreSQL service container 미배치 환경 (현 CI) 에서는

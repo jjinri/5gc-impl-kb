@@ -22,6 +22,7 @@
 #include "oauth2_jwks.h"
 #include "router.h"
 #include "selection_engine.h"
+#include "subscription_store.h"
 #include "tls_context.h"
 
 /* The running server, exposed to the signal handler for graceful stop. */
@@ -70,6 +71,7 @@ int main(void)
     nssf_availability_repo_t *repo = NULL;
     nssf_selection_engine_t *engine = NULL;
     nssf_availability_engine_t *avail_engine = NULL;
+    nssf_subscription_store_t *sub_store = NULL;
     nssf_router_t *router = NULL;
     nssf_server_t *server = NULL;
 
@@ -144,11 +146,27 @@ int main(void)
         goto cleanup;
     }
 
+    /*
+     * 4c. SubscriptionStore — libpq backend over the same operator conninfo. The
+     * Subscription routes (Post/Unsubscribe/SubModifyPatch) resolve through this
+     * store. The initial-snapshot dispatch seam (avail_repo + retry_store +
+     * dispatcher) is intentionally NOT installed here: create() then persists the
+     * subscription and skips the snapshot dispatch (the no-collaborator path), and
+     * the engine→store→dispatcher fan-out / publish seam is a separate integration
+     * slice — no outbound notification egress is wired in this slice.
+     */
+    sub_store = nssf_subscription_store_new_pg(conninfo, errbuf, sizeof(errbuf));
+    if (sub_store == NULL) {
+        fprintf(stderr, "nssf: subscription store init failed: %s\n", errbuf);
+        goto cleanup;
+    }
+
     /* 5. Router over the combined handler dependencies. */
     nssf_router_deps_t deps = {
         .jwks_cache = jwks,
         .selection_engine = engine,
         .availability_engine = avail_engine,
+        .subscription_store = sub_store,
     };
     router = nssf_router_create(&deps);
     if (router == NULL) {
@@ -173,7 +191,8 @@ int main(void)
     signal(SIGPIPE, SIG_IGN);
 
     fprintf(stderr,
-            "nssf: serving NSSelection + NSSAIAvailability routes on %s:%u\n",
+            "nssf: serving NSSelection + NSSAIAvailability + Subscription routes "
+            "on %s:%u\n",
             bind_addr ? bind_addr : "0.0.0.0", (unsigned)port);
 
     if (nssf_server_run(server) == 0) {
@@ -186,6 +205,7 @@ cleanup:
     g_server = NULL;
     nssf_server_free(server);
     nssf_router_free(router);
+    nssf_subscription_store_free(sub_store);
     nssf_availability_engine_free(avail_engine);
     nssf_selection_engine_free(engine);
     nssf_availability_repo_free(repo);
