@@ -71,6 +71,16 @@ extern "C" {
 typedef struct nssf_notification_dispatcher nssf_notification_dispatcher_t;
 
 /*
+ * Shared callback-URL policy gate (B1), exported for the inbound Subscription
+ * Post handler to validate a request's callbackUri with the SAME rules the
+ * outbound dispatch path enforces — there is exactly one policy, never a
+ * duplicated inline copy. PRODUCTION posture: https-only, plus userinfo('@') /
+ * fragment('#') / empty-authority / malformed / NULL rejected. Returns true when
+ * the URL is acceptable for an outbound notification POST.
+ */
+bool nssf_notification_dispatcher_callback_url_allowed(const char *url);
+
+/*
  * One dequeued retry-queue work item. The dispatcher OWNS the heap strings and
  * frees them; a backend that fills this on dequeue transfers ownership to the
  * dispatcher. `id` keys the row for the done/requeue follow-up (an opaque text

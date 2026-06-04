@@ -37,6 +37,9 @@
 #include "nssaiavailability_patch_handler.h"
 #include "nssaiavailability_put_handler.h"
 #include "problem_details.h"
+#include "subscription_patch_handler.h"
+#include "subscription_post_handler.h"
+#include "subscription_unsubscribe_handler.h"
 
 /* cJSON for serializing the router-level ProblemDetails (404/405/500). */
 #include "cJSON.h"
@@ -46,6 +49,8 @@
 #define ROUTE_NSSELECTION       "/network-slice-information"
 #define ROUTE_NSSAIAVAIL        "/nssai-availability"
 #define ROUTE_NSSAIAVAIL_ID     "/nssai-availability/"  /* prefix + {nfId}. */
+#define ROUTE_SUBSCRIPTIONS     "/nssai-availability/subscriptions"
+#define ROUTE_SUBSCRIPTION_ID   "/nssai-availability/subscriptions/"  /* prefix + {id}. */
 
 struct nssf_router {
     nssf_router_deps_t deps;  /* copied by value; members borrowed. */
@@ -76,7 +81,8 @@ void nssf_router_free(nssf_router_t *router)
 static int emit_problem(nssf_router_response_t *out, problem_details_t *pd,
                         int fallback_status)
 {
-    out->allow[0] = '\0';  /* error responses carry no Allow header. */
+    out->allow[0] = '\0';     /* error responses carry no Allow header. */
+    out->location[0] = '\0';  /* nor a Location header. */
     if (pd == NULL) {
         out->status = fallback_status;
         out->content_type = NSSF_CT_PROBLEM_JSON;
@@ -124,6 +130,30 @@ static bool match_nssaiavail_id(const char *route_path, size_t route_len,
     return true;
 }
 
+/*
+ * When `route_path` (query-stripped, length route_len) is under the
+ * "/nssai-availability/subscriptions/" prefix, return the borrowed
+ * {subscriptionId} segment + its length. Returns false when not under the prefix
+ * or when the id is empty / further-nested.
+ */
+static bool match_subscription_id(const char *route_path, size_t route_len,
+                                  const char **sub_id_out, size_t *sub_id_len_out)
+{
+    const size_t prefix_len = sizeof(ROUTE_SUBSCRIPTION_ID) - 1;
+    if (route_len <= prefix_len ||
+        memcmp(route_path, ROUTE_SUBSCRIPTION_ID, prefix_len) != 0) {
+        return false;
+    }
+    const char *seg = route_path + prefix_len;
+    size_t seg_len = route_len - prefix_len;
+    if (memchr(seg, '/', seg_len) != NULL) {
+        return false;
+    }
+    *sub_id_out = seg;
+    *sub_id_len_out = seg_len;
+    return true;
+}
+
 int nssf_router_dispatch(const nssf_router_t *router,
                          const nssf_router_request_t *req,
                          nssf_router_response_t *out)
@@ -138,6 +168,7 @@ int nssf_router_dispatch(const nssf_router_t *router,
     out->content_type = NULL;
     out->body = NULL;
     out->allow[0] = '\0';
+    out->location[0] = '\0';
 
     if (router == NULL || req->path == NULL || req->method == NULL) {
         return emit_problem(out, nf_problem_details_make_500(NULL, req ? req->path : NULL), 500);
@@ -208,6 +239,104 @@ int nssf_router_dispatch(const nssf_router_t *router,
         /* Carry the Allow header value the server emits on success. */
         memcpy(out->allow, hres.allow, sizeof(out->allow));
         return out->status;
+    }
+
+    /*
+     * Subscription routes — matched BEFORE the {nfId} route so the collection
+     * path "/nssai-availability/subscriptions" is not mis-claimed as an
+     * nfId="subscriptions" record (the {nfId} matcher accepts any single segment).
+     */
+
+    /* POST /nssai-availability/subscriptions → NSSAIAvailabilityPost. */
+    if (path_matches(req->path, route_len, ROUTE_SUBSCRIPTIONS)) {
+        if (strcmp(req->method, "POST") != 0) {
+            return emit_problem(out,
+                                nf_problem_details_make_405(NULL, req->path),
+                                405);
+        }
+
+        nssf_subscription_post_deps_t deps = {
+            .jwks_cache = router->deps.jwks_cache,
+            .store = router->deps.subscription_store,
+        };
+        nssf_subscription_post_request_t hreq = {
+            .authorization = req->authorization,
+            .content_type = req->content_type,
+            .body = req->body,
+            .content_length = req->content_length,
+            .has_content_length = req->has_content_length,
+            .max_body_len = req->max_body_len,
+            .request_target = req->path,
+            .max_uri_len = req->max_uri_len,
+        };
+        nssf_subscription_post_response_t hres = {0};
+        nssf_subscription_post_handle(&hreq, &deps, &hres);
+        out->status = hres.status;
+        out->content_type = hres.content_type;
+        out->body = hres.body;   /* ownership transferred. */
+        /* Carry the 201 Location header value the server emits on success. */
+        memcpy(out->location, hres.location, sizeof(out->location));
+        return out->status;
+    }
+
+    /* {DELETE,PATCH} /nssai-availability/subscriptions/{subscriptionId}. */
+    const char *sub_id = NULL;
+    size_t sub_id_len = 0;
+    if (match_subscription_id(req->path, route_len, &sub_id, &sub_id_len)) {
+        char *sub_id_z = xstrndup((const uint8_t *)sub_id, sub_id_len);
+        if (sub_id_z == NULL) {
+            return emit_problem(out, nf_problem_details_make_500(NULL, req->path), 500);
+        }
+
+        if (strcmp(req->method, "DELETE") == 0) {
+            nssf_subscription_unsubscribe_deps_t deps = {
+                .jwks_cache = router->deps.jwks_cache,
+                .store = router->deps.subscription_store,
+            };
+            nssf_subscription_unsubscribe_request_t hreq = {
+                .authorization = req->authorization,
+                .subscription_id = sub_id_z,
+                .request_target = req->path,
+                .max_uri_len = req->max_uri_len,
+            };
+            nssf_subscription_unsubscribe_response_t hres = {0};
+            nssf_subscription_unsubscribe_handle(&hreq, &deps, &hres);
+            out->status = hres.status;
+            out->content_type = hres.content_type;
+            out->body = hres.body;   /* ownership transferred. */
+            free(sub_id_z);
+            return out->status;
+        }
+
+        if (strcmp(req->method, "PATCH") == 0) {
+            nssf_subscription_patch_deps_t deps = {
+                .jwks_cache = router->deps.jwks_cache,
+                .store = router->deps.subscription_store,
+            };
+            nssf_subscription_patch_request_t hreq = {
+                .authorization = req->authorization,
+                .subscription_id = sub_id_z,
+                .content_type = req->content_type,
+                .body = req->body,
+                .content_length = req->content_length,
+                .has_content_length = req->has_content_length,
+                .max_body_len = req->max_body_len,
+                .request_target = req->path,
+                .max_uri_len = req->max_uri_len,
+            };
+            nssf_subscription_patch_response_t hres = {0};
+            nssf_subscription_patch_handle(&hreq, &deps, &hres);
+            out->status = hres.status;
+            out->content_type = hres.content_type;
+            out->body = hres.body;   /* ownership transferred. */
+            free(sub_id_z);
+            return out->status;
+        }
+
+        free(sub_id_z);
+        return emit_problem(out,
+                            nf_problem_details_make_405(NULL, req->path),
+                            405);
     }
 
     /* {PUT,PATCH,DELETE} /nssai-availability/{nfId}. */
@@ -505,9 +634,14 @@ static int submit_response(nghttp2_session *session, nssf_conn_t *conn,
     snprintf(status_str, sizeof(status_str), "%d", rres.status);
     const char *ct = rres.content_type ? rres.content_type : "application/json";
 
-    /* OPTIONS success answers with an Allow header (rres.allow non-empty) and no
-     * content-type (empty body); every other response carries content-type. */
+    /*
+     * OPTIONS success answers with an Allow header (rres.allow non-empty) and no
+     * content-type (empty body); the subscription Post 201 answers with a Location
+     * header and no content-type (empty body); every other response carries
+     * content-type. allow / location are mutually exclusive across the routes.
+     */
     bool has_allow = (rres.allow[0] != '\0');
+    bool has_location = (rres.location[0] != '\0');
     nghttp2_nv hdrs[3];
     size_t nhdrs = 0;
     hdrs[nhdrs++] = (nghttp2_nv){ (uint8_t *)":status", (uint8_t *)status_str, 7,
@@ -515,6 +649,9 @@ static int submit_response(nghttp2_session *session, nssf_conn_t *conn,
     if (has_allow) {
         hdrs[nhdrs++] = (nghttp2_nv){ (uint8_t *)"allow", (uint8_t *)rres.allow, 5,
                                       strlen(rres.allow), NGHTTP2_NV_FLAG_NONE };
+    } else if (has_location) {
+        hdrs[nhdrs++] = (nghttp2_nv){ (uint8_t *)"location", (uint8_t *)rres.location, 8,
+                                      strlen(rres.location), NGHTTP2_NV_FLAG_NONE };
     } else {
         hdrs[nhdrs++] = (nghttp2_nv){ (uint8_t *)"content-type", (uint8_t *)ct, 12,
                                       strlen(ct), NGHTTP2_NV_FLAG_NONE };

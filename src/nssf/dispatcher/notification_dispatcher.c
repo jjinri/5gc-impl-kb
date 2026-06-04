@@ -179,6 +179,16 @@ static bool callback_url_allowed(const char *url, bool allow_insecure_loopback)
     return has_prefix_ci(url, "https://");
 }
 
+/*
+ * Public reuse entry — the inbound Post handler validates a request callbackUri
+ * with the production posture (no loopback relaxation). Thin pass-through to the
+ * one gate above; no behavior change to the outbound dispatch path.
+ */
+bool nssf_notification_dispatcher_callback_url_allowed(const char *url)
+{
+    return callback_url_allowed(url, /*allow_insecure_loopback=*/false);
+}
+
 /* ──────────────────────────────────────────────────────────────────────────
  * correlation-id sanitization (B2) — header injection guard
  * ────────────────────────────────────────────────────────────────────────── */

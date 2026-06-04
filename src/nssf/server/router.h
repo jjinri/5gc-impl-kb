@@ -14,10 +14,12 @@
  *        PATCH  /nssai-availability/{nfId}   → nssf_nssaiavailability_patch_handle
  *        DELETE /nssai-availability/{nfId}   → nssf_nssaiavailability_delete_handle
  *        OPTIONS /nssai-availability         → nssf_nssaiavailability_options_handle
- *      Future handlers (Subscription) slot into the table without touching the
- *      server I/O code (request-flow.md §module dispatch). An unmatched
- *      method/path answers 404 / 405 here so the server never needs route
- *      knowledge.
+ *        POST   /nssai-availability/subscriptions      → nssf_subscription_post_handle
+ *        DELETE /nssai-availability/subscriptions/{id} → nssf_subscription_unsubscribe_handle
+ *        PATCH  /nssai-availability/subscriptions/{id} → nssf_subscription_patch_handle
+ *      A new handler slots into the table without touching the server I/O code
+ *      (request-flow.md §module dispatch). An unmatched method/path answers
+ *      404 / 405 here so the server never needs route knowledge.
  *
  *   2. The server — the nghttp2/libuv/OpenSSL event-loop transport that decodes
  *      requests into the router and streams responses back. It is kept next to
@@ -36,6 +38,8 @@
 #include "nssaiavailability_options_handler.h"  /* NSSF_NSSAIAVAIL_ALLOW_LEN */
 #include "nsselection_get_handler.h"
 #include "oauth2_jwks.h"
+#include "subscription_post_handler.h"  /* NSSF_SUBSCRIPTION_LOCATION_LEN */
+#include "subscription_store.h"
 #include "tls_context.h"
 
 #ifdef __cplusplus
@@ -71,12 +75,15 @@ typedef struct {
  *
  * `allow` carries the OPTIONS Allow-header value (empty string when the route
  * produces no Allow header); the server emits it as the `Allow` response header.
+ * `location` carries the subscription Post 201 Location-header value (empty
+ * otherwise); the server emits it as the `Location` response header.
  */
 typedef struct {
     int status;
     const char *content_type;   /* static string — not freed. */
     char *body;                 /* heap JSON body, or NULL. */
     char allow[NSSF_NSSAIAVAIL_ALLOW_LEN];  /* Allow header value, or "" (none). */
+    char location[NSSF_SUBSCRIPTION_LOCATION_LEN];  /* Location value, or "". */
 } nssf_router_response_t;
 
 /*
@@ -90,11 +97,15 @@ typedef struct {
  *                        answers 500.
  *   availability_engine — AvailabilityEngine for the NSSAIAvailability routes.
  *                        NULL → those routes answer 500.
+ *   subscription_store  — SubscriptionStore for the Subscription routes
+ *                        (Post/Unsubscribe/SubModifyPatch). NULL → those routes
+ *                        answer 500.
  */
 typedef struct {
     nssf_jwks_cache_t *jwks_cache;
     nssf_selection_engine_t *selection_engine;
     nssf_availability_engine_t *availability_engine;
+    nssf_subscription_store_t *subscription_store;
 } nssf_router_deps_t;
 
 typedef struct nssf_router nssf_router_t;
