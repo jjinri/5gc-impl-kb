@@ -44,6 +44,8 @@ plan_history:
   - '#106 merged — autonomous-runner PR-D NSSF first dry-run evidence + wave1 status sync.'
   - '#110 merged — PR-codegen-nssaiavailability-extension (first fully-autonomous orchestrator slice, ADR-0005 4-condition self-merge gate). multi-spec emit, model 32→50.'
   - '#135 merged — PR-phase2-notification-dispatcher (eyeball slice, f6a4e88). retry_queue + outbound TLS + M4 first consumer. operator+Pane-2 eyeball, rework round 1 (B1 URL gate / B2 correlation sanitize / B3 producer not-ready path). F3 → Phase-4 dispatcher-resilience.'
+  - '#136 merged — plan-amendment (d3d9fba) — #135 status sync + Phase-4 dispatcher-resilience + 2 follow-up slices + G-08 addendum + .gitignore _verification_log.'
+  - '#137 merged — PR-phase3-subscription-store (e1c3528) — phase3 first slice, default self-merge (4-condition PASS). 3-op store + initial-snapshot dispatch (call-driven). tier-1 keyValuePair.c link supplement.'
 
 # ─── 2. PR 시퀀스 ─────────────────────────────────────────────────────
 prs:
@@ -523,7 +525,14 @@ prs:
     depends_on:
       - PR-phase1-wave1-schema-bootstrap
       - PR-phase2-notification-dispatcher
-    status: not_started
+    status: merged
+    merged_pr: 'https://github.com/jjinri/5gc-impl-kb/pull/137'
+    # DEFAULT self-merge (store layer, not eyeball/M4) — 4-condition gate ALL PASS
+    # (verifier 6/6 / reviewer approve / MERGEABLE-CLEAN / up-to-date). tier-1 fix
+    # = generated keyValuePair.c link supplement (PR #92 precedent). initial-snapshot
+    # dispatch call-driven (1 enqueue + 1 dispatch, no polling loop — G-08 deferred
+    # 유지). on_availability_deleted() API 제공하나 main.c fan-out 미배선 (operator
+    # sequencing defer).
     required_checks:
       - phase3_initial_snapshot_dispatch
     estimated_loc: 1200
