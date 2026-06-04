@@ -1,0 +1,173 @@
+schema_version: docx-semantic-analysis-v1
+nf: nssf
+primary_spec: "29.531"
+generated_at: "2026-06-04"
+source:
+  docx: specs/29.531/29531-j60.docx
+  extracted_index: specs/29.531/_extracted/_index.md
+  extracted_sections:
+    - specs/29.531/_extracted/05-services-offered-by-the-nssf.md
+    - specs/29.531/_extracted/06-1-nnssf-nsselection-service-api.md
+    - specs/29.531/_extracted/06-2-nnssf-nssaiavailability-service-api.md
+analysis_scope:
+  included:
+    - TS 29.531 clause 5 service descriptions and service-operation prose
+    - TS 29.531 clauses 6.1 and 6.2 API/security/redirection prose
+    - SHALL/should/if/when conditions that influence NSSF design, tests, sequencing, or operator input
+  excluded:
+    - Annex A OpenAPI body re-analysis beyond current YAML-derived contract
+    - Full 23.501/23.502 procedure semantic expansion
+    - Plan amendment changes; this file records analysis only
+summary:
+  current_harness_gap: >-
+    Existing NSSF readiness artifacts are strong on OpenAPI shapes and code-generation topics, but weak on prose-derived
+    procedure conditions, notification suppression rules, feature-negotiated behavior, and redirect/discovery operator context.
+  design_value: >-
+    Clause 5/6 analysis adds operational semantics around when a request is made, which NF consumes or produces it,
+    which conditional fields are required, and which notification flows must be suppressed or deferred.
+services:
+  - service: Nnssf_NSSelection
+    source_refs:
+      - specs/29.531/_extracted/05-services-offered-by-the-nssf.md:20-28
+      - specs/29.531/_extracted/05-services-offered-by-the-nssf.md:33-153
+      - specs/29.531/_extracted/06-1-nnssf-nsselection-service-api.md:130-138
+    consumers:
+      - AMF
+      - SMF+PGW-C
+      - NWDAF
+      - NSSF in a different PLMN
+    semantic_points:
+      - id: nsselection-procedure-variants
+        summary: >-
+          GET is used across registration, AMF reallocation, EPS/5GS mobility, UE configuration update,
+          SMF selection/PDU establishment, PDN establishment, and NWDAF analytics contexts; each context has different
+          required query fields and response obligations.
+        current_coverage: partial
+        current_artifacts:
+          - dev/nssf/pr-slicing-plan.yaml: phase1 NSSelection handler and phase4 tests exist, but procedure-specific matrix is not first-class.
+        recommended_action: >-
+          Add contract/e2e matrix rows for registration, PDU session, UE configuration update, PDN establishment,
+          NWDAF NSI lookup, and roaming mapping variants.
+      - id: nsselection-discovery-and-home-nssf
+        summary: >-
+          Consumers may find same-PLMN NSSF by local config or NRF discovery; home NSSF may be locally configured or discovered
+          from constructed FQDN.
+        current_coverage: partial
+        current_artifacts:
+          - dev/nssf/open-gaps-and-assumptions.md:G-07 redirect/operator table
+          - dev/nssf/operator-inputs.yaml: NRF and local config inputs exist, but home-NSSF/FQDN policy is not explicit.
+        recommended_action: >-
+          Operator guide should distinguish same-PLMN NSSF URL, NRF discovery URL, home-NSSF URL, and self-constructed FQDN policy.
+      - id: nsselection-conditional-policy
+        summary: >-
+          NSSF behavior changes based on NSSRG restrictions, UDM indication, UE NSAG support, and optional target AMF/NSI/NRF data.
+        current_coverage: partial
+        recommended_action: >-
+          SelectionEngine tests should include conditional cases for NSSRG compatibility, UDM provide-all-subscribed flag,
+          NSAG response inclusion, and optional NRF/NSI fields.
+      - id: nsselection-no-oauth-scopes
+        summary: >-
+          The Nnssf_NSSelection API prose states that no OAuth2 scopes are defined for this API.
+        current_coverage: advisory
+        recommended_action: >-
+          Security docs should avoid inventing Nnssf-specific scopes; any outbound/client token scope should be operator/target-service policy,
+          not a 29.531 Nnssf scope claim.
+      - id: nsselection-redirect-target-header
+        summary: >-
+          307/308 redirection within an NSSF set must identify the new NSSF via 3gpp-Sbi-Target-Nf-Id.
+        current_coverage: partial
+        recommended_action: >-
+          Contract/security tests should verify redirect responses include 3gpp-Sbi-Target-Nf-Id when server-side redirect is enabled.
+  - service: Nnssf_NSSAIAvailability
+    source_refs:
+      - specs/29.531/_extracted/05-services-offered-by-the-nssf.md:154-265
+      - specs/29.531/_extracted/06-2-nnssf-nssaiavailability-service-api.md:25-39
+      - specs/29.531/_extracted/06-2-nnssf-nssaiavailability-service-api.md:136-149
+      - specs/29.531/_extracted/06-2-nnssf-nssaiavailability-service-api.md:211-219
+    consumers:
+      - AMF
+      - V-NSSF
+    semantic_points:
+      - id: availability-update-empty-authorized-result
+        summary: >-
+          PUT/PATCH returns 204 if authorized availability is empty after update; otherwise 200 with authorized availability.
+          Per-TA AuthorizedNssaiAvailabilityData is omitted when no supported S-NSSAIs are authorized for that TA.
+        current_coverage: partial
+        recommended_action: >-
+          AvailabilityEngine/handler tests should explicitly cover 204-empty vs 200-present and per-TA omission.
+      - id: subscription-event-specific-required-fields
+        summary: >-
+          Subscription request body requirements depend on event type: Network Slice Replacement, Network Slice Instance Replacement,
+          NSSAI validity, and NSSAI availability changes are not equivalent.
+        current_coverage: partial
+        recommended_action: >-
+          SubscriptionStore/handler validation should reject event-specific missing fields instead of only generic callbackUri/event presence.
+      - id: subscription-expiry-operator-policy
+        summary: >-
+          NSSF may determine expiry based on operator policy; if no expiry is returned, consumer treats subscription as indefinite.
+          NSSF should avoid assigning the same expiry to many subscriptions to prevent mass re-create storms.
+        current_coverage: partial
+        recommended_action: >-
+          Operator guide/config should document default expiry, optional indefinite behavior, and jitter/spread policy.
+      - id: subscription-modify-event-immutable
+        summary: >-
+          PATCH for an existing subscription must not change the event IE; taiList may be empty only if both sides support ONSSAI.
+        current_coverage: likely_missing
+        recommended_action: >-
+          Add SubModifyPatch tests: event mutation rejected; empty taiList accepted only under ONSSAI feature flag.
+      - id: notify-originator-suppression
+        summary: >-
+          If a notification is triggered by an AMF updating supported S-NSSAIs per TA via Update, NSSF must not send the notification
+          to that same AMF.
+        current_coverage: implemented
+        closure_pr: "#142"
+        closure_commit: e4beb87
+        implementation_notes: >-
+          PR-phase3-fanout-integration now carries subscriber amf_id/amf_set_id separately from the filter and suppresses enqueue
+          when subscriber amf_id exactly matches the originating event nf_id; suppression is enqueue-skip only, so DELETE tombstone cleanup remains match-based.
+        recommended_action: >-
+          Closed by #142. Preserve as DOCX-derived evidence and keep future Phase4 tests from regressing exact amf_id suppression semantics.
+      - id: notify-feature-conditional-payload
+        summary: >-
+          Notification payload differs by event and feature support: EANAN permits empty authorizedNssaiAvailabilityData for all TAs,
+          NSIUN handles unavailable NSI notifications, NSRP handles replacement plus alternative S-NSSAI.
+        current_coverage: partial
+        recommended_action: >-
+          Phase4 contract/e2e tests should include feature-gated notification payload cases; Phase3 may keep unsupported features explicit.
+      - id: availability-no-oauth-scopes
+        summary: >-
+          The Nnssf_NSSAIAvailability API prose states that no OAuth2 scopes are defined for this API.
+        current_coverage: advisory
+        recommended_action: >-
+          Do not claim 29.531-defined scopes for availability APIs. Keep OAuth2 scope values as operator/NRF policy if used.
+      - id: availability-redirect-target-header
+        summary: >-
+          307/308 redirection within an NSSF set must identify the new NSSF via 3gpp-Sbi-Target-Nf-Id.
+        current_coverage: partial
+        recommended_action: >-
+          Server-side redirect capability should be either explicitly unsupported/deferred or tested for 307/308 header correctness.
+operator_inputs_suggested:
+  - id: nssf_service_base_urls
+    reason: Same-PLMN local config, NRF discovery, and home-NSSF/FQDN paths are distinct deployment choices.
+  - id: selection_policy_tables
+    reason: Selection behavior depends on PLMN/TAI/S-NSSAI, NSSRG restrictions, NSAG support, UDM flag, and optional target AMF/NRF/NSI outputs.
+  - id: subscription_expiry_policy
+    reason: Spec allows NSSF-determined expiry, indefinite subscriptions, and recommends avoiding synchronized expiry storms.
+  - id: feature_flags
+    reason: ONSSAI, EANAN, NSIUN, NSRP, SATAS and NSAG behavior alters validation and notification payloads.
+  - id: redirect_policy
+    reason: 307/308 redirects require 3gpp-Sbi-Target-Nf-Id and NSSF set semantics.
+recommended_next_actions:
+  immediate_phase3:
+    - DOCX-GAP-001 notify-originator-suppression closed by #142 (e4beb87); preserve exact amf_id suppression evidence.
+    - Ensure future fanout changes keep real subscription UUID + callbackUri and origin NF/requester context semantics intact.
+  phase3_to_phase4_gate:
+    - After Phase 3 runtime stabilization completes, run DOCX Harness Phase 2 before entering Phase 4.
+    - Convert one-off DOCX prose analysis into a repeatable harness step with scripted candidate extraction, fixed schemas, validation, and gap-to-plan linkage.
+    - Assess DOCX-derived gaps against Phase 1-3 artifacts and create focused backfill PRs before Phase 4 contract/e2e/security matrix expansion.
+  phase4_tests:
+    - Expand contract/e2e matrix with procedure-specific NSSelection variants and feature-gated notification payloads.
+    - Add redirect 307/308 header evidence if redirect support remains in scope.
+  docs_plan:
+    - Convert this analysis into a plan amendment only after current phase3 PR completes to avoid branch conflict.
+    - Add operator guide sections for discovery URLs, feature flags, subscription expiry/jitter, and redirect policy.
