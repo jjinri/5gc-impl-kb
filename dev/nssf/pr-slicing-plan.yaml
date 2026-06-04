@@ -50,6 +50,8 @@ plan_history:
   - 'sequencing amendment 2026-06-04 (phase3-first) — new PR-phase3-fanout-integration slice + all deferred backlog (oauth2-resilience/config-hardening/dispatcher follow-ups x3) gated behind fan-out anchor → picker next = subscription-handlers (not oauth2-resilience). reliability 제약: oauth2-resilience MUST close before Phase4/e2e or dispatcher worker loop.'
   - '#139 merged (84fd43d) — sequencing amendment (phase3-first gate + fan-out slice + round-2 depends_on-enforced reliability gate: phase4/dispatcher-resilience depends_on oauth2-resilience+config-hardening).'
   - '#140 merged (13f3af0) — PR-phase3-subscription-handlers (default self-merge, 4-condition PASS). 3 handlers + route wiring + dispatcher URL-policy export reuse. initial-snapshot logic delivered+tested, production seam-install deferred (live outbound = fanout-integration).'
+  - '#141 merged (98ec51e) — plan-amendment status-sync — PR-phase3-subscription-handlers → merged.'
+  - '#142 merged (e4beb87) — PR-phase3-fanout-integration (EYEBALL slice, operator+Pane-2 merge-ok). FIRST LIVE OUTBOUND — engine change-event → subscription match → dispatcher enqueue real UUID+callbackUri + main.c publish-seam wiring. call-driven single-shot (no loop). Round-2 rework closed DOCX-GAP-001 (self-notification echo to originating AMF suppressed via dedicated amf_id/amf_set_id columns; suppress=enqueue-skip, DELETE tombstone match-based retained; amfSetId-only=no-suppress). 4-lane all green + reviewer gap001_closed=true + verifier 5/5. Un-gates deferred backlog (oauth2-resilience/config-hardening) + phase4 (contract/security/e2e) + dispatcher-resilience(depends_on oauth2-resilience+config-hardening).'
 
 # ─── 2. PR 시퀀스 ─────────────────────────────────────────────────────
 prs:
@@ -586,7 +588,7 @@ prs:
       - tests/nssf/integration/test_fanout_integration.c
     depends_on:
       - PR-phase3-subscription-handlers
-    status: not_started
+    status: merged
     required_checks: []
     estimated_loc: 350
     notes: |
