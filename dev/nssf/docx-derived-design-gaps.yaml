@@ -1,0 +1,129 @@
+schema_version: docx-derived-design-gaps-v1
+nf: nssf
+generated_at: "2026-06-04"
+source_analysis: design/nssf/_docx_semantic_analysis.yaml
+status: analysis_only
+note: >-
+  This file records DOCX-derived design gaps. It does not amend pr-slicing-plan.yaml or engineering decisions.
+  Apply through a later plan-amendment PR after phase3 implementation work is stable.
+gaps:
+  - id: DOCX-GAP-001
+    title: Fan-out must suppress notification to the AMF that triggered the availability update
+    severity: important
+    source_refs:
+      - specs/29.531/_extracted/05-services-offered-by-the-nssf.md:225-251
+    docx_basis: >-
+      Notify is sent by NSSF for NSSAI availability/replacement changes, but if the notification is triggered by the AMF using
+      Update, NSSF shall not notify that same AMF.
+    current_state: >-
+      PR-phase3-fanout-integration says affected subscription match → dispatcher enqueue, but current plan text does not explicitly
+      require originator suppression.
+    recommended_fix: >-
+      Add fanout acceptance criteria: pass origin nfId/requester context from availability update into subscription matching and skip enqueue
+      where subscription owner/callback belongs to the triggering AMF.
+    target_slice: PR-phase3-fanout-integration
+  - id: DOCX-GAP-002
+    title: Subscription PATCH must not change event IE; empty taiList is ONSSAI-gated
+    severity: important
+    source_refs:
+      - specs/29.531/_extracted/05-services-offered-by-the-nssf.md:208-217
+    docx_basis: >-
+      Subscription modification uses PATCH but the consumer shall not change the event IE; taiList may be empty only when consumer and NSSF
+      support ONSSAI.
+    current_state: >-
+      Subscription-handlers scope covers SubModifyPatch, but this prose-derived invariant is not first-class in the plan summary.
+    recommended_fix: >-
+      Add unit/integration tests for event mutation reject and ONSSAI-gated empty taiList behavior. If #140 already merged without it,
+      add a phase4 contract/security follow-up or small hardening PR.
+    target_slice: PR-phase4-contract-tests
+  - id: DOCX-GAP-003
+    title: Subscription expiry policy needs jitter/spread semantics, not just default TTL
+    severity: advisory
+    source_refs:
+      - specs/29.531/_extracted/05-services-offered-by-the-nssf.md:201-207
+    docx_basis: >-
+      NSSF may choose expiry based on operator policy; if omitted, subscription is indefinite; NSSF should avoid returning the same expiry
+      for many subscriptions to avoid synchronized re-creation.
+    current_state: >-
+      open-gaps has default expiry 24h, but jitter/spread/indefinite behavior is not explicit.
+    recommended_fix: >-
+      Add operator-guide config for default_expiry, allow_indefinite, and expiry_jitter_seconds. Add tests in subscription or phase4 matrix.
+    target_slice: PR-phase5-operator-configuration-guide
+  - id: DOCX-GAP-004
+    title: NSSelection needs procedure-specific test matrix beyond one generic GET path
+    severity: important
+    source_refs:
+      - specs/29.531/_extracted/05-services-offered-by-the-nssf.md:33-153
+    docx_basis: >-
+      NSSelection GET covers registration, PDU session establishment, UE configuration update, PDN establishment, NWDAF slice info,
+      roaming and indirect network sharing; each variant has distinct required query fields and response fields.
+    current_state: >-
+      The plan has NSSelection handler and Phase4 tests, but procedure variants are not visible as a DOCX-derived coverage matrix.
+    recommended_fix: >-
+      Add phase4 contract/e2e rows for each procedure variant and mark unsupported variants with explicit operator/deferred policy.
+    target_slice: PR-phase4-contract-tests
+  - id: DOCX-GAP-005
+    title: SelectionEngine conditional behavior should cover NSSRG, UDM provide-all flag, and NSAG support
+    severity: important
+    source_refs:
+      - specs/29.531/_extracted/05-services-offered-by-the-nssf.md:89-91
+      - specs/29.531/_extracted/05-services-offered-by-the-nssf.md:126-128
+    docx_basis: >-
+      Response contents depend on subscribed NSSRG list, UE support for simultaneous registration restrictions, UDM indication, and NSAG support.
+    current_state: >-
+      These conditions are not prominent in engineering/dev operator inputs or phase4 acceptance criteria.
+    recommended_fix: >-
+      Add SelectionEngine test cases or explicit unsupported/deferred policy for NSSRG compatibility, UDM flag, and NSAG info inclusion.
+    target_slice: PR-phase4-e2e-tests
+  - id: DOCX-GAP-006
+    title: NSSF discovery/home-NSSF/FQDN operator policy should be separated from OAuth2/NRF token config
+    severity: advisory
+    source_refs:
+      - specs/29.531/_extracted/05-services-offered-by-the-nssf.md:28
+    docx_basis: >-
+      Same-PLMN NSSF may be local-config or NRF-discovered; home NSSF may be locally configured in visited NSSF or discovered from a
+      self-constructed FQDN.
+    current_state: >-
+      Operator inputs include NRF/JWKS/token and generic redirect assumptions, but not a clean split for NSSF discovery and home-NSSF policy.
+    recommended_fix: >-
+      Operator guide should include same_plmn_nssf_url, nrf_discovery_url, home_nssf_url, and home_nssf_fqdn_policy fields or explicit exclusions.
+    target_slice: PR-phase5-operator-configuration-guide
+  - id: DOCX-GAP-007
+    title: 307/308 server-side redirect needs 3gpp-Sbi-Target-Nf-Id evidence or explicit unsupported status
+    severity: advisory
+    source_refs:
+      - specs/29.531/_extracted/06-1-nnssf-nsselection-service-api.md:135-138
+      - specs/29.531/_extracted/06-2-nnssf-nssaiavailability-service-api.md:216-219
+    docx_basis: >-
+      NSSF-set redirect via 307/308 must include the identity of the new NSSF in 3gpp-Sbi-Target-Nf-Id.
+    current_state: >-
+      M4 outbound redirect no-follow is covered, but inbound/server redirect behavior is a separate NSSF API concern.
+    recommended_fix: >-
+      Either declare server-side redirect unsupported/deferred in operator guide, or add tests proving 307/308 responses include the target NF header.
+    target_slice: PR-phase4-contract-tests
+  - id: DOCX-GAP-008
+    title: Feature-gated notification payloads need explicit coverage or unsupported policy
+    severity: advisory
+    source_refs:
+      - specs/29.531/_extracted/05-services-offered-by-the-nssf.md:231-249
+      - specs/29.531/_extracted/06-2-nnssf-nssaiavailability-service-api.md:204-209
+    docx_basis: >-
+      EANAN, NSIUN, NSRP, ONSSAI, SATAS and NSAG alter notification payloads and subscription validation.
+    current_state: >-
+      Feature negotiation is documented generally, but individual feature behavior is not a visible implementation/test matrix.
+    recommended_fix: >-
+      Add feature flag matrix to operator guide and phase4 tests; keep unsupported feature behavior fail-closed or explicit no-support response.
+    target_slice: PR-phase4-e2e-tests
+  - id: DOCX-GAP-009
+    title: 29.531 Nnssf APIs define no OAuth2 scopes
+    severity: advisory
+    source_refs:
+      - specs/29.531/_extracted/06-1-nnssf-nsselection-service-api.md:130-134
+      - specs/29.531/_extracted/06-2-nnssf-nssaiavailability-service-api.md:211-215
+    docx_basis: >-
+      Both Nnssf APIs state that no OAuth2 scopes are defined for the API.
+    current_state: >-
+      Outbound OAuth2 work uses NRF/operator policy scopes. This is acceptable if not represented as 29.531-defined Nnssf scopes.
+    recommended_fix: >-
+      Add doc note: Nnssf API scopes are not spec-defined; configured outbound scopes are deployment/NRF policy values.
+    target_slice: PR-phase5-operator-configuration-guide
