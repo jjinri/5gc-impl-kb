@@ -67,6 +67,13 @@ assumption: 5
 - **이미 G-08 가 커버**. exponential backoff jitter / max-attempts / dead-letter table 의 Phase-4 튜닝. #135 는 Phase 1~3 minimum (동기 dispatch + 한 차례 재시도) 만 구현.
 - **신규 (추가)**. fail-closed `NSSF_DISPATCH_FORBIDDEN` (oauth2 token 획득 실패 등) 시 row 를 `requeue NOW()` 로 재무장하므로, caller 가 dispatch 를 즉시 재호출하면 **hot-loop** (busy retry) 위험이 있다. #135 는 이를 *caller-contract* 로 막는다 — `notification_dispatcher.h` 의 `dispatch_pending` doc 에 **"caller MUST NOT tight-loop on FORBIDDEN/retriable status"** 명시 + dispatch 는 call-driven (호출당 최대 1 row, 내부 polling loop 없음).
 - **blocker 승격 조건**. Phase-4 resilience slice (`PR-phase4-dispatcher-resilience`, G-08 + F3 fold) 가 dispatcher 에 polling/worker loop 를 도입하면, 위 hot-loop 가 caller-contract 만으로 막히지 않으므로 **G-08 은 그 시점에 deferred → blocker 로 승격** (backoff/dead-letter 가 loop 의 전제조건이 됨). loop 없이 call-driven 유지 시 deferred 유지.
+
+### Reliability 제약 (2026-06-04, sequencing amendment phase3-first)
+
+`PR-phase3-fanout-integration` 가 engine→store→dispatcher publish-seam 을 main.c 에 배선하면 (B3 not-ready path 대체) live subscription 의 outbound 가 활성화된다. 이 시점부터 outbound OAuth2 token 의 transient failure (5xx/timeout/429) 가 **single-shot** 으로 처리된다 (#135 G-08 minimum — 한 차례 재시도 후 stop). 현재는 polling loop 없음 + fail-closed/queue 보존이라 **security blocker 아님** (token 없으면 outbound 금지, row 유실 없음).
+
+- **명문화된 제약**. `PR-phase2-oauth2-resilience` (+ `PR-phase2-config-hardening`) 는 **Phase-4/e2e 진입 전 또는 dispatcher worker/polling loop 도입 전 반드시 close** 해야 한다 (F3/G-08 연결). 그 전까지 fan-out 은 call-driven single-shot 으로 동작한다.
+- **plan 강제**. 위 backlog 는 `PR-phase3-fanout-integration` depends_on gate 로 phase3 integration 뒤에만 picker surface 되며, dispatcher worker loop 슬라이스(`PR-phase4-dispatcher-resilience`)도 동일 anchor 뒤다 — operator 가 Phase-4 진입 전 resilience close 를 enforce 한다.
 <!-- USER:summary-body:end -->
 
 ## References

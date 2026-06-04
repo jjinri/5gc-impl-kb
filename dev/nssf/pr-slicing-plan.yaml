@@ -46,6 +46,8 @@ plan_history:
   - '#135 merged — PR-phase2-notification-dispatcher (eyeball slice, f6a4e88). retry_queue + outbound TLS + M4 first consumer. operator+Pane-2 eyeball, rework round 1 (B1 URL gate / B2 correlation sanitize / B3 producer not-ready path). F3 → Phase-4 dispatcher-resilience.'
   - '#136 merged — plan-amendment (d3d9fba) — #135 status sync + Phase-4 dispatcher-resilience + 2 follow-up slices + G-08 addendum + .gitignore _verification_log.'
   - '#137 merged — PR-phase3-subscription-store (e1c3528) — phase3 first slice, default self-merge (4-condition PASS). 3-op store + initial-snapshot dispatch (call-driven). tier-1 keyValuePair.c link supplement.'
+  - '#138 merged — plan-amendment status-sync (1424557) — PR-phase3-subscription-store → merged.'
+  - 'sequencing amendment 2026-06-04 (phase3-first) — new PR-phase3-fanout-integration slice + all deferred backlog (oauth2-resilience/config-hardening/dispatcher follow-ups x3) gated behind fan-out anchor → picker next = subscription-handlers (not oauth2-resilience). reliability 제약: oauth2-resilience MUST close before Phase4/e2e or dispatcher worker loop.'
 
 # ─── 2. PR 시퀀스 ─────────────────────────────────────────────────────
 prs:
@@ -553,6 +555,43 @@ prs:
       - phase3_integration_unsubscribe
       - phase3_integration_submodifypatch
     estimated_loc: 1400
+    notes: |
+      scope boundary (sequencing amendment 2026-06-04, operator+Pane-2 codex):
+      CRUD (Post/Unsubscribe/SubModifyPatch) + Location header + callbackUri
+      validation (dispatcher URL policy 재사용 — https-only + userinfo/fragment
+      reject) + initial-snapshot dispatch (call-driven) + subscription route
+      wiring 까지만. change-event→subscription match→dispatcher enqueue + global
+      main.c publish-seam wiring 은 PR-phase3-fanout-integration (분리 slice).
+
+  - id: PR-phase3-fanout-integration
+    title: 'feat(nssf): fan-out integration — availability change-event → subscription match → dispatcher enqueue + main.c publish-seam wiring'
+    phase: phase3
+    work_items:
+      # 기존 codegen WI 재사용 (B3 deferred fan-out = dispatcher 책임). first-class
+      # WI-fanout-integration 승격 = readiness-config(design/nssf/) regen follow-up,
+      # 본 housekeeping scope(dev/nssf/**) 밖.
+      - WI-notification-dispatcher
+    scope_files:
+      - src/nssf/main.c
+      - src/nssf/store/subscription_store.{h,c}
+      - tests/nssf/integration/test_fanout_integration.c
+    depends_on:
+      - PR-phase3-subscription-handlers
+    status: not_started
+    required_checks: []
+    estimated_loc: 350
+    notes: |
+      B3 deferred fan-out 닫음. availability-engine change-event seam
+      (nssf_availability_change_publish_fn) → affected subscription match
+      (subscription_store) → dispatcher retry_queue enqueue (실제 subscription
+      UUID + callbackUri) + main.c 에서 engine→store→dispatcher publish-seam wiring
+      (현재 #135 B3 not-ready/미배선 path 대체). 기존 dispatcher/store seam 소비,
+      새 outbound 로직 없음.
+      ⚠ worker/polling loop 도입 금지 — call-driven 유지 (change-event 당
+      enqueue+dispatch 1회). loop 도입 시 open-gaps G-08 fail-closed FORBIDDEN
+      hot-loop 가 blocker 로 승격 → 그 경우 PR-phase2-oauth2-resilience (M4
+      backoff/dead-letter) 가 선행조건. 본 slice 는 loop 없이 닫고, loop 필요 시
+      resilience-first 로 별도 진행.
 
   - id: PR-phase4-contract-tests
     title: 'test(nssf): WI-contract-tests — 8 op × 18 cause matrix'
@@ -729,10 +768,14 @@ prs:
       # dispatcher consumer 후. picker 가 route-registration/dispatcher 보다
       # 먼저 새던 M4-edge 재현 차단.
       - PR-phase2-notification-dispatcher
+      # sequencing gate (amendment 2026-06-04, phase3-first): phase3 integration
+      # 완결(fan-out) 후로 정렬. topo-sort 가 phase3 subscription-handlers 보다
+      # 먼저 본 backlog 를 surface 하던 것 차단.
+      - PR-phase3-fanout-integration
     status: not_started
     required_checks: []
     estimated_loc: 400
-    notes: 'M4 #128 accept-defer 한 decision #11 완성 (single-shot fail-closed → bounded retry/backoff + 400/401/403/invalid_scope dead-letter). fail-closed 불변 유지.'
+    notes: 'M4 #128 accept-defer 한 decision #11 완성 (single-shot fail-closed → bounded retry/backoff + 400/401/403/invalid_scope dead-letter). fail-closed 불변 유지. RELIABILITY 제약 (amendment 2026-06-04): Phase-4/e2e 전 또는 dispatcher worker/polling loop 도입 전 본 slice 반드시 close (F3/G-08 — live subscription outbound 활성 시 token transient failure single-shot 위험).'
 
   - id: PR-phase2-config-hardening
     title: 'feat(nssf): WI-config-hardening — secret_ref env:/file: resolver seam'
@@ -747,10 +790,13 @@ prs:
       # gating fix (amendment 2026-06-02, PR-C): secret_ref resolver 급하지 않음
       # — dispatcher 뒤로. (M4-edge gating 재현 차단.)
       - PR-phase2-notification-dispatcher
+      # sequencing gate (amendment 2026-06-04, phase3-first): phase3 integration
+      # (fan-out) 후로 정렬.
+      - PR-phase3-fanout-integration
     status: not_started
     required_checks: []
     estimated_loc: 300
-    notes: 'secret_ref(env:NAME/file:/path) resolver code (M4 advisory A1). mtls default 라 low-pri. 문서 의미 = operator-config-guide.'
+    notes: 'secret_ref(env:NAME/file:/path) resolver code (M4 advisory A1). mtls default 라 low-pri. 문서 의미 = operator-config-guide. RELIABILITY 제약 (amendment 2026-06-04): oauth2-resilience 와 함께 Phase-4/e2e 전 또는 dispatcher worker loop 전 close.'
 
   - id: PR-phase5-operator-configuration-guide
     title: 'docs(nssf): WI-operator-config-guide — operator configuration guide'
@@ -787,6 +833,10 @@ prs:
       - tests/nssf/**/test_notification_dispatcher_*.c
     depends_on:
       - PR-phase2-notification-dispatcher
+      # sequencing gate (amendment 2026-06-04, phase3-first): phase3 integration
+      # (fan-out) 후로 정렬. ⚠ 본 slice 가 worker loop 도입 시 RELIABILITY 제약 —
+      # PR-phase2-oauth2-resilience 선행 close 필수 (F3/G-08).
+      - PR-phase3-fanout-integration
     status: deferred
     required_checks: []
     estimated_loc: 500
@@ -810,6 +860,8 @@ prs:
       - tests/nssf/**/test_notification_dispatcher_*.c
     depends_on:
       - PR-phase2-notification-dispatcher
+      # sequencing gate (amendment 2026-06-04, phase3-first): phase3 integration 후로 정렬.
+      - PR-phase3-fanout-integration
     status: deferred
     required_checks: []
     estimated_loc: 150
@@ -828,6 +880,8 @@ prs:
       - tests/nssf/**/test_notification_dispatcher_*.c
     depends_on:
       - PR-phase2-notification-dispatcher
+      # sequencing gate (amendment 2026-06-04, phase3-first): phase3 integration 후로 정렬.
+      - PR-phase3-fanout-integration
     status: deferred
     required_checks: []
     estimated_loc: 150
