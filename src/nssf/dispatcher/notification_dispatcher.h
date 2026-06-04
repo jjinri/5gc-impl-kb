@@ -15,17 +15,32 @@
  *      nssf_availability_change_publish_fn seam
  *      (src/nssf/engine/availability_engine.h). The AvailabilityEngine invokes it
  *      after a committed mutation; it enqueues one retry_queue row. This is the
- *      "Put/Patch 후 retry_queue 에 row enqueue" acceptance.
+ *      "Put/Patch 후 retry_queue 에 row enqueue" acceptance. WHY it does NOT
+ *      fabricate a subscription_id: real fan-out (changed nfId/tai → affected
+ *      subscriptions + their callbackUri) is the Phase-3 SubscriptionStore's job.
+ *      A retry_queue row is only enqueued when a real subscription UUID AND a
+ *      callbackUri are both present (the in-memory test backend supplies them; the
+ *      production producer-to-PG wiring stays behind a not-ready path until
+ *      Phase 3 — see change_publish()). The slice deliverable is the
+ *      enqueue-on-commit SEAM, not the fan-out.
  *   2. CONSUMER — dispatch_pending() dequeues a row (FOR UPDATE SKIP LOCKED on
  *      the libpq backend), POSTs once to the callback URI, and on a retriable
  *      failure (5xx / timeout / connection / TLS handshake) retries exactly once
  *      before stopping (4xx → no retry).
  *
  * Security baseline (ADR-0004 Layer A) on the outbound POST:
+ *   - The callback URI is validated by a SHARED url policy gate BEFORE any token
+ *     is attached and BEFORE the POST is emitted: https-only (production),
+ *     userinfo('@') / fragment('#') / malformed rejected. WHY before-attach: this
+ *     closes the window where an OAuth2 bearer could be attached to a plaintext or
+ *     attacker-shifted URL — libcurl's own protocol guard alone runs too late.
  *   - TLS peer + hostname verification MANDATORY, min TLS 1.2, redirects never
- *     followed — delegated to libcurl/OpenSSL, never disabled.
- *   - https-only for the production callback; a test-only loopback ctor mirrors
- *     oauth2_outbound's create/create_insecure split for http://127.0.0.1 mocks.
+ *     followed — delegated to libcurl/OpenSSL, never disabled. The libcurl
+ *     transport additionally caps the allowed protocol to HTTPS as belt-and-
+ *     suspenders.
+ *   - https-only for the production callback; a test-only loopback dispatcher
+ *     mirrors oauth2_outbound's create/create_insecure split for http://127.0.0.1
+ *     mocks (nssf_notification_dispatcher_new vs _new_insecure).
  *   - OAuth2 bearer attach via nssf_oauth2_outbound_attach_bearer (first M4
  *     consumer); fail-closed — NSSF_OAUTH2_ABORT FORBIDS the POST.
  *
@@ -85,6 +100,16 @@ typedef struct nssf_retry_store nssf_retry_store_t;
  * Construct the libpq-backed retry store. `conninfo` is an operator-config libpq
  * connection string (never hardcoded). Returns NULL on connect failure; writes a
  * NUL-terminated diagnostic into errbuf when errbuf != NULL && errlen > 0.
+ *
+ * CONCURRENCY CONTRACT (F4) — the PG store is SINGLE-WORKER / NOT thread-safe.
+ * Ownership unit = ONE store (and its one PGconn) per worker. dequeue() opens a
+ * transaction on that single connection and holds the row under FOR UPDATE SKIP
+ * LOCKED until complete()/requeue() commits; a second concurrent caller on the
+ * SAME store would corrupt that in-flight transaction. Cross-WORKER concurrency
+ * is safe (SKIP LOCKED prevents double-send across separate conns); intra-store
+ * concurrency is the caller's contract to forbid — give each worker its own
+ * store/conn. The PG backend therefore takes NO internal mutex (unlike the
+ * in-memory test seam) and guards the contract with a debug owner-check.
  */
 nssf_retry_store_t *nssf_retry_store_new_pg(const char *conninfo,
                                             char *errbuf,
@@ -148,13 +173,30 @@ typedef int (*nssf_notification_transport_fn)(
     void *transport_ctx);
 
 /*
- * Construct a dispatcher.
+ * Construct a PRODUCTION dispatcher.
  *   store — borrowed retry store (not owned, not freed by the dispatcher).
  *   oauth — borrowed outbound-OAuth2 handle for bearer attach (may be NULL → no
  *           bearer is ever attached, the dev no-attach path).
  * Returns NULL on OOM or when store is NULL.
+ *
+ * The callback URI is enforced https-only by the url policy gate: a row whose
+ * callbackUri is not https:// (or is malformed / carries userinfo / fragment) is
+ * dropped terminally and NO token is attached. Use _new_insecure for loopback
+ * mock targets in tests.
  */
 nssf_notification_dispatcher_t *nssf_notification_dispatcher_new(
+    nssf_retry_store_t *store,
+    nssf_oauth2_outbound_t *oauth);
+
+/*
+ * TEST/DEV ONLY. Mirrors nssf_oauth2_outbound_create_insecure: relaxes the
+ * https-only callback gate so integration tests can POST to an http://127.0.0.1
+ * (or [::1] / localhost) loopback mock AMF callback. A non-loopback http target
+ * is still rejected, and userinfo('@') / fragment('#') / malformed URLs are
+ * rejected on BOTH ctors. MUST NOT be used in production. Same ownership /
+ * NULL-on-failure contract as _new.
+ */
+nssf_notification_dispatcher_t *nssf_notification_dispatcher_new_insecure(
     nssf_retry_store_t *store,
     nssf_oauth2_outbound_t *oauth);
 
@@ -196,9 +238,21 @@ typedef enum {
  * (Phase 1~3 minimum, G-08) and then stops — no dead-letter table. A 4xx is
  * terminal (no retry). Returns the outcome classification.
  *
+ * This entry is CALL-DRIVEN — it dispatches AT MOST one row per call and does
+ * NOT spin an internal polling/worker loop. The caller drives the cadence.
+ *
+ * CALLER CONTRACT (F3, deferred backoff) — when this returns
+ * NSSF_DISPATCH_FORBIDDEN (fail-closed OAuth2 ABORT, row re-armed) or any
+ * retriable outcome, the caller MUST NOT tight-loop calling back immediately.
+ * There is no backoff / dead-letter / hot-loop guard in THIS phase; a follow-up
+ * WI (Phase 4) adds fail-closed backoff + dead-letter. Until then a tight retry
+ * loop on FORBIDDEN/retriable status would hammer the NRF token endpoint / AMF.
+ *
  * `inbound_correlation_id` overrides the row's stored correlation id for this
  * dispatch when non-NULL; otherwise the row's id (or a freshly generated one) is
- * propagated as 3gpp-Sbi-Correlation-Info + W3C traceparent.
+ * propagated as 3gpp-Sbi-Correlation-Info + W3C traceparent. Any correlation id
+ * is sanitized (CR/LF/control/over-length rejected → safe id regenerated) before
+ * it reaches a header — header injection is closed off (B2).
  */
 nssf_dispatch_result_e nssf_notification_dispatcher_dispatch_pending(
     nssf_notification_dispatcher_t *disp,

@@ -79,6 +79,137 @@ static char *dup_or_null(const char *s)
     return s != NULL ? strdup(s) : NULL;
 }
 
+/* ──────────────────────────────────────────────────────────────────────────
+ * outbound URL policy gate (B1) — mirrors oauth2_outbound.c's scheme policy
+ *
+ * Runs BEFORE build_headers / oauth2 bearer attach and BEFORE the POST so a
+ * token is never attached to a plaintext / attacker-shifted / malformed URL.
+ * libcurl's CURLOPT_PROTOCOLS cap is belt-and-suspenders that runs too late to
+ * protect the token attach step.
+ * ────────────────────────────────────────────────────────────────────────── */
+
+static bool has_prefix_ci(const char *s, const char *prefix)
+{
+    for (size_t i = 0; prefix[i] != '\0'; i++) {
+        if (s[i] == '\0' ||
+            tolower((unsigned char)s[i]) != tolower((unsigned char)prefix[i])) {
+            return false;
+        }
+    }
+    return true;
+}
+
+/*
+ * Reject userinfo('@') and fragment('#') anywhere in the URL. A '@' shifts the
+ * real host (credential-in-URL / host confusion) and a '#' is never sent to the
+ * server — both are config/data errors on a callback URI.
+ */
+static bool url_has_userinfo_or_fragment(const char *url)
+{
+    for (const char *p = url; *p != '\0'; p++) {
+        if (*p == '@' || *p == '#') {
+            return true;
+        }
+    }
+    return false;
+}
+
+/* The authority must be non-empty (something between "://" and the path). */
+static bool url_authority_nonempty(const char *url)
+{
+    const char *sep = strstr(url, "://");
+    if (sep == NULL) {
+        return false;
+    }
+    const char *authority = sep + 3;
+    return *authority != '\0' && *authority != '/' && *authority != '?';
+}
+
+/* Loopback gate for the insecure (test-only) dispatcher — mirrors oauth2_outbound. */
+static bool host_is_loopback(const char *url)
+{
+    static const char scheme[] = "http://";
+    if (!has_prefix_ci(url, scheme)) {
+        return false;
+    }
+    const char *authority = url + (sizeof(scheme) - 1);
+    for (const char *p = authority; *p != '\0'; p++) {
+        if (*p == '/' || *p == '?' || *p == '#') {
+            break;
+        }
+        if (*p == '@') {
+            return false;
+        }
+    }
+    static const char *const prefixes[] = {
+        "http://127.0.0.1", "http://[::1]", "http://localhost",
+    };
+    for (size_t i = 0; i < sizeof(prefixes) / sizeof(prefixes[0]); i++) {
+        if (has_prefix_ci(url, prefixes[i])) {
+            char next = url[strlen(prefixes[i])];
+            if (next == '\0' || next == ':' || next == '/') {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+/*
+ * The shared callback-URL policy gate. `allow_insecure_loopback` is set ONLY by
+ * the test-only insecure dispatcher. Returns true when the POST may proceed.
+ * Production: https-only. Both modes reject userinfo / fragment / empty
+ * authority / NULL.
+ */
+static bool callback_url_allowed(const char *url, bool allow_insecure_loopback)
+{
+    if (url == NULL || url[0] == '\0') {
+        return false;
+    }
+    if (url_has_userinfo_or_fragment(url)) {
+        return false;
+    }
+    if (!url_authority_nonempty(url)) {
+        return false;
+    }
+    if (allow_insecure_loopback) {
+        /* test-only: https OR an http loopback host. */
+        return has_prefix_ci(url, "https://") || host_is_loopback(url);
+    }
+    return has_prefix_ci(url, "https://");
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * correlation-id sanitization (B2) — header injection guard
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/* Max correlation id we will propagate verbatim into a header value. */
+#define NSSF_CORRELATION_ID_MAX 128
+
+/*
+ * A correlation id is header-safe iff it is non-empty, within the length cap,
+ * and free of CR/LF and control chars (which would split / inject headers).
+ * Printable ASCII only — the 3gpp-Sbi-Correlation-Info / traceparent values are
+ * trace correlators, not arbitrary text.
+ */
+static bool correlation_id_is_safe(const char *id)
+{
+    if (id == NULL) {
+        return false;
+    }
+    size_t n = 0;
+    for (const char *p = id; *p != '\0'; p++, n++) {
+        unsigned char ch = (unsigned char)*p;
+        if (ch < 0x20 || ch == 0x7f) {
+            return false; /* control char (incl. CR/LF/TAB) — reject. */
+        }
+        if (n + 1 > NSSF_CORRELATION_ID_MAX) {
+            return false; /* over-length. */
+        }
+    }
+    return n > 0;
+}
+
 /*
  * Build the persisted payload envelope. The Phase 1~3 schema has no callback_uri
  * / correlation_id columns, so we wrap the notification body plus its routing /
@@ -124,7 +255,11 @@ static char *envelope_get_string(const cJSON *env, const char *key)
 /*
  * Split a stored envelope back into callback_uri / correlation_id / body. The
  * body is re-serialized when it is a JSON sub-tree, or copied when a plain
- * string. Returns 0 on success (fields owned by the caller), -1 on OOM.
+ * string. Returns 0 on success (fields owned by the caller), -1 on a corrupt /
+ * unparseable envelope OR a MISSING/empty body (F7): the dispatcher MUST never
+ * emit a null-body POST, so a row that cannot yield a non-empty body is reported
+ * as an error and the caller quarantines (terminally drops) it. On -1 all out
+ * fields are freed and zeroed.
  */
 static int envelope_split(const char *envelope_json, char **out_callback,
                           char **out_correlation, char **out_body)
@@ -132,9 +267,12 @@ static int envelope_split(const char *envelope_json, char **out_callback,
     *out_callback = NULL;
     *out_correlation = NULL;
     *out_body = NULL;
+    if (envelope_json == NULL) {
+        return -1;
+    }
     cJSON *env = cJSON_Parse(envelope_json);
     if (env == NULL) {
-        return -1;
+        return -1; /* corrupt/unparseable envelope. */
     }
     *out_callback = envelope_get_string(env, "callbackUri");
     *out_correlation = envelope_get_string(env, "correlationId");
@@ -142,19 +280,66 @@ static int envelope_split(const char *envelope_json, char **out_callback,
     const cJSON *body = cJSON_GetObjectItemCaseSensitive(env, "body");
     if (cJSON_IsString(body) && body->valuestring != NULL) {
         *out_body = strdup(body->valuestring);
-    } else if (body != NULL) {
+    } else if (body != NULL && !cJSON_IsNull(body)) {
         *out_body = cJSON_PrintUnformatted(body);
     }
     cJSON_Delete(env);
+
+    /* A non-empty body is mandatory — never POST a null body (F7). */
+    if (*out_body == NULL || (*out_body)[0] == '\0') {
+        free(*out_callback);
+        free(*out_correlation);
+        free(*out_body);
+        *out_callback = NULL;
+        *out_correlation = NULL;
+        *out_body = NULL;
+        return -1;
+    }
     return 0;
 }
 
 /* ── libpq backend ─────────────────────────────────────────────────────── */
 
+/*
+ * The PG store is SINGLE-WORKER / NOT thread-safe (F4). Ownership unit = one
+ * store + one PGconn per worker. We take NO mutex here (unlike the in-memory
+ * seam) — instead a debug owner-thread guard catches a contract violation (two
+ * threads driving the SAME store) early in dev. WHY a guard not a lock: a lock
+ * would mask the real bug (sharing one conn/transaction across workers) and
+ * still be wrong, since FOR UPDATE SKIP LOCKED on one connection cannot protect
+ * an interleaved second caller's in-flight transaction.
+ */
 typedef struct {
     nssf_retry_store_t base;
     PGconn *conn;
+    pthread_t owner;     /* first thread to touch the store. */
+    bool owner_set;
 } pg_store_t;
+
+/*
+ * Assert single-worker ownership in debug builds. Records the first caller's
+ * thread and aborts if a different thread ever drives the same store. No-op
+ * under NDEBUG (zero release overhead) — the contract is documented in the
+ * header for release callers.
+ */
+static void pg_assert_owner(pg_store_t *self)
+{
+#ifndef NDEBUG
+    pthread_t me = pthread_self();
+    if (!self->owner_set) {
+        self->owner = me;
+        self->owner_set = true;
+    } else if (!pthread_equal(self->owner, me)) {
+        fprintf(stderr,
+                "nssf_retry_store(pg): single-worker contract violated — "
+                "a second thread drove the same store (one store/conn per "
+                "worker; see notification_dispatcher.h F4).\n");
+        abort();
+    }
+#else
+    (void)self;
+#endif
+}
 
 static void copy_err(char *errbuf, size_t errlen, const char *msg)
 {
@@ -185,6 +370,7 @@ static int pg_enqueue(nssf_retry_store_t *s, const char *sub_id,
                       const char *correlation_id)
 {
     pg_store_t *self = (pg_store_t *)s;
+    pg_assert_owner(self);
     char *envelope = envelope_build(callback_uri, payload_json, correlation_id);
     if (envelope == NULL) {
         return -1;
@@ -209,6 +395,7 @@ static int pg_enqueue(nssf_retry_store_t *s, const char *sub_id,
 static int pg_dequeue(nssf_retry_store_t *s, nssf_retry_item_t *out)
 {
     pg_store_t *self = (pg_store_t *)s;
+    pg_assert_owner(self);
     memset(out, 0, sizeof(*out));
 
     if (pg_cmd(self->conn, "BEGIN") != 0) {
@@ -238,13 +425,34 @@ static int pg_dequeue(nssf_retry_store_t *s, nssf_retry_item_t *out)
     out->attempt_count = atoi(PQgetvalue(res, 0, 3));
     PQclear(res);
 
-    if (env == NULL || out->id == NULL || out->subscription_id == NULL ||
-        envelope_split(env, &out->callback_uri, &out->correlation_id,
-                       &out->payload_json) != 0) {
+    /* Transient (OOM) read failure — leave the row, ROLLBACK and retry later. */
+    if (env == NULL || out->id == NULL || out->subscription_id == NULL) {
         free(env);
         nssf_retry_item_clear(out);
         (void)pg_cmd(self->conn, "ROLLBACK");
         return -1;
+    }
+
+    /*
+     * F7 quarantine — a corrupt/unparseable envelope or a missing/empty body can
+     * never produce a deliverable POST. DELETE the poison row inside the open
+     * locked transaction (and COMMIT) rather than ROLLBACK, so it does not loop
+     * forever as a poison row. Report 0 (no usable row this claim).
+     */
+    if (envelope_split(env, &out->callback_uri, &out->correlation_id,
+                       &out->payload_json) != 0) {
+        fprintf(stderr,
+                "nssf_dispatcher: quarantining poison retry_queue row id=%s "
+                "(corrupt envelope or missing body).\n", out->id);
+        const char *params[1] = {out->id};
+        const char *del = "DELETE FROM retry_queue WHERE id = $1::bigint";
+        PGresult *dr = PQexecParams(self->conn, del, 1, NULL, params, NULL, NULL, 0);
+        int del_ok = (PQresultStatus(dr) == PGRES_COMMAND_OK);
+        PQclear(dr);
+        (void)pg_cmd(self->conn, del_ok ? "COMMIT" : "ROLLBACK");
+        free(env);
+        nssf_retry_item_clear(out);
+        return del_ok ? 0 : -1;
     }
     free(env);
     /* Transaction stays OPEN — the row is held under FOR UPDATE until the
@@ -255,6 +463,7 @@ static int pg_dequeue(nssf_retry_store_t *s, nssf_retry_item_t *out)
 static int pg_complete(nssf_retry_store_t *s, const char *id)
 {
     pg_store_t *self = (pg_store_t *)s;
+    pg_assert_owner(self);
     const char *params[1] = {id};
     const char *sql = "DELETE FROM retry_queue WHERE id = $1::bigint";
     PGresult *res = PQexecParams(self->conn, sql, 1, NULL, params, NULL, NULL, 0);
@@ -268,6 +477,7 @@ static int pg_complete(nssf_retry_store_t *s, const char *id)
 static int pg_requeue(nssf_retry_store_t *s, const char *id)
 {
     pg_store_t *self = (pg_store_t *)s;
+    pg_assert_owner(self);
     const char *params[1] = {id};
     /* Phase 1~3: no backoff — re-arm for an immediate next attempt (G-08). */
     const char *sql =
@@ -344,6 +554,8 @@ typedef struct {
     pthread_mutex_t lock;
 } mem_store_t;
 
+static void mem_remove_at(mem_store_t *self, long idx); /* fwd — F7 quarantine. */
+
 static long mem_index_of(mem_store_t *self, long long id)
 {
     for (size_t i = 0; i < self->count; ++i) {
@@ -417,14 +629,28 @@ static int mem_dequeue(nssf_retry_store_t *s, nssf_retry_item_t *out)
     out->id = strdup(idbuf);
     out->subscription_id = dup_or_null(row->subscription_id);
     out->attempt_count = row->attempt_count;
-    int split = (out->id != NULL && out->subscription_id != NULL)
-                    ? envelope_split(row->envelope, &out->callback_uri,
-                                     &out->correlation_id, &out->payload_json)
-                    : -1;
-    if (out->id == NULL || out->subscription_id == NULL || split != 0) {
+
+    /* Transient (OOM) — leave the row claimable, report error and retry later. */
+    if (out->id == NULL || out->subscription_id == NULL) {
         nssf_retry_item_clear(out);
         pthread_mutex_unlock(&self->lock);
         return -1;
+    }
+
+    /*
+     * F7 quarantine — a corrupt envelope / missing body can never be delivered,
+     * so DROP the poison row here rather than leaving it to loop forever. Report
+     * 0 (no usable row this claim).
+     */
+    if (envelope_split(row->envelope, &out->callback_uri, &out->correlation_id,
+                       &out->payload_json) != 0) {
+        fprintf(stderr,
+                "nssf_dispatcher: quarantining poison retry_queue row id=%s "
+                "(corrupt envelope or missing body).\n", out->id);
+        mem_remove_at(self, pick);
+        nssf_retry_item_clear(out);
+        pthread_mutex_unlock(&self->lock);
+        return 0;
     }
     row->claimed = true; /* held until complete()/requeue(). */
     pthread_mutex_unlock(&self->lock);
@@ -557,6 +783,7 @@ struct nssf_notification_dispatcher {
     nssf_oauth2_outbound_t *oauth;  /* borrowed; NULL → never attach a bearer. */
     nssf_notification_transport_fn transport;
     void *transport_ctx;
+    bool allow_insecure_loopback;   /* test-only ctor — relaxes https-only gate. */
 };
 
 /* ── outbound payload from a change event ──────────────────────────────── */
@@ -599,20 +826,28 @@ void nssf_notification_dispatcher_change_publish(
     if (disp == NULL || ev == NULL) {
         return;
     }
-    char *payload = event_to_payload(ev);
-    if (payload == NULL) {
-        return;
-    }
     /*
-     * Phase 1~3 producer: enqueue keyed by the changed nfId. SubscriptionStore
-     * fan-out (resolve nfId/tai → affected subscriptions + their callbackUri) is
-     * a Phase 3 collaborator; until it lands the row carries the nfId as its
-     * subscription key and a NULL callback (the dispatch step then has no target
-     * and treats it as a terminal drop). The required behavior this slice proves
-     * is the enqueue-on-commit seam, not the fan-out.
+     * Phase 1~3 producer — NOT-READY path (B3). The committed change event carries
+     * nfId / tai / after but NOT a subscription UUID nor a callbackUri: resolving
+     * the changed nfId/tai to the AFFECTED subscriptions (and their callbackUri)
+     * is the Phase-3 SubscriptionStore fan-out, which is not wired yet.
+     *
+     * WHY we do NOT enqueue here: writing the nfId into retry_queue.subscription_id
+     * (a real UUID/FK column) is wrong — it fabricates a subscription that does not
+     * exist and produces a poison row with a NULL callback that can never deliver.
+     * A retry_queue row is enqueued ONLY when a real subscription UUID AND a
+     * callbackUri are both present; that path is exercised today via the
+     * nssf_retry_store_enqueue API directly (the in-memory test backend is the
+     * slice deliverable for the enqueue-on-commit seam). Until the Phase-3 fan-out
+     * lands, the availability-producer-to-store wiring stays behind this explicit
+     * not-ready log path rather than silently dropping or poisoning the queue.
      */
-    const char *key = ev->nf_id != NULL ? ev->nf_id : "";
-    (void)nssf_retry_store_enqueue(disp->store, key, NULL, payload, NULL);
+    char *payload = event_to_payload(ev);
+    fprintf(stderr,
+            "nssf_dispatcher: change_publish not-ready — Phase-3 SubscriptionStore "
+            "fan-out unavailable; no retry_queue row enqueued for nfId=%s%s.\n",
+            ev->nf_id != NULL ? ev->nf_id : "(null)",
+            payload != NULL ? "" : " (payload build failed)");
     free(payload);
 }
 
@@ -662,7 +897,9 @@ static void to_trace_id(const char *src, char out[33])
 static struct curl_slist *append_correlation(struct curl_slist *headers,
                                              const char *correlation_id)
 {
-    char buf[128];
+    /* Header line = prefix(27) + correlation id (caller-capped at
+     * NSSF_CORRELATION_ID_MAX) + NUL — sized to never truncate a valid id. */
+    char buf[64 + NSSF_CORRELATION_ID_MAX];
     int n = snprintf(buf, sizeof(buf), "3gpp-Sbi-Correlation-Info: %s",
                      correlation_id);
     if (n < 0 || (size_t)n >= sizeof(buf)) {
@@ -742,6 +979,25 @@ static int libcurl_transport(const nssf_notification_dispatcher_t *disp,
     /* Redirects NEVER followed — a 3xx Location fails closed. */
     curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0L);
 
+    /*
+     * B1 belt-and-suspenders — cap the allowed protocol to HTTPS so even a
+     * mis-validated URL cannot drive a plaintext/file/gopher request. The shared
+     * callback_url_allowed() gate is the primary defence (runs before the token
+     * attach); this is the libcurl-level backstop.
+     *
+     * libcurl is 7.81.0 here — CURLOPT_PROTOCOLS_STR is 7.85+ only and would
+     * break the build, so the 7.81 path uses the (deprecated-but-present)
+     * CURLOPT_PROTOCOLS bitmask. The _STR branch is compiled ONLY on 7.85+ for
+     * forward-compat.
+     */
+#if LIBCURL_VERSION_NUM >= 0x075500 /* 7.85.0 */
+    curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https");
+    curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "https");
+#else
+    curl_easy_setopt(curl, CURLOPT_PROTOCOLS, (long)CURLPROTO_HTTPS);
+    curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS, (long)CURLPROTO_HTTPS);
+#endif
+
     curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, NSSF_DISPATCH_CONNECT_TIMEOUT_S);
     curl_easy_setopt(curl, CURLOPT_TIMEOUT, NSSF_DISPATCH_REQUEST_TIMEOUT_S);
 
@@ -762,8 +1018,9 @@ static int libcurl_transport(const nssf_notification_dispatcher_t *disp,
 
 /* ── construction / seam install ───────────────────────────────────────── */
 
-nssf_notification_dispatcher_t *nssf_notification_dispatcher_new(
-    nssf_retry_store_t *store, nssf_oauth2_outbound_t *oauth)
+static nssf_notification_dispatcher_t *dispatcher_new_with_policy(
+    nssf_retry_store_t *store, nssf_oauth2_outbound_t *oauth,
+    bool allow_insecure_loopback)
 {
     if (store == NULL) {
         return NULL;
@@ -776,7 +1033,22 @@ nssf_notification_dispatcher_t *nssf_notification_dispatcher_new(
     disp->oauth = oauth;
     disp->transport = libcurl_transport;
     disp->transport_ctx = NULL;
+    disp->allow_insecure_loopback = allow_insecure_loopback;
     return disp;
+}
+
+nssf_notification_dispatcher_t *nssf_notification_dispatcher_new(
+    nssf_retry_store_t *store, nssf_oauth2_outbound_t *oauth)
+{
+    /* Production — https-only callback gate enforced (no loopback relaxation). */
+    return dispatcher_new_with_policy(store, oauth, /*allow_insecure_loopback=*/false);
+}
+
+nssf_notification_dispatcher_t *nssf_notification_dispatcher_new_insecure(
+    nssf_retry_store_t *store, nssf_oauth2_outbound_t *oauth)
+{
+    /* TEST/DEV ONLY — relaxes the https-only gate to http loopback hosts. */
+    return dispatcher_new_with_policy(store, oauth, /*allow_insecure_loopback=*/true);
 }
 
 void nssf_notification_dispatcher_free(nssf_notification_dispatcher_t *disp)
@@ -862,20 +1134,38 @@ nssf_dispatch_result_e nssf_notification_dispatcher_dispatch_pending(
         return NSSF_DISPATCH_ERROR;
     }
 
-    /* A row with no resolved callback target cannot be delivered (the Phase 3
-     * SubscriptionStore fan-out is not wired yet) — drop it terminally. */
-    if (item.callback_uri == NULL || item.callback_uri[0] == '\0') {
+    /*
+     * B1 — outbound URL policy gate, run BEFORE build_headers / oauth2 bearer
+     * attach and BEFORE the POST. A row whose callbackUri is NULL/empty, not
+     * https:// (production), malformed, or carries userinfo('@') / fragment('#')
+     * is dropped TERMINALLY: no token is attached and no POST is emitted. WHY
+     * here and not just at libcurl: this closes the window where a bearer could
+     * be attached to a plaintext / attacker-shifted URL before the transport's
+     * own protocol cap would fire. classify terminal/forbidden (DROPPED).
+     */
+    if (!callback_url_allowed(item.callback_uri, disp->allow_insecure_loopback)) {
+        fprintf(stderr,
+                "nssf_dispatcher: rejecting row id=%s — callback URL fails policy "
+                "(https-only / no userinfo / no fragment / well-formed). No token "
+                "attached, no POST emitted.\n", item.id);
         (void)nssf_retry_store_complete(disp->store, item.id);
         nssf_retry_item_clear(&item);
         return NSSF_DISPATCH_DROPPED;
     }
 
-    /* Effective correlation id: explicit inbound > stored > freshly generated. */
+    /*
+     * B2 — header-injection guard. The effective correlation id (explicit inbound
+     * > stored > freshly generated) is propagated into 3gpp-Sbi-Correlation-Info
+     * and traceparent, so any CR/LF/control/over-length id is rejected and a safe
+     * id is regenerated. Applies to BOTH the inbound-supplied and stored-row
+     * sources (a freshly generated hex id is safe by construction). gen_correlation
+     * is the fallback for absent OR unsafe ids.
+     */
     char gen[33];
     const char *corr = inbound_correlation_id != NULL ? inbound_correlation_id
                        : item.correlation_id != NULL  ? item.correlation_id
                                                       : NULL;
-    if (corr == NULL) {
+    if (corr == NULL || !correlation_id_is_safe(corr)) {
         gen_correlation_hex(gen);
         corr = gen;
     }
