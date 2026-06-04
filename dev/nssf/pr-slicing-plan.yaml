@@ -48,6 +48,8 @@ plan_history:
   - '#137 merged — PR-phase3-subscription-store (e1c3528) — phase3 first slice, default self-merge (4-condition PASS). 3-op store + initial-snapshot dispatch (call-driven). tier-1 keyValuePair.c link supplement.'
   - '#138 merged — plan-amendment status-sync (1424557) — PR-phase3-subscription-store → merged.'
   - 'sequencing amendment 2026-06-04 (phase3-first) — new PR-phase3-fanout-integration slice + all deferred backlog (oauth2-resilience/config-hardening/dispatcher follow-ups x3) gated behind fan-out anchor → picker next = subscription-handlers (not oauth2-resilience). reliability 제약: oauth2-resilience MUST close before Phase4/e2e or dispatcher worker loop.'
+  - '#139 merged (84fd43d) — sequencing amendment (phase3-first gate + fan-out slice + round-2 depends_on-enforced reliability gate: phase4/dispatcher-resilience depends_on oauth2-resilience+config-hardening).'
+  - '#140 merged (13f3af0) — PR-phase3-subscription-handlers (default self-merge, 4-condition PASS). 3 handlers + route wiring + dispatcher URL-policy export reuse. initial-snapshot logic delivered+tested, production seam-install deferred (live outbound = fanout-integration).'
 
 # ─── 2. PR 시퀀스 ─────────────────────────────────────────────────────
 prs:
@@ -549,7 +551,14 @@ prs:
       - tests/nssf/integration/test_subscription_*_integration.c
     depends_on:
       - PR-phase3-subscription-store
-    status: not_started
+    status: merged
+    merged_pr: 'https://github.com/jjinri/5gc-impl-kb/pull/140'
+    # DEFAULT self-merge (handler layer, not eyeball/M4) — 4-condition gate ALL PASS
+    # (verifier 5/5 / reviewer approve / MERGEABLE-CLEAN / up-to-date). 3 handlers +
+    # route wiring (router/main deps) + dispatcher callback-URL policy export (reuse,
+    # no behavior change). initial-snapshot dispatch = call-driven logic delivered +
+    # tested; production main.c snapshot-seam install DEFERRED (live outbound =
+    # fanout-integration). no fan-out/publish-seam, no worker/polling loop.
     required_checks:
       - phase3_integration_post
       - phase3_integration_unsubscribe
