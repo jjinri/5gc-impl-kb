@@ -45,20 +45,19 @@ python3 design/scripts/spec-split.py 29.531 --force
 
 ## 3. 핵심 발견
 
-### 3.1 fan-out에서 같은 AMF로 notification을 보내면 안 되는 경우
+### 3.1 fan-out에서 같은 AMF로 notification을 보내면 안 되는 경우 — #142로 닫힘
 
 DOCX Clause 5.3 Notify prose는 availability update가 AMF에 의해 발생한 경우, NSSF가 그 같은 AMF에 notification을 보내지 말아야 한다고 설명한다.
 
-영향:
+상태:
 
-- 현재 next slice인 `PR-phase3-fanout-integration`은 `availability change-event → subscription match → dispatcher enqueue`를 구현한다.
-- 이때 update를 발생시킨 NF/AMF의 identity를 fan-out matching까지 전달하지 않으면 자기 자신에게 callback을 보낼 수 있다.
+- `PR-phase3-fanout-integration` #142, merge commit `e4beb87`에서 구현 완료.
+- subscription row에 `amf_id`/`amf_set_id`를 filter JSON과 별도 truth로 저장한다.
+- fan-out은 `subscriber amf_id == event nf_id` exact match일 때만 self-notification enqueue를 suppress한다.
+- suppression은 enqueue-skip만 수행한다. DELETE change의 matched subscription tombstone cleanup은 유지된다.
+- `amfSetId`만 있거나 legacy/null identity인 subscription은 same individual AMF를 확정할 수 없으므로 suppress하지 않는다.
 
-권장:
-
-- fanout acceptance에 “originator AMF suppression” 추가.
-- availability update path에서 origin `nfId` 또는 requester id를 publish event에 포함.
-- subscription match/enqueue 단계에서 같은 AMF subscription은 skip.
+이 항목은 더 이상 open implementation gap이 아니라, 이후 fan-out 변경이 회귀시키면 안 되는 DOCX-derived evidence/guardrail이다.
 
 ### 3.2 Subscription PATCH 불변 조건
 
@@ -122,8 +121,8 @@ DOCX는 NSSelection/NSSAIAvailability API 모두 OAuth2를 사용할 수 있지�
 
 권장 순서:
 
-1. 현재 `PR-phase3-fanout-integration` 리뷰 전, `DOCX-GAP-001`을 reviewer checklist로 전달.
-2. phase3 PR 안정화 후 별도 plan-amendment PR 작성.
+1. `DOCX-GAP-001`은 `PR-phase3-fanout-integration` #142, merge commit `e4beb87`로 닫혔으므로 evidence/guardrail로 보존한다.
+2. phase3 안정화 후 별도 plan-amendment PR 작성.
 3. Phase4 test slices에 `DOCX-GAP-002`, `DOCX-GAP-004`, `DOCX-GAP-005`, `DOCX-GAP-007`, `DOCX-GAP-008` 반영.
 4. Operator config guide slice에 `DOCX-GAP-003`, `DOCX-GAP-006`, `DOCX-GAP-009` 반영.
 
@@ -147,8 +146,8 @@ Phase 3 runtime wiring이 안정화되면, Phase 4 contract/e2e/security test �
 
 DOCX 분석은 “전체 규격 자동 이해”가 아니라 “OpenAPI YAML이 놓치는 설계 조건을 조기 발견하는 장치”로 가장 가치가 크다.
 
-이번 분석에서 가장 즉시성 있는 보강점은 다음이다.
+이번 분석에서 가장 즉시성 있던 보강점은 `DOCX-GAP-001`이었다.
 
 > `PR-phase3-fanout-integration`은 availability update를 발생시킨 AMF에게 notification을 되돌려 보내지 않는 originator suppression 조건을 검증해야 한다.
 
-이 항목은 구현 중인 phase3 fan-out slice와 직접 연결되므로 Pane 1/window 2 reviewer에게 전달할 가치가 높다.
+이 항목은 #142 merge commit `e4beb87`로 닫혔다. 앞으로는 open gap이 아니라 regression 방지 evidence로 보존한다.

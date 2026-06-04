@@ -30,12 +30,15 @@ gaps:
     docx_basis: >-
       Notify is sent by NSSF for NSSAI availability/replacement changes, but if the notification is triggered by the AMF using
       Update, NSSF shall not notify that same AMF.
-    current_state: >-
-      PR-phase3-fanout-integration says affected subscription match → dispatcher enqueue, but current plan text does not explicitly
-      require originator suppression.
+    current_state: implemented_closed
+    closure_pr: "#142"
+    closure_commit: e4beb87
+    closure_evidence: >-
+      PR-phase3-fanout-integration implements exact subscriber amf_id == event nf_id self-notification suppression using dedicated
+      amf_id/amf_set_id persistence separate from the filter. Suppression skips enqueue only; DELETE tombstone cleanup remains match-based.
+      amfSetId-only and legacy/null-identity subscriptions are not suppressed.
     recommended_fix: >-
-      Add fanout acceptance criteria: pass origin nfId/requester context from availability update into subscription matching and skip enqueue
-      where subscription owner/callback belongs to the triggering AMF.
+      Closed by #142. Keep this entry as DOCX-derived evidence and guardrail for future fanout regressions.
     target_slice: PR-phase3-fanout-integration
   - id: DOCX-GAP-002
     title: Subscription PATCH must not change event IE; empty taiList is ONSSAI-gated

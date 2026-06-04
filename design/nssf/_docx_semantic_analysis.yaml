@@ -119,10 +119,14 @@ services:
         summary: >-
           If a notification is triggered by an AMF updating supported S-NSSAIs per TA via Update, NSSF must not send the notification
           to that same AMF.
-        current_coverage: likely_missing
-        plan_impact: fanout-integration acceptance candidate
+        current_coverage: implemented
+        closure_pr: "#142"
+        closure_commit: e4beb87
+        implementation_notes: >-
+          PR-phase3-fanout-integration now carries subscriber amf_id/amf_set_id separately from the filter and suppresses enqueue
+          when subscriber amf_id exactly matches the originating event nf_id; suppression is enqueue-skip only, so DELETE tombstone cleanup remains match-based.
         recommended_action: >-
-          PR-phase3-fanout-integration should carry origin nfId/requester context into subscription matching and suppress enqueue for the triggering AMF.
+          Closed by #142. Preserve as DOCX-derived evidence and keep future Phase4 tests from regressing exact amf_id suppression semantics.
       - id: notify-feature-conditional-payload
         summary: >-
           Notification payload differs by event and feature support: EANAN permits empty authorizedNssaiAvailabilityData for all TAs,
@@ -155,8 +159,8 @@ operator_inputs_suggested:
     reason: 307/308 redirects require 3gpp-Sbi-Target-Nf-Id and NSSF set semantics.
 recommended_next_actions:
   immediate_phase3:
-    - Add notify-originator-suppression to fanout-integration review checklist before merge if not already implemented.
-    - Ensure fanout matching preserves real subscription UUID + callbackUri and also origin NF/requester context.
+    - DOCX-GAP-001 notify-originator-suppression closed by #142 (e4beb87); preserve exact amf_id suppression evidence.
+    - Ensure future fanout changes keep real subscription UUID + callbackUri and origin NF/requester context semantics intact.
   phase3_to_phase4_gate:
     - After Phase 3 runtime stabilization completes, run DOCX Harness Phase 2 before entering Phase 4.
     - Convert one-off DOCX prose analysis into a repeatable harness step with scripted candidate extraction, fixed schemas, validation, and gap-to-plan linkage.
