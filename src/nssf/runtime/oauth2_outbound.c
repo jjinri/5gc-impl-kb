@@ -21,6 +21,7 @@
 #include "oauth2_outbound.h"
 
 #include <ctype.h>
+#include <errno.h>
 #include <pthread.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -37,8 +38,32 @@
 #define NSSF_OAUTH2_DEFAULT_CONNECT_TIMEOUT_S 2u
 #define NSSF_OAUTH2_DEFAULT_REQUEST_TIMEOUT_S 5u
 
+/* Bounded-retry defaults (M4 decision #11), applied when the field is zero. */
+#define NSSF_OAUTH2_DEFAULT_MAX_ATTEMPTS 3u   /* total tries per acquire. */
+#define NSSF_OAUTH2_DEFAULT_BACKOFF_BASE_MS 200u
+#define NSSF_OAUTH2_DEFAULT_BACKOFF_MAX_MS 2000u
+
 /* JWS exp validation leeway (decision 10 clock_skew_leeway). */
 #define NSSF_OAUTH2_CLOCK_SKEW_LEEWAY_S 60
+
+/*
+ * 3-way outcome of a single token-POST attempt (M4 decision #11). The caller
+ * uses this to decide retry vs immediate fail-closed:
+ *   REFRESH_OK          — 200 + valid Bearer + resolvable TTL; cache updated.
+ *   REFRESH_RETRIABLE   — transport error | HTTP 5xx | HTTP 429; may retry under
+ *                         the bounded backoff budget. Cache UNCHANGED.
+ *   REFRESH_DEAD_LETTER — HTTP 400/401/403 or other 4xx, or OAuth2 error body
+ *                         invalid_client / invalid_scope; NO retry, fail-closed.
+ *                         Cache UNCHANGED.
+ * A 200 that lacks a usable Bearer/TTL is treated as DEAD_LETTER (the server
+ * answered authoritatively with an unusable token — retrying is pointless and a
+ * stale token must never be cached).
+ */
+typedef enum {
+    REFRESH_OK = 0,
+    REFRESH_RETRIABLE,
+    REFRESH_DEAD_LETTER,
+} refresh_outcome_t;
 
 /*
  * Owned, validated copy of the operator config. Strings are duplicated so the
@@ -61,6 +86,9 @@ typedef struct {
     uint32_t max_ttl_seconds;
     uint32_t connect_timeout_seconds;
     uint32_t request_timeout_seconds;
+    uint32_t max_attempts;    /* total token-POST tries per acquire (>=1). */
+    uint32_t backoff_base_ms; /* base backoff before the first retry. */
+    uint32_t backoff_max_ms;  /* per-retry backoff ceiling. */
     bool follow_redirect;
     bool allow_insecure_loopback; /* test-only ctor flag. */
 } owned_config_t;
@@ -74,6 +102,16 @@ struct nssf_oauth2_outbound {
 
     nssf_oauth2_token_transport_fn transport;
     void *transport_ctx;
+
+    /* Bounded-retry seams + observability (M4 decision #11). All guarded by
+     * lock. backoff_sleep defaults to the real clock_nanosleep wrapper; the
+     * dead-letter callback is operator-optional. */
+    nssf_oauth2_backoff_sleep_fn backoff_sleep;
+    void *backoff_sleep_ctx;
+    nssf_oauth2_dead_letter_cb dead_letter_cb;
+    void *dead_letter_ctx;
+    uint32_t dead_letter_count; /* cumulative dead-letter outcomes. */
+    uint32_t retry_count;       /* cumulative retries performed (backoff sleeps). */
 
     pthread_mutex_t lock;
 };
@@ -156,6 +194,51 @@ static uint32_t nz(uint32_t v, uint32_t dflt)
 static bool method_uses_secret(nssf_oauth2_auth_method_t m)
 {
     return m == NSSF_OAUTH2_AUTH_SECRET_BASIC || m == NSSF_OAUTH2_AUTH_SECRET_POST;
+}
+
+/*
+ * Default backoff sleep — real wall-clock sleep of delay_ms milliseconds. Uses
+ * CLOCK_MONOTONIC so the delay is unaffected by wall-clock steps, and retries on
+ * EINTR so a signal does not shorten the bounded backoff. WHY a seam: tests
+ * replace this with a no-op (set_backoff_sleep) to assert the attempt/delay
+ * sequence without real sleeping. This is the call-driven inline sleep — there
+ * is no worker thread or timer.
+ */
+static void default_backoff_sleep(uint32_t delay_ms, void *ctx)
+{
+    (void)ctx;
+    if (delay_ms == 0) {
+        return;
+    }
+    struct timespec req = {
+        .tv_sec = (time_t)(delay_ms / 1000u),
+        .tv_nsec = (long)(delay_ms % 1000u) * 1000000L,
+    };
+    struct timespec rem;
+    while (clock_nanosleep(CLOCK_MONOTONIC, 0, &req, &rem) == EINTR) {
+        req = rem; /* finish the remaining bounded interval after a signal. */
+    }
+}
+
+/*
+ * Compute the backoff delay before retry number `retry_index` (0-based: the
+ * delay before the FIRST retry is retry_index 0). Exponential — base << index —
+ * capped at backoff_max_ms. The doubling is computed in 64-bit and clamped so a
+ * large index can never overflow into a wrap-around small delay (bounded).
+ */
+static uint32_t backoff_delay_ms(const owned_config_t *cfg, uint32_t retry_index)
+{
+    uint64_t delay = cfg->backoff_base_ms;
+    for (uint32_t i = 0; i < retry_index; i++) {
+        delay <<= 1;
+        if (delay >= cfg->backoff_max_ms) {
+            return cfg->backoff_max_ms; /* capped — stays bounded. */
+        }
+    }
+    if (delay > cfg->backoff_max_ms) {
+        delay = cfg->backoff_max_ms;
+    }
+    return (uint32_t)delay;
 }
 
 /* ---- token-response JSON read (non-crypto field extraction) ---- */
@@ -552,16 +635,35 @@ static bool cached_token_fresh_locked(const nssf_oauth2_outbound_t *ob, time_t n
 }
 
 /*
- * Caller holds ob->lock. Performs the token POST and, on a valid 200 response
- * with a Bearer token and resolvable TTL, replaces the cache. Returns 0 on a
- * usable cached token, nonzero on any failure (fail-closed — never caches a
- * partial/expired token).
+ * Caller holds ob->lock. Performs ONE token POST and classifies the result into
+ * the 3-way refresh_outcome_t (M4 decision #11). On REFRESH_OK the cache is
+ * replaced with the new Bearer; on RETRIABLE/DEAD_LETTER the cache is left
+ * UNCHANGED (never caches a partial/expired/error token — fail-closed).
+ *
+ * Classification:
+ *   transport rc != 0 (network/connect/TLS/timeout)            → RETRIABLE
+ *   HTTP 429 | HTTP 5xx (>=500)                                → RETRIABLE
+ *   HTTP 200 + valid Bearer + resolvable TTL                   → OK
+ *   HTTP 400/401/403, other 4xx, or any other non-200/non-5xx → DEAD_LETTER
+ *   OAuth2 error body invalid_client / invalid_scope (4xx)     → DEAD_LETTER
+ *   HTTP 200 but token unusable (no Bearer / no TTL)           → DEAD_LETTER
+ *
+ * out_http_status / out_oauth_error carry a MINIMAL non-secret reason for a
+ * dead-letter signal. out_oauth_error, when set, is a malloc'd copy the caller
+ * frees; it is NULL when no error code is parsed. NEITHER ever carries a token
+ * or secret. out_http_status is 0 on a transport error (no HTTP status).
  */
-static int refresh_locked(nssf_oauth2_outbound_t *ob, const char *scope)
+static refresh_outcome_t refresh_locked(nssf_oauth2_outbound_t *ob,
+                                        const char *scope,
+                                        long *out_http_status,
+                                        char **out_oauth_error)
 {
+    *out_http_status = 0;
+    *out_oauth_error = NULL;
+
     char *form = build_form_body(&ob->cfg, scope);
     if (form == NULL) {
-        return -1;
+        return REFRESH_RETRIABLE; /* transient OOM — allow a retry. */
     }
 
     /* client_secret_basic → "client_id:secret_ref" for HTTP Basic. */
@@ -589,19 +691,48 @@ static int refresh_locked(nssf_oauth2_outbound_t *ob, const char *scope)
     }
     if (trc != 0) {
         free(body);
-        return -1; /* network/TLS/timeout failure → fail-closed. */
+        return REFRESH_RETRIABLE; /* network/TLS/timeout failure — may retry. */
     }
 
-    /* Decision 11: only 200 is success. Others → caller fail-closed (no cache). */
+    *out_http_status = http_status;
+
+    /*
+     * Non-200 classification. 429 (Too Many Requests) and 5xx are transient →
+     * RETRIABLE. Everything else (400/401/403, other 4xx, unexpected 2xx/3xx) is
+     * authoritative-and-final → DEAD_LETTER. WHY parse the OAuth2 error body on a
+     * non-200: surface a non-secret reason code (e.g. invalid_client) for the
+     * dead-letter signal; it never changes retriability of a 429/5xx.
+     */
     if (http_status != 200 || body == NULL) {
+        if (http_status == 429 || (http_status >= 500 && http_status <= 599)) {
+            free(body);
+            return REFRESH_RETRIABLE;
+        }
+        if (body != NULL) {
+            *out_oauth_error = json_get_string(body, "error"); /* non-secret. */
+        }
         free(body);
-        return -1;
+        return REFRESH_DEAD_LETTER;
     }
+
+    /*
+     * 200 but the OAuth2 error field is present (some servers answer 200 with an
+     * error body): invalid_client / invalid_scope are non-retriable per decision
+     * #11. Treat any error field on a 200 as dead-letter — a 200 carrying an
+     * error is not a usable token grant.
+     */
+    char *err = json_get_string(body, "error");
+    if (err != NULL && err[0] != '\0') {
+        *out_oauth_error = err;
+        free(body);
+        return REFRESH_DEAD_LETTER;
+    }
+    free(err);
 
     /* Decision 10: access_token required, token_type must be Bearer (ci). */
     char *access_token = json_get_string(body, "access_token");
     char *token_type = json_get_string(body, "token_type");
-    int rc = -1;
+    refresh_outcome_t outcome = REFRESH_DEAD_LETTER; /* 200 w/o usable token. */
     if (access_token != NULL && access_token[0] != '\0' && token_type != NULL &&
         strcasecmp(token_type, "Bearer") == 0) {
         time_t now = time(NULL);
@@ -611,24 +742,51 @@ static int refresh_locked(nssf_oauth2_outbound_t *ob, const char *scope)
             ob->cached_token = access_token;
             ob->cached_expiry = expiry;
             access_token = NULL; /* ownership moved into cache. */
-            rc = 0;
+            outcome = REFRESH_OK;
         }
     }
 
     free(access_token);
     free(token_type);
     free(body);
-    return rc;
+    return outcome;
 }
 
 /*
- * Caller holds ob->lock. Ensures a fresh cached token (lazy refresh) and, on
- * success, returns an OWNED malloc'd copy of the bearer in *out_copy (the caller
- * frees). WHY a copy under the lock: refresh_locked may free/replace
- * ob->cached_token on a later call, so a pointer into the cache must never
- * escape the lock — copying inside the critical section is the UAF-safe contract
- * for the thread-safe API. Returns 0 on success, nonzero (fail-closed) on
- * refresh failure or OOM.
+ * Caller holds ob->lock. Record a dead-letter outcome: bump the counter and, if
+ * an operator callback is installed, invoke it with the MINIMAL non-secret
+ * reason (http_status + oauth_error code). WHY under the lock: counter and cb
+ * pointer are lock-guarded handle state, and the existing model already does
+ * network I/O under the lock (call-driven, bounded). The callback must not
+ * retain oauth_error (borrowed). NEVER pass a token/secret here.
+ */
+static void record_dead_letter_locked(nssf_oauth2_outbound_t *ob,
+                                      long http_status, const char *oauth_error)
+{
+    ob->dead_letter_count++;
+    if (ob->dead_letter_cb != NULL) {
+        ob->dead_letter_cb(http_status, oauth_error, ob->dead_letter_ctx);
+    }
+}
+
+/*
+ * Caller holds ob->lock. Ensures a fresh cached token (lazy refresh with bounded
+ * retry) and, on success, returns an OWNED malloc'd copy of the bearer in
+ * *out_copy (the caller frees). WHY a copy under the lock: refresh_locked may
+ * free/replace ob->cached_token on a later call, so a pointer into the cache
+ * must never escape the lock — copying inside the critical section is the
+ * UAF-safe contract for the thread-safe API.
+ *
+ * Retry model (M4 decision #11): up to cfg.max_attempts total token-POST tries.
+ * A RETRIABLE outcome (transport error | 429 | 5xx) sleeps an exponential,
+ * capped backoff (inline, call-driven — backoff_sleep seam) and retries until
+ * the attempt budget is exhausted. A DEAD_LETTER outcome (non-retriable) stops
+ * immediately, records the dead-letter signal, and fails closed with NO retry.
+ * Either exhaustion or dead-letter ⇒ fail-closed: returns nonzero and leaves the
+ * cache untouched (no unauthenticated outbound, no partial/stale token).
+ *
+ * Returns 0 on success (fresh/usable cached token copied out), nonzero on
+ * fail-closed (retries exhausted, dead-letter, or OOM).
  */
 static int acquire_owned_copy_locked(nssf_oauth2_outbound_t *ob,
                                      const char *scope, char **out_copy)
@@ -636,8 +794,39 @@ static int acquire_owned_copy_locked(nssf_oauth2_outbound_t *ob,
     *out_copy = NULL;
     time_t now = time(NULL);
     if (!cached_token_fresh_locked(ob, now)) {
-        if (refresh_locked(ob, scope) != 0) {
-            return -1; /* fail-closed: no unauth outbound. */
+        uint32_t max_attempts = ob->cfg.max_attempts; /* >=1 (nz default). */
+        bool got_token = false;
+        for (uint32_t attempt = 0; attempt < max_attempts; attempt++) {
+            long http_status = 0;
+            char *oauth_error = NULL;
+            refresh_outcome_t outcome =
+                refresh_locked(ob, scope, &http_status, &oauth_error);
+
+            if (outcome == REFRESH_OK) {
+                free(oauth_error);
+                got_token = true;
+                break;
+            }
+            if (outcome == REFRESH_DEAD_LETTER) {
+                /* Non-retriable — record + fail-closed immediately, no retry. */
+                record_dead_letter_locked(ob, http_status, oauth_error);
+                free(oauth_error);
+                return -1;
+            }
+            /* RETRIABLE: backoff before the next try, if any attempt remains. */
+            free(oauth_error);
+            if (attempt + 1 < max_attempts) {
+                uint32_t delay = backoff_delay_ms(&ob->cfg, attempt);
+                ob->retry_count++;
+                /* Inline sleep (call-driven; no worker). Serializes on the lock,
+                 * consistent with the existing refresh-under-lock model. */
+                if (ob->backoff_sleep != NULL) {
+                    ob->backoff_sleep(delay, ob->backoff_sleep_ctx);
+                }
+            }
+        }
+        if (!got_token) {
+            return -1; /* retries exhausted → fail-closed: no unauth outbound. */
         }
     }
     if (ob->cached_token == NULL) {
@@ -874,6 +1063,12 @@ static nssf_oauth2_outbound_t *create_with_scheme_policy(
                                          NSSF_OAUTH2_DEFAULT_CONNECT_TIMEOUT_S);
     ob->cfg.request_timeout_seconds = nz(cfg->request_timeout_seconds,
                                          NSSF_OAUTH2_DEFAULT_REQUEST_TIMEOUT_S);
+    ob->cfg.max_attempts =
+        nz(cfg->max_attempts, NSSF_OAUTH2_DEFAULT_MAX_ATTEMPTS);
+    ob->cfg.backoff_base_ms =
+        nz(cfg->backoff_base_ms, NSSF_OAUTH2_DEFAULT_BACKOFF_BASE_MS);
+    ob->cfg.backoff_max_ms =
+        nz(cfg->backoff_max_ms, NSSF_OAUTH2_DEFAULT_BACKOFF_MAX_MS);
     ob->cfg.follow_redirect = cfg->redirect.follow_redirect;
     ob->cfg.allow_insecure_loopback = allow_insecure_loopback;
 
@@ -889,6 +1084,13 @@ static nssf_oauth2_outbound_t *create_with_scheme_policy(
     ob->cached_expiry = 0;
     ob->transport = libcurl_transport;
     ob->transport_ctx = NULL;
+    /* Resilience seams — default real sleep; cb/counters start zero (calloc). */
+    ob->backoff_sleep = default_backoff_sleep;
+    ob->backoff_sleep_ctx = NULL;
+    ob->dead_letter_cb = NULL;
+    ob->dead_letter_ctx = NULL;
+    ob->dead_letter_count = 0;
+    ob->retry_count = 0;
     return ob;
 }
 
@@ -916,6 +1118,59 @@ void nssf_oauth2_outbound_set_transport(
     ob->transport = transport_fn != NULL ? transport_fn : libcurl_transport;
     ob->transport_ctx = transport_ctx;
     pthread_mutex_unlock(&ob->lock);
+}
+
+void nssf_oauth2_outbound_set_backoff_sleep(nssf_oauth2_outbound_t *ob,
+                                            nssf_oauth2_backoff_sleep_fn sleep_fn,
+                                            void *ctx)
+{
+    if (ob == NULL) {
+        return;
+    }
+    pthread_mutex_lock(&ob->lock);
+    /* NULL restores the real sleep — the seam is never left unset. */
+    ob->backoff_sleep = sleep_fn != NULL ? sleep_fn : default_backoff_sleep;
+    ob->backoff_sleep_ctx = ctx;
+    pthread_mutex_unlock(&ob->lock);
+}
+
+void nssf_oauth2_outbound_set_dead_letter_cb(nssf_oauth2_outbound_t *ob,
+                                             nssf_oauth2_dead_letter_cb cb,
+                                             void *ctx)
+{
+    if (ob == NULL) {
+        return;
+    }
+    pthread_mutex_lock(&ob->lock);
+    ob->dead_letter_cb = cb; /* NULL disables (counter still increments). */
+    ob->dead_letter_ctx = ctx;
+    pthread_mutex_unlock(&ob->lock);
+}
+
+uint32_t nssf_oauth2_outbound_dead_letter_count(const nssf_oauth2_outbound_t *ob)
+{
+    if (ob == NULL) {
+        return 0;
+    }
+    /* Cast away const to take the lock — observed state is logically const but
+     * the read must be mutex-guarded for a consistent value. */
+    nssf_oauth2_outbound_t *m = (nssf_oauth2_outbound_t *)ob;
+    pthread_mutex_lock(&m->lock);
+    uint32_t v = m->dead_letter_count;
+    pthread_mutex_unlock(&m->lock);
+    return v;
+}
+
+uint32_t nssf_oauth2_outbound_retry_count(const nssf_oauth2_outbound_t *ob)
+{
+    if (ob == NULL) {
+        return 0;
+    }
+    nssf_oauth2_outbound_t *m = (nssf_oauth2_outbound_t *)ob;
+    pthread_mutex_lock(&m->lock);
+    uint32_t v = m->retry_count;
+    pthread_mutex_unlock(&m->lock);
+    return v;
 }
 
 void nssf_oauth2_outbound_free(nssf_oauth2_outbound_t *ob)

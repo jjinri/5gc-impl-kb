@@ -151,6 +151,29 @@ target_compile_features(test_oauth2_outbound_attach PRIVATE c_std_11)
 add_test(NAME nssf_oauth2_outbound_attach
          COMMAND test_oauth2_outbound_attach)
 
+# Phase 2 WI-oauth2-resilience — outbound OAuth2 bounded retry + exponential
+# capped backoff + dead-letter classification + fail-closed invariant (ADR-0004
+# M4 decision #11). Driven ENTIRELY through the mock token-transport seam plus a
+# no-op recording backoff-sleep seam (nssf_oauth2_outbound_set_backoff_sleep) —
+# NO network, NO real sleeping, NO live NRF — so the retry/backoff/dead-letter
+# coverage runs UNCONDITIONALLY and deterministically in CI. Same link surface
+# as the attach suite (nssf_runtime exposes curl/curl.h + curl_slist PUBLIC).
+# ctest -R nssf_oauth2_outbound 매칭 (nssf_oauth2_outbound_retry).
+add_executable(test_oauth2_outbound_retry
+    unit/test_oauth2_outbound_retry.c)
+
+target_link_libraries(test_oauth2_outbound_retry
+    PRIVATE
+        unity
+        nssf_runtime
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_oauth2_outbound_retry PRIVATE c_std_11)
+
+add_test(NAME nssf_oauth2_outbound_retry
+         COMMAND test_oauth2_outbound_retry)
+
 # Phase 1 wave 1 WI-availability-repo — AvailabilityRepository in-memory test
 # seam round-trip. DB 의존 없음 (nssf_availability_repo_new_inmemory). cJSON 은
 # nssf_repository 의 PUBLIC nssf_generated 의존으로 전이. ctest -R
