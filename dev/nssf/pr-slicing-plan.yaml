@@ -53,6 +53,7 @@ plan_history:
   - '#141 merged (98ec51e) — plan-amendment status-sync — PR-phase3-subscription-handlers → merged.'
   - '#142 merged (e4beb87) — PR-phase3-fanout-integration (EYEBALL slice, operator+Pane-2 merge-ok). FIRST LIVE OUTBOUND — engine change-event → subscription match → dispatcher enqueue real UUID+callbackUri + main.c publish-seam wiring. call-driven single-shot (no loop). Round-2 rework closed DOCX-GAP-001 (self-notification echo to originating AMF suppressed via dedicated amf_id/amf_set_id columns; suppress=enqueue-skip, DELETE tombstone match-based retained; amfSetId-only=no-suppress). 4-lane all green + reviewer gap001_closed=true + verifier 5/5. Un-gates deferred backlog (oauth2-resilience/config-hardening) + phase4 (contract/security/e2e) + dispatcher-resilience(depends_on oauth2-resilience+config-hardening).'
   - '#145 merged (1e99fc5) — PR-phase2-oauth2-resilience (EYEBALL slice, operator+Pane-2 merge-ok). M4 decision #11 close — outbound OAuth2 single-shot fail-closed → bounded retry + exponential capped backoff + dead-letter classification (transport-err/429/5xx=retriable; 400/401/403/4xx/invalid_client/invalid_scope/200-with-error/200-unusable=dead-letter, no retry). fail-closed 불변 보존 (retry 소진+dead-letter→ABORT, no unauth outbound, no partial/stale cache). NO worker/polling loop (acquire 호출 내 동기 inline, call-driven). additive seams (backoff-sleep/dead-letter-cb/counters), config max_attempts/backoff_base_ms/backoff_max_ms nz-default; public sig+enum 불변. 4-lane: reviewer security-GREEN + verifier 5/5 (full 39/39, sanitizers clean). RELIABILITY gate satisfied — Phase-4/e2e + dispatcher worker loop 진입 전제 (oauth2-resilience) close. config-hardening 만 남음.'
+  - 'phase4-rows amendment 2026-06-05 (crosswalk #149, planner-mode) — DOCX-derived acceptance rows 를 기존 phase4 slice 에 흡수 (신규 slice 없음). contract += GAP-002/004/007 (+GAP-003 negative-claim marker); security += GAP-002/007/009-wording-guard; e2e += GAP-001/004/005/008. GAP-003/006/009 = phase5 operator-guide defer. ⚠ OPUS-TENSION-001: callback 307 retry 미채택 — ADR-0004 no-follow/fail-closed ratification 우선 (redirect unsupported 선언이 정답). three_trigger_escape=false (ADR/eng_frozen/ADR-0004 본문 무변, test acceptance row 확장만). self-merge 금지 — operator review.'
   - '#146 merged (e352ba8) — plan-amendment status-sync — PR-phase2-oauth2-resilience → merged.'
   - '#147 merged (6d20bdf) — PR-phase2-config-hardening (default self-merge, 4-condition PASS). standalone secret_ref env:/file: resolver seam (oauth2_outbound.h TODO seam 구현) — env:NAME getenv verbatim / file:/path read, 값 직접 보유 금지, fail-fast (bad-format/NOT_FOUND/IO_ERROR/TOO_LARGE 64KiB), secure_scrub(volatile memset)-before-free, file trailing-newline 1개만 strip. secret hygiene — VALUE 절대 미로그 (scheme/NAME/PATH/status class 만). M4 token-attach path 무변경 (standalone). no worker/polling loop, no new dep, no new spec dep. 4-lane: reviewer approve (secret hygiene PASS) + verifier 5/5 (full 40/40, sanitizers clean, CI-parity all green). RELIABILITY gate 2/2 CLOSED (oauth2-resilience+config-hardening) — Phase-4/e2e + dispatcher worker loop un-gated (operator 결정 대상, 자동 진입 금지).'
 
@@ -607,6 +608,15 @@ prs:
       backoff/dead-letter) 가 선행조건. 본 slice 는 loop 없이 닫고, loop 필요 시
       resilience-first 로 별도 진행.
 
+  # ===== DOCX-derived acceptance row 흡수 (amendment 2026-06-05, crosswalk #149) =====
+  # docx-harness-p2-crosswalk.yaml 의 phase4_test_rows 를 기존 phase4 slice
+  # (contract/security/e2e) acceptance 로 흡수. 신규 runtime slice 없음 (codex 권고
+  # new_slice_needed_before_phase4=false). GAP-003/006/009 = phase5 operator-guide
+  # defer (+ GAP-003 contract negative-claim marker, GAP-009 security wording-guard).
+  # ⚠ OPUS-TENSION-001: Opus 의 callback 307 retry row 는 따르지 않음 — 현 ADR-0004
+  # no-follow/fail-closed ratification 우선 (redirect 미구현/unsupported 선언이 정답).
+  # verification-matrix.yaml 가 8op×18cause / 7항목 baseline / e2e scenario 의 진실
+  # 출처 — 본 acceptance 는 DOCX-derived 보강 row 다.
   - id: PR-phase4-contract-tests
     title: 'test(nssf): WI-contract-tests — 8 op × 18 cause matrix'
     phase: phase4
@@ -624,6 +634,13 @@ prs:
     required_checks:
       - phase4_contract_matrix
     estimated_loc: 1500
+    acceptance_docx_rows:   # absorbed 2026-06-05 (crosswalk #149); base matrix = verification-matrix.yaml
+      - 'DOCX-GAP-002: SubModifyPatch /event 및 /filter/event mutation → 400 ModificationNotAllowed + 원본 event IE 불변 (immutability).'
+      - 'DOCX-GAP-002: empty taiList = ONSSAI support 필요 — 미지원 시 explicit unsupported 응답 (silent accept 금지).'
+      - 'DOCX-GAP-004: NSSelection registration/PDU-session/UE-config-update = implemented subset matrix (정상 경로).'
+      - 'DOCX-GAP-004: PDN-Connection / Other-Purpose(NWDAF) / Inter-PLMN(V/H-NSSF) variants = supported-or-deferred marker (미구현이면 explicit unsupported, silent omit 금지).'
+      - 'DOCX-GAP-007: server-side 307/308 = unsupported/no-redirect 증명 (no accidental 3xx) OR (enabled 시) Location + 3gpp-Sbi-Target-Nf-Id. ⚠ ADR-0004 no-follow ratification 우선 — redirect unsupported 선언이 정답 (OPUS-TENSION-001).'
+      - 'DOCX-GAP-003 (marker): subscription expiry policy = deferred/operator-configurable — spec-complete expiry 주장 금지 (negative-claim guard). 본격 정책 = phase5 operator-guide.'
 
   - id: PR-phase4-security-tests
     title: 'test(nssf): WI-security-tests — ADR-0004 7 항목 baseline evidence'
@@ -642,6 +659,10 @@ prs:
     required_checks:
       - phase4_security_baseline_evidence
     estimated_loc: 1200
+    acceptance_docx_rows:   # absorbed 2026-06-05 (crosswalk #149); base = ADR-0004 7항목 (verification-matrix.yaml)
+      - 'DOCX-GAP-002: mutation rejection 은 fail-closed — auth 후 / persist 전 거부, persisted event/filter state 불변.'
+      - 'DOCX-GAP-007: operator target NF identity 없이 server redirect 절대 미발생 (no redirect without 3gpp-Sbi-Target-Nf-Id). ADR-0004 no-follow 일관.'
+      - 'DOCX-GAP-009 (wording-guard): inbound scope enforcement test label = project/deployment policy (ADR-0004) 로 표기 — 29.531 resource-level scope 정의라 주장 금지. full operator-guide wording = phase5 defer.'
 
   - id: PR-phase4-e2e-tests
     title: 'test(nssf): WI-e2e-tests — request-flow e2e 시나리오'
@@ -660,6 +681,11 @@ prs:
     required_checks:
       - phase4_e2e_scenarios
     estimated_loc: 1300
+    acceptance_docx_rows:   # absorbed 2026-06-05 (crosswalk #149); base scenarios = verification-matrix.yaml
+      - 'DOCX-GAP-001: self-originating AMF fan-out regression guard — same-AMF originator 는 enqueue/POST 안 됨 (suppress); different-AMF notify + DELETE tombstone retained.'
+      - 'DOCX-GAP-004: implemented NSSelection procedure 흐름 rows (registration/PDU/UE-config); unsupported variants = explicit deferred marker.'
+      - 'DOCX-GAP-005: NSSRG present → nssrgList OR explicit unsupported policy; NSAG supported → nsagInfoList OR explicit unsupported; UDM provide-all flag = supported-or-deferred.'
+      - 'DOCX-GAP-008: notification feature payload matrix — sNssai status-change generic payload = 현 supported subset; NSRP/NSIUN/validityTime = supported OR 501 unsupported; ONSSAI/SATAS/NSAG flag = invalid payload silent accept 금지 (overclaim 방지).'
 
   - id: PR-phase5-observability-finalize
     title: 'feat(nssf): WI-observability-finalize — metric / log / trace seam'
@@ -840,6 +866,10 @@ prs:
     required_checks: []
     estimated_loc: 300
     notes: 'deferred backlog (memory project_nssf_deferred_plan_slices). tls/mtls/oauth2_inbound/oauth2_outbound config 키 + nf_instance_id + dev PKI + NRF token_url/cert paths + secret_ref 의미.'
+    deferred_docx_rows:   # absorbed 2026-06-05 (crosswalk #149) — phase4 not_applicable, phase5 operator-guide 로 defer
+      - 'DOCX-GAP-003: subscription expiry policy — default_expiry / allow_indefinite / expiry_jitter_seconds / cleanup 정책. (phase4 = negative-claim marker only.)'
+      - 'DOCX-GAP-006: NSSF discovery / home-NSSF / FQDN operator policy — same-PLMN local vs NRF-discovered vs home-NSSF URL, OAuth2/NRF token config 와 분리.'
+      - 'DOCX-GAP-009: 29.531 Nnssf API 는 resource-level OAuth2 scope 미정의 — configured scope 는 deployment/NRF policy 임을 명시. (phase4 security = wording-guard test label only.)'
 
   # ===== dispatcher eyeball follow-up slices (amendment 2026-06-04, post-#135) =====
   # operator(pane1)+Pane-2(codex) eyeball outcome 등록. dispatch 순서/시점 별도
