@@ -91,6 +91,14 @@ assumption: 5
 - **F1 — outbound-callback 3xx no-follow (OPUS-TENSION-001 후속)**. NotificationDispatcher 의 *outbound callback* POST 가 307/308/3xx 응답을 절대 follow 하지 않고 (libcurl `FOLLOWLOCATION=0`), 그 응답을 retry/dead-letter/fail-closed 로 처리하며, redirect Location host 로 credential/header(bearer) 를 흘리지 않는다. phase4 **security + e2e** acceptance_round2_rows. ⚠ 이는 DOCX-GAP-007 의 *server-side* 307/308 (NSSF 가 발신하는 redirect 응답) 과 **다른 outbound-callback 축**이다 — 두 축을 plan 가시성에서 구분 유지. 현 libcurl 이 `FOLLOWLOCATION=0` 이라 live hole 이 아니며 본 row 는 **regression guard** 다 (Opus callback 307-retry row 미채택, ADR-0004 ratification 우선).
 - **F2 — callback_url_allowed control/malformed strictness**. enqueue+dispatch 가 공유하는 URL gate (`callback_url_allowed`) 에 ASCII control/whitespace (CR/LF/TAB/space) 및 malformed authority/port/IPv6 reject 를 **모든 모드 공통으로** 추가한다 ("libcurl 가 나중에 reject 할 malformed URL" 을 앞단에서 차단 + reject test). ⚠ **admit 집합은 #151 2-layer 설계를 유지**한다 — enqueue structural gate 는 permissive (ctor-agnostic) 라 well-formed https + test loopback-http 를 둘 다 admit 하고 (`test_enqueue_accepts_https_and_loopback` 가 loopback-http enqueue 통과를 고정), well-formed **https-only 는 production/inbound/dispatch gate 의 concern** 이다. 즉 F2 는 enqueue 의 admit 집합을 좁혀 https-only 로 만드는 게 아니라, 모든 모드 공통으로 malformed/control-char reject 를 *추가*하는 strictness 다. phase4 **security (+ contract)** acceptance_round2_rows. 비고: percent-encoded `%40`(@) / `%23`(#) 은 literal userinfo/fragment 가 아니라 reject 필수가 아니다 (현 정책 OK, row 에 명시).
 - **scope**. `three_trigger_escape=false`. plan + open-gaps + plan-amendments doc 만. self-merge 금지 — operator(pane1)+Pane2 review.
+
+### F8 follow-up (deferred decision, 2026-06-05, post-#155 dispatcher body-strict-json)
+
+`#155` 는 `envelope_split` 에 strict-valid-JSON gate 를 추가해 non-empty invalid-JSON body 가 `application/json` 으로 POST 되던 F7 잔여 창을 닫았다 (invalid → quarantine/terminal drop). Pane2 reconcile: `cJSON_Parse` 의 trailing-garbage lenient 동작은 `envelope_build` 가 leniently-parsed body 를 canonical JSON 으로 선-strip 하므로 **normal producer path 에서 wire-hole 미발생** — `#155` 는 정확하다.
+
+- **F8 (deferred decision, 메모만 — 코드 변경 아님)**. `envelope_build` + `envelope_split` 를 **둘 다 strict** (`cJSON_ParseWithLengthOpts` `require_null_terminated=true`) 로 갈지는 *별도 plan/decision ratify* 사안이다. 이는 현재의 **silent-strip (build 가 trailing garbage 조용히 제거)** 을 **quarantine (의미변경)** 으로 바꾸는 것이라 동작 의미가 달라진다.
+- **위험**. raw DB/envelope injection 또는 future bypass producer (envelope_build 를 우회해 raw envelope 의 string body 를 직접 쓰는 경로) 시 trailing-garbage 잔여가 이론적으로 가능. 단 현재 payload 는 모두 NSSF-internal (dispatcher 가 생성) 이라 **긴급도 낮음**.
+- **상태**. deferred — operator 가 별도 decision 으로 ratify 할 때 진행. 본 메모는 추적용이며 자율 진행 대상 아니다.
 <!-- USER:summary-body:end -->
 
 ## References
