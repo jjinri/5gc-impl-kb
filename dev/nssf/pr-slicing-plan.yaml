@@ -52,6 +52,7 @@ plan_history:
   - '#140 merged (13f3af0) — PR-phase3-subscription-handlers (default self-merge, 4-condition PASS). 3 handlers + route wiring + dispatcher URL-policy export reuse. initial-snapshot logic delivered+tested, production seam-install deferred (live outbound = fanout-integration).'
   - '#141 merged (98ec51e) — plan-amendment status-sync — PR-phase3-subscription-handlers → merged.'
   - '#142 merged (e4beb87) — PR-phase3-fanout-integration (EYEBALL slice, operator+Pane-2 merge-ok). FIRST LIVE OUTBOUND — engine change-event → subscription match → dispatcher enqueue real UUID+callbackUri + main.c publish-seam wiring. call-driven single-shot (no loop). Round-2 rework closed DOCX-GAP-001 (self-notification echo to originating AMF suppressed via dedicated amf_id/amf_set_id columns; suppress=enqueue-skip, DELETE tombstone match-based retained; amfSetId-only=no-suppress). 4-lane all green + reviewer gap001_closed=true + verifier 5/5. Un-gates deferred backlog (oauth2-resilience/config-hardening) + phase4 (contract/security/e2e) + dispatcher-resilience(depends_on oauth2-resilience+config-hardening).'
+  - '#145 merged (1e99fc5) — PR-phase2-oauth2-resilience (EYEBALL slice, operator+Pane-2 merge-ok). M4 decision #11 close — outbound OAuth2 single-shot fail-closed → bounded retry + exponential capped backoff + dead-letter classification (transport-err/429/5xx=retriable; 400/401/403/4xx/invalid_client/invalid_scope/200-with-error/200-unusable=dead-letter, no retry). fail-closed 불변 보존 (retry 소진+dead-letter→ABORT, no unauth outbound, no partial/stale cache). NO worker/polling loop (acquire 호출 내 동기 inline, call-driven). additive seams (backoff-sleep/dead-letter-cb/counters), config max_attempts/backoff_base_ms/backoff_max_ms nz-default; public sig+enum 불변. 4-lane: reviewer security-GREEN + verifier 5/5 (full 39/39, sanitizers clean). RELIABILITY gate satisfied — Phase-4/e2e + dispatcher worker loop 진입 전제 (oauth2-resilience) close. config-hardening 만 남음.'
 
 # ─── 2. PR 시퀀스 ─────────────────────────────────────────────────────
 prs:
@@ -795,7 +796,7 @@ prs:
       # 완결(fan-out) 후로 정렬. topo-sort 가 phase3 subscription-handlers 보다
       # 먼저 본 backlog 를 surface 하던 것 차단.
       - PR-phase3-fanout-integration
-    status: not_started
+    status: merged   # #145 (1e99fc5) EYEBALL-STOP, operator+Pane2 merge-ok. M4 #11 close, fail-closed 보존.
     required_checks: []
     estimated_loc: 400
     notes: 'M4 #128 accept-defer 한 decision #11 완성 (single-shot fail-closed → bounded retry/backoff + 400/401/403/invalid_scope dead-letter). fail-closed 불변 유지. RELIABILITY 제약 (amendment 2026-06-04): Phase-4/e2e 전 또는 dispatcher worker/polling loop 도입 전 본 slice 반드시 close (F3/G-08 — live subscription outbound 활성 시 token transient failure single-shot 위험).'
