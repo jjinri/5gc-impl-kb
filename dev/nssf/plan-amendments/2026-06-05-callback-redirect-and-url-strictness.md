@@ -21,7 +21,8 @@ NotificationDispatcher 의 *outbound callback* POST 에 대한 redirect 처리 �
 
 enqueue + dispatch 가 공유하는 URL gate (`callback_url_allowed`, notification_dispatcher.c) 의 well-formed 강도를 phase4 에서 명시 검증한다.
 
-- **요구**: shared gate 가 ASCII control/whitespace (CR/LF/TAB/space) 및 malformed authority/port/IPv6 를 **enqueue 단계에서** 명시 reject 한다 — well-formed https URL 만 admit. 즉 "libcurl 가 나중에 reject 할 malformed URL" 을 앞단(enqueue)에서 차단하고 reject test 로 고정한다.
+- **요구**: shared gate 가 ASCII control/whitespace (CR/LF/TAB/space) 및 malformed authority/port/IPv6 를 **모든 모드 공통으로** 명시 reject 한다 — "libcurl 가 나중에 reject 할 malformed URL" 을 앞단(enqueue)에서 차단하고 reject test 로 고정한다.
+- **⚠ admit 집합 불변 (#151 2-layer 설계 유지)**: F2 는 enqueue 의 admit 집합을 좁히는 게 아니다. enqueue structural gate 는 #151 대로 permissive (ctor-agnostic) — well-formed https + test loopback-http 를 둘 다 admit 한다 (`test_enqueue_accepts_https_and_loopback` 가 loopback-http enqueue 통과를 고정). well-formed **https-only 는 production / inbound / dispatch gate 의 concern** 이다 (dispatch-time/ctor). 따라서 F2 = "enqueue 에서 https 만 admit" 이 *아니라*, 모든 모드 공통으로 control/whitespace/malformed reject 를 *추가* 하는 strictness 다. ("enqueue 에서 https 만 admit" 으로 읽으면 #151 의 ratified 2-layer 동작과 충돌 — Pane2 catch.)
 - **비고**: percent-encoded `%40`(@) / `%23`(#) 은 literal userinfo/fragment 가 아니므로 reject 필수가 아니다 (현 정책 OK). row 에 명시해 향후 혼동 방지.
 - **반영**: `PR-phase4-security-tests` 의 `acceptance_round2_rows` (+ `PR-phase4-contract-tests` 의 inbound callbackUri 400-reject row).
 
