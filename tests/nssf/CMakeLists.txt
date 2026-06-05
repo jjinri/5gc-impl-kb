@@ -151,6 +151,27 @@ target_compile_features(test_oauth2_outbound_attach PRIVATE c_std_11)
 add_test(NAME nssf_oauth2_outbound_attach
          COMMAND test_oauth2_outbound_attach)
 
+# Phase 2 WI-config-hardening — deploy-time secret_ref resolver (ADR-0004 M7).
+# env:NAME / file:/path resolution + newline handling + fail-fast + scrub-free
+# 를 검증한다. env 케이스는 setenv/unsetenv, file 케이스는 mkstemp+write 로 로컬
+# fixture 를 쓴다 — no network, no DB, no vault, 무조건 CI 실행. resolver 는
+# nssf_runtime 의 secret_ref_resolver.c 이며 zlog 는 PUBLIC 으로 전이된다.
+# ctest -R nssf_secret_ref_resolver 매칭.
+add_executable(test_secret_ref_resolver
+    unit/test_secret_ref_resolver.c)
+
+target_link_libraries(test_secret_ref_resolver
+    PRIVATE
+        unity
+        nssf_runtime
+        nssf_sanitizers
+        nssf_warnings)
+
+target_compile_features(test_secret_ref_resolver PRIVATE c_std_11)
+
+add_test(NAME nssf_secret_ref_resolver
+         COMMAND test_secret_ref_resolver)
+
 # Phase 2 WI-oauth2-resilience — outbound OAuth2 bounded retry + exponential
 # capped backoff + dead-letter classification + fail-closed invariant (ADR-0004
 # M4 decision #11). Driven ENTIRELY through the mock token-transport seam plus a

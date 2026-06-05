@@ -14,7 +14,8 @@ add_library(nssf_runtime STATIC
     tls_context.c
     oauth2_jwks.c
     oauth2_outbound.c
-    oauth2_scope_check.c)
+    oauth2_scope_check.c
+    secret_ref_resolver.c)
 
 target_include_directories(nssf_runtime PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR})
