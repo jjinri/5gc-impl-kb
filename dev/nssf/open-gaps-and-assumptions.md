@@ -74,6 +74,15 @@ assumption: 5
 
 - **명문화된 제약**. `PR-phase2-oauth2-resilience` (+ `PR-phase2-config-hardening`) 는 **Phase-4/e2e 진입 전 또는 dispatcher worker/polling loop 도입 전 반드시 close** 해야 한다 (F3/G-08 연결). 그 전까지 fan-out 은 call-driven single-shot 으로 동작한다.
 - **plan 강제 (depends_on-ENFORCED, round-2)**. 위 backlog 는 `PR-phase3-fanout-integration` depends_on gate 로 phase3 integration 뒤에만 picker surface 된다. 추가로 **모든 Phase-4/e2e gate slice (`PR-phase4-contract-tests` / `PR-phase4-security-tests` / `PR-phase4-e2e-tests`) 와 worker-loop slice (`PR-phase4-dispatcher-resilience`) 의 depends_on 에 `PR-phase2-oauth2-resilience` + `PR-phase2-config-hardening` 를 hard dependency 로 추가**했다 (round-1 의 note-only → round-2 enforced). topo 검증: oauth2-resilience/config-hardening 가 모든 phase4 slice 앞에 정렬, cycle 없음 (drift PASS). 즉 resilience close 전엔 Phase-4 진입 자체가 picker 상 불가능하다.
+
+### DOCX-GAP phase4 흡수 (2026-06-05, crosswalk #149 plan-amendment)
+
+`dev/nssf/docx-harness-p2-crosswalk.yaml` (#149, DOCX Harness P2 + Opus crosswalk) 의 DOCX-derived gap row 를 phase4 test slice 에 흡수한다. 신규 runtime slice 는 만들지 않았다 (crosswalk `new_slice_needed_before_phase4=false`). 본 amendment 는 `pr-slicing-plan.yaml` 의 phase4 slice `acceptance_docx_rows` + phase5 `deferred_docx_rows` 로 반영했다.
+
+- **흡수 (phase4 acceptance row)**. contract-tests = DOCX-GAP-002 (SubModifyPatch event-IE immutability + empty taiList ONSSAI-gated) / GAP-004 (NSSelection procedure matrix, implemented subset + unsupported marker) / GAP-007 (307·308 server redirect unsupported 증명 또는 3gpp-Sbi-Target-Nf-Id). security-tests = GAP-002 (mutation fail-closed) / GAP-007 (no redirect without target NF) / GAP-009 (scope wording-guard). e2e-tests = GAP-001 (self-origin AMF suppression regression) / GAP-004 / GAP-005 (NSSRG/NSAG/UDM provide-all) / GAP-008 (feature-gated notification payload).
+- **defer (phase5 operator-guide)**. DOCX-GAP-003 (expiry jitter/spread policy) + DOCX-GAP-006 (NSSF discovery/home-NSSF/FQDN policy) + DOCX-GAP-009 (29.531 Nnssf API 의 no resource-level OAuth2 scope wording). GAP-003 은 phase4 contract 에 negative-claim marker (spec-complete expiry 주장 금지), GAP-009 는 phase4 security 에 wording-guard label 만 남기고 본문은 phase5 로 defer.
+- **OPUS-TENSION-001 (redirect)**. Opus 의 callback 307 retry row 는 채택하지 않는다. 현 ADR-0004 no-follow / fail-closed ratification 이 우선이며, redirect 미구현/unsupported 선언이 정답이다. phase4 row 는 "no accidental 3xx" 증명 방향으로 작성한다.
+- **scope**. test acceptance row 확장만 — `three_trigger_escape=false` (ADR 신설/`eng_frozen`/ADR-0004 본문 무변). src/tests 무변경, plan + 본 doc 만. self-merge 금지 — operator review.
 <!-- USER:summary-body:end -->
 
 ## References
