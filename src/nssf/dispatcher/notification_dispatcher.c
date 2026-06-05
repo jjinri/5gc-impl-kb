@@ -266,10 +266,11 @@ static char *envelope_get_string(const cJSON *env, const char *key)
  * Split a stored envelope back into callback_uri / correlation_id / body. The
  * body is re-serialized when it is a JSON sub-tree, or copied when a plain
  * string. Returns 0 on success (fields owned by the caller), -1 on a corrupt /
- * unparseable envelope OR a MISSING/empty body (F7): the dispatcher MUST never
- * emit a null-body POST, so a row that cannot yield a non-empty body is reported
- * as an error and the caller quarantines (terminally drops) it. On -1 all out
- * fields are freed and zeroed.
+ * unparseable envelope OR a MISSING/empty body OR a body that is not strict-
+ * valid JSON (F7): the dispatcher MUST never emit a null-body POST nor POST an
+ * invalid-JSON body as application/json, so a row that cannot yield a non-empty
+ * strict-valid-JSON body is reported as an error and the caller quarantines
+ * (terminally drops) it. On -1 all out fields are freed and zeroed.
  */
 static int envelope_split(const char *envelope_json, char **out_callback,
                           char **out_correlation, char **out_body)
@@ -305,6 +306,33 @@ static int envelope_split(const char *envelope_json, char **out_callback,
         *out_body = NULL;
         return -1;
     }
+
+    /*
+     * F7 follow-up — strict-valid-JSON body gate. The string branch above can
+     * carry a non-empty but INVALID-JSON body (envelope_build stores an
+     * unparseable payload_json verbatim as a string). The dispatch path POSTs
+     * *out_body with Content-Type: application/json, so an invalid-JSON string
+     * would be sent as application/json. Treat that as an un-deliverable poison
+     * row exactly like the null/empty case — one chokepoint for all "cannot
+     * yield a deliverable body" rejects. WHY here: this is the single pre-POST
+     * point where F7 quarantine already lives. (The JSON sub-tree branch
+     * re-serializes a parsed tree, so it is always valid JSON; only the string
+     * branch can carry invalid JSON.)
+     */
+    cJSON *body_check = cJSON_Parse(*out_body);
+    if (body_check == NULL) {
+        /* WHY generic message — never echo body bytes / callback_uri / token /
+         * correlation id (no body/secret logging). */
+        fprintf(stderr, "nssf_dispatcher: F7 quarantine: body is not valid JSON.\n");
+        free(*out_callback);
+        free(*out_correlation);
+        free(*out_body);
+        *out_callback = NULL;
+        *out_correlation = NULL;
+        *out_body = NULL;
+        return -1;
+    }
+    cJSON_Delete(body_check);
     return 0;
 }
 

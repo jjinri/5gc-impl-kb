@@ -69,6 +69,8 @@
 
 #include <curl/curl.h>
 
+#include "cJSON.h"
+
 /* ---- mock AMF callback transport (captured POST + staged reply sequence) ---- */
 
 typedef struct {
@@ -830,6 +832,207 @@ static void test_empty_body_row_quarantined_no_post(void)
 }
 
 /* ===================================================================
+ * F7 follow-up — STRICT-valid-JSON body gate (EYEBALL-STOP slice
+ *   PR-phase2-dispatcher-body-strict-json)
+ *
+ * envelope_build 가 cJSON_Parse 에 실패하는 payload_json 을 envelope `body`
+ * 에 plain STRING 으로 저장하므로, non-empty NON-JSON payload 는 invalid-JSON
+ * 문자열 body 를 가진 row 가 된다. dispatch 시 envelope_split 의 strict-JSON
+ * gate (F7 follow-up) 가 이를 기존 null/empty 와 동일하게 quarantine 한다 —
+ * Content-Type: application/json 으로 invalid-JSON 을 POST 하는 창을 닫는다.
+ * 반대로 valid-JSON body (object/array/literal) 는 gate 를 통과해 그대로
+ * 배달된다 ("valid JSON" gate 이지 "must be object" gate 가 아님).
+ * =================================================================== */
+
+/* Drive one dispatch with the given payload as the ROW body and assert the
+ * quarantine contract: result is NONE (no due row delivered), ZERO POSTs, no
+ * bearer, and the poison row is terminally GONE (a follow-up dequeue is empty).
+ * Mirrors test_empty_body_row_quarantined_no_post exactly, parameterized over
+ * the (invalid-JSON) payload string. */
+static void assert_body_quarantined_no_post(const char *payload, const char *label)
+{
+    char msg[256];
+    nssf_retry_store_t *store = nssf_retry_store_new_inmemory();
+    TEST_ASSERT_NOT_NULL(store);
+    /* non-empty NON-JSON payload → envelope body is that invalid string. */
+    snprintf(msg, sizeof(msg), "[%s] enqueue 실패", label);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        0,
+        nssf_retry_store_enqueue(store, "sub-badjson",
+                                 "https://amf.example.com/cb", payload, NULL),
+        msg);
+
+    nssf_notification_dispatcher_t *disp =
+        nssf_notification_dispatcher_new(store, NULL);
+    TEST_ASSERT_NOT_NULL(disp);
+    nssf_notification_dispatcher_set_transport(disp, amf_mock_transport, &g_amf);
+
+    g_amf.reply[0] = 200; /* the mock would accept — must NEVER be reached. */
+    g_amf.reply_len = 1;
+
+    nssf_dispatch_result_e r =
+        nssf_notification_dispatcher_dispatch_pending(disp, NULL);
+    /* the invalid-JSON body row is quarantined on dequeue → no due row → NONE. */
+    snprintf(msg, sizeof(msg),
+             "[%s] invalid-JSON body row 가 quarantine 되지 않음 (NONE 기대)",
+             label);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(NSSF_DISPATCH_NONE, r, msg);
+    snprintf(msg, sizeof(msg),
+             "[%s] invalid-JSON body 인데 POST 가 emit 됨 "
+             "(application/json 로 비-JSON 전송 — strict-JSON gate 위반)", label);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, g_amf.calls, msg);
+    snprintf(msg, sizeof(msg), "[%s] quarantine 된 row 에 bearer 부착됨", label);
+    TEST_ASSERT_FALSE_MESSAGE(g_amf.saw_bearer, msg);
+
+    /* the poison row is GONE (terminally dropped) — not left to loop forever. */
+    nssf_retry_item_t none;
+    snprintf(msg, sizeof(msg),
+             "[%s] quarantine 후 poison row 가 남아있음 (무한 loop 위험)", label);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, nssf_retry_store_dequeue(store, &none), msg);
+    nssf_retry_item_clear(&none);
+
+    nssf_notification_dispatcher_free(disp);
+    nssf_retry_store_free(store);
+}
+
+/* (1) invalid-JSON string body → quarantine, NO POST. Several non-JSON shapes:
+ * a bare word, an unterminated object, and an unterminated array all enqueue as
+ * a plain string body and are dropped by the strict-JSON gate at dispatch. */
+static void test_invalid_json_body_row_quarantined_no_post(void)
+{
+    assert_body_quarantined_no_post("not valid json", "bare-word");
+    memset(&g_amf, 0, sizeof(g_amf));
+    assert_body_quarantined_no_post("{unterminated", "unterminated-object");
+    memset(&g_amf, 0, sizeof(g_amf));
+    assert_body_quarantined_no_post("[1,2", "unterminated-array");
+    memset(&g_amf, 0, sizeof(g_amf));
+    /* a bare reserved word (not a quoted JSON string) is non-JSON text. */
+    assert_body_quarantined_no_post("undefined", "bare-reserved-word");
+}
+
+/* Drive one dispatch with the given (VALID-JSON) payload and assert it PASSES
+ * the strict-JSON gate: it is POSTed (transport called exactly once, 2xx →
+ * SENT), and the delivered body round-trips to the same JSON value. */
+static void assert_valid_json_body_delivers(const char *payload, const char *label)
+{
+    char msg[256];
+    nssf_retry_store_t *store = nssf_retry_store_new_inmemory();
+    TEST_ASSERT_NOT_NULL(store);
+    snprintf(msg, sizeof(msg), "[%s] enqueue 실패", label);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        0,
+        nssf_retry_store_enqueue(store, "sub-validjson",
+                                 "https://amf.example.com/cb", payload, NULL),
+        msg);
+
+    nssf_notification_dispatcher_t *disp =
+        nssf_notification_dispatcher_new(store, NULL);
+    TEST_ASSERT_NOT_NULL(disp);
+    nssf_notification_dispatcher_set_transport(disp, amf_mock_transport, &g_amf);
+
+    g_amf.reply[0] = 200;
+    g_amf.reply_len = 1;
+
+    nssf_dispatch_result_e r =
+        nssf_notification_dispatcher_dispatch_pending(disp, NULL);
+    snprintf(msg, sizeof(msg),
+             "[%s] valid-JSON body 가 SENT 되지 않음 — strict-JSON gate 가 "
+             "valid JSON 을 drop 함 (over-strict)", label);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(NSSF_DISPATCH_SENT, r, msg);
+    snprintf(msg, sizeof(msg),
+             "[%s] valid-JSON body 가 정확히 1 POST 로 배달되지 않음", label);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, g_amf.calls, msg);
+
+    /* the POSTed body must itself be parseable JSON (round-trips to the same
+     * value) — the gate let through a deliverable application/json body. */
+    cJSON *got = cJSON_Parse(g_amf.last_body);
+    snprintf(msg, sizeof(msg),
+             "[%s] POST 된 body 가 valid JSON 이 아님 (배달된 body 가 비-JSON)",
+             label);
+    TEST_ASSERT_NOT_NULL_MESSAGE(got, msg);
+    cJSON *want = cJSON_Parse(payload);
+    TEST_ASSERT_NOT_NULL(want);
+    snprintf(msg, sizeof(msg),
+             "[%s] POST 된 body 가 enqueue payload 와 JSON-동등하지 않음", label);
+    TEST_ASSERT_TRUE_MESSAGE(cJSON_Compare(got, want, true), msg);
+    cJSON_Delete(got);
+    cJSON_Delete(want);
+
+    /* SENT row is completed (deleted) — queue is now empty. */
+    nssf_retry_item_t none;
+    snprintf(msg, sizeof(msg), "[%s] SENT 후 row 가 큐에서 제거되지 않음", label);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, nssf_retry_store_dequeue(store, &none), msg);
+    nssf_retry_item_clear(&none);
+
+    nssf_notification_dispatcher_free(disp);
+    nssf_retry_store_free(store);
+}
+
+/* (2) valid-JSON OBJECT body still delivers (regression — the gate does NOT
+ * drop valid JSON). */
+static void test_valid_json_object_body_still_delivers(void)
+{
+    assert_valid_json_body_delivers("{\"changeType\":\"REPLACED\"}",
+                                    "json-object");
+    memset(&g_amf, 0, sizeof(g_amf));
+    /* a nested object is still valid JSON. */
+    assert_valid_json_body_delivers(
+        "{\"changeType\":\"REPLACED\",\"snssais\":[{\"sst\":1}]}",
+        "json-nested-object");
+}
+
+/* (3) valid-JSON NON-OBJECT body still delivers (boundary — proves the strict-
+ * JSON gate is "strict-valid JSON", NOT "must be an object"). A JSON array and
+ * the scalar JSON literals that round-trip through the envelope as a re-
+ * serialized sub-tree (number / boolean) all PASS and POST. If nf-code's gate
+ * were object-only these would (wrongly) quarantine — that is the discrepancy
+ * this case guards against.
+ *
+ * SCOPE NOTE — these payloads are stored by envelope_build as a PARSED sub-tree
+ * (cJSON_Parse succeeds), then envelope_split RE-SERIALIZES the sub-tree
+ * (cJSON_PrintUnformatted) back to canonical JSON, so the body the gate checks
+ * is always strict-valid JSON. (The two literals that do NOT survive the
+ * envelope round-trip — a top-level JSON string and a top-level JSON null — are
+ * an envelope-storage artifact, NOT the strict-JSON gate, and are pinned
+ * separately in test_envelope_roundtrip_nondeliverable_literals_quarantined.) */
+static void test_valid_json_non_object_body_still_delivers(void)
+{
+    /* JSON array. */
+    assert_valid_json_body_delivers("[1,2,3]", "json-array");
+    memset(&g_amf, 0, sizeof(g_amf));
+    /* JSON number literal. */
+    assert_valid_json_body_delivers("42", "json-number-literal");
+    memset(&g_amf, 0, sizeof(g_amf));
+    /* JSON boolean literals. */
+    assert_valid_json_body_delivers("true", "json-true-literal");
+    memset(&g_amf, 0, sizeof(g_amf));
+    assert_valid_json_body_delivers("false", "json-false-literal");
+}
+
+/* (3b) BOUNDARY DOCUMENTATION — two top-level JSON literals are non-deliverable
+ * through the envelope, and the dispatcher correctly quarantines them (NO POST).
+ * This is NOT the strict-JSON gate rejecting valid JSON — it is upstream
+ * envelope (build/split) round-trip semantics, asserted here so the boundary is
+ * pinned rather than silently ambiguous:
+ *
+ *   - top-level JSON STRING ("a-json-string"): envelope_build stores it as a
+ *     cJSON STRING node; envelope_split's string branch extracts valuestring —
+ *     the BARE unquoted text "a-json-string" — which is NOT valid JSON, so the
+ *     strict-JSON gate quarantines it. (Emitting the bare text as
+ *     application/json would be exactly the poison the gate closes.)
+ *   - top-level JSON NULL: envelope_split treats a null body as the F7
+ *     null/empty-body case (out_body stays NULL) → quarantine, independent of
+ *     the new gate.
+ *
+ * Either way the observable contract holds: a non-deliverable body never POSTs. */
+static void test_envelope_roundtrip_nondeliverable_literals_quarantined(void)
+{
+    assert_body_quarantined_no_post("\"a-json-string\"", "toplevel-json-string");
+    memset(&g_amf, 0, sizeof(g_amf));
+    assert_body_quarantined_no_post("null", "toplevel-json-null");
+}
+
+/* ===================================================================
  * empty queue → NONE (no transport call)
  * =================================================================== */
 
@@ -868,6 +1071,10 @@ int main(void)
     RUN_TEST(test_crlf_inbound_correlation_not_injected);
     RUN_TEST(test_control_and_overlength_stored_correlation_not_injected);
     RUN_TEST(test_empty_body_row_quarantined_no_post);
+    RUN_TEST(test_invalid_json_body_row_quarantined_no_post);
+    RUN_TEST(test_valid_json_object_body_still_delivers);
+    RUN_TEST(test_valid_json_non_object_body_still_delivers);
+    RUN_TEST(test_envelope_roundtrip_nondeliverable_literals_quarantined);
     RUN_TEST(test_empty_queue_none);
     return UNITY_END();
 }
