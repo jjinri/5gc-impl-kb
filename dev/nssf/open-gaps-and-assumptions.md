@@ -83,6 +83,14 @@ assumption: 5
 - **defer (phase5 operator-guide)**. DOCX-GAP-003 (expiry jitter/spread policy) + DOCX-GAP-006 (NSSF discovery/home-NSSF/FQDN policy) + DOCX-GAP-009 (29.531 Nnssf API 의 no resource-level OAuth2 scope wording). GAP-003 은 phase4 contract 에 negative-claim marker (spec-complete expiry 주장 금지), GAP-009 는 phase4 security 에 wording-guard label 만 남기고 본문은 phase5 로 defer.
 - **OPUS-TENSION-001 (redirect)**. Opus 의 callback 307 retry row 는 채택하지 않는다. 현 ADR-0004 no-follow / fail-closed ratification 이 우선이며, redirect 미구현/unsupported 선언이 정답이다. phase4 row 는 "no accidental 3xx" 증명 방향으로 작성한다.
 - **scope**. test acceptance row 확장만 — `three_trigger_escape=false` (ADR 신설/`eng_frozen`/ADR-0004 본문 무변). src/tests 무변경, plan + 본 doc 만. self-merge 금지 — operator review.
+
+### callback redirect + URL strictness round-2 (2026-06-05, #150/#151 Pane2 follow-up)
+
+`#150` (phase4-rows) + `#151` (enqueue-hardening) merge 시 Pane2(codex) 가 approve-with-followup 으로 남긴 2건을 phase4 acceptance 로 흡수한다 (round-2 plan-amendment). 신규 slice 없음, src/tests 무변. 상세 = `dev/nssf/plan-amendments/2026-06-05-callback-redirect-and-url-strictness.md`.
+
+- **F1 — outbound-callback 3xx no-follow (OPUS-TENSION-001 후속)**. NotificationDispatcher 의 *outbound callback* POST 가 307/308/3xx 응답을 절대 follow 하지 않고 (libcurl `FOLLOWLOCATION=0`), 그 응답을 retry/dead-letter/fail-closed 로 처리하며, redirect Location host 로 credential/header(bearer) 를 흘리지 않는다. phase4 **security + e2e** acceptance_round2_rows. ⚠ 이는 DOCX-GAP-007 의 *server-side* 307/308 (NSSF 가 발신하는 redirect 응답) 과 **다른 outbound-callback 축**이다 — 두 축을 plan 가시성에서 구분 유지. 현 libcurl 이 `FOLLOWLOCATION=0` 이라 live hole 이 아니며 본 row 는 **regression guard** 다 (Opus callback 307-retry row 미채택, ADR-0004 ratification 우선).
+- **F2 — callback_url_allowed control/malformed strictness**. enqueue+dispatch 가 공유하는 URL gate (`callback_url_allowed`) 에 ASCII control/whitespace (CR/LF/TAB/space) 및 malformed authority/port/IPv6 reject 를 **모든 모드 공통으로** 추가한다 ("libcurl 가 나중에 reject 할 malformed URL" 을 앞단에서 차단 + reject test). ⚠ **admit 집합은 #151 2-layer 설계를 유지**한다 — enqueue structural gate 는 permissive (ctor-agnostic) 라 well-formed https + test loopback-http 를 둘 다 admit 하고 (`test_enqueue_accepts_https_and_loopback` 가 loopback-http enqueue 통과를 고정), well-formed **https-only 는 production/inbound/dispatch gate 의 concern** 이다. 즉 F2 는 enqueue 의 admit 집합을 좁혀 https-only 로 만드는 게 아니라, 모든 모드 공통으로 malformed/control-char reject 를 *추가*하는 strictness 다. phase4 **security (+ contract)** acceptance_round2_rows. 비고: percent-encoded `%40`(@) / `%23`(#) 은 literal userinfo/fragment 가 아니라 reject 필수가 아니다 (현 정책 OK, row 에 명시).
+- **scope**. `three_trigger_escape=false`. plan + open-gaps + plan-amendments doc 만. self-merge 금지 — operator(pane1)+Pane2 review.
 <!-- USER:summary-body:end -->
 
 ## References
