@@ -25,6 +25,18 @@
  *
  * All crypto is delegated (OpenSSL via libcurl for TLS, libjwt for any JWS exp
  * parse). No primitives are hand-rolled (M6).
+ *
+ * Resilience (M4 decision #11 — bounded retry + dead-letter):
+ *   token acquire 는 single-shot 가 아니라 retriable failure 에 한해 bounded
+ *   exponential backoff 로 재시도한다. retriable = transport error (network /
+ *   connect / TLS / timeout) | HTTP 5xx | HTTP 429. non-retriable (dead-letter)
+ *   = HTTP 400/401/403 및 그 외 4xx, OAuth2 error body invalid_client /
+ *   invalid_scope. retry 는 max_attempts 로 bounded — 절대 무한이 아니다.
+ *   재시도는 acquire 호출 안에서 SYNCHRONOUS 하게 일어난다 (call-driven). 별도
+ *   worker thread / polling loop / timer 는 없다. backoff sleep 은 acquire 경로
+ *   안에서 inline 으로 수행된다. retry 소진 또는 dead-letter 결과는 모두
+ *   fail-closed — enabled 일 때 ABORT 를 반환하고 unauthenticated outbound 를
+ *   절대 내보내지 않으며 partial/stale token 을 캐시하지 않는다.
  */
 
 #ifndef NSSF_RUNTIME_OAUTH2_OUTBOUND_H
@@ -110,6 +122,25 @@ typedef struct nssf_oauth2_outbound_config {
     uint32_t connect_timeout_seconds; /* default 2. */
     uint32_t request_timeout_seconds; /* default 5. */
 
+    /*
+     * Bounded-retry policy for token acquire (M4 decision #11). All three take
+     * decision-mandated defaults when zeroed (self-documenting names). Retry is
+     * call-driven and synchronous — there is NO worker thread or polling loop.
+     *
+     *   max_attempts    — TOTAL token-POST tries per acquire (default 3). The
+     *                     first try plus up to (max_attempts-1) retries. A value
+     *                     of 1 disables retry (single-shot). Bounded — never
+     *                     infinite. Only RETRIABLE outcomes consume an attempt's
+     *                     retry budget; a DEAD_LETTER outcome stops immediately.
+     *   backoff_base_ms — base delay before the FIRST retry (default 200ms). The
+     *                     delay doubles per subsequent retry (exponential).
+     *   backoff_max_ms  — per-retry delay ceiling (default 2000ms). The doubled
+     *                     delay is capped at this value so backoff stays bounded.
+     */
+    uint32_t max_attempts;    /* total tries per acquire; default 3 (>=1). */
+    uint32_t backoff_base_ms; /* base backoff before first retry; default 200. */
+    uint32_t backoff_max_ms;  /* per-retry backoff ceiling; default 2000. */
+
     nssf_oauth2_redirect_policy_t redirect; /* default no-follow. */
 } nssf_oauth2_outbound_config_t;
 
@@ -180,6 +211,57 @@ nssf_oauth2_outbound_t *nssf_oauth2_outbound_create_insecure(
 void nssf_oauth2_outbound_set_transport(nssf_oauth2_outbound_t *ob,
                                         nssf_oauth2_token_transport_fn transport_fn,
                                         void *transport_ctx);
+
+/*
+ * Backoff-sleep seam (TEST/DEV — additive, optional). The retry loop calls this
+ * to sleep `delay_ms` milliseconds between a RETRIABLE attempt and the next try.
+ * The production default sleeps for real (clock_nanosleep). Tests stub it with a
+ * no-op so they can assert the attempt count and the computed delay sequence
+ * WITHOUT real wall-clock sleeping. The seam is invoked once per retry with the
+ * already-computed (exponential, capped) delay for that retry. It carries no
+ * secret. sleep_fn==NULL restores the default. ctx lifetime is the caller's.
+ */
+typedef void (*nssf_oauth2_backoff_sleep_fn)(uint32_t delay_ms, void *ctx);
+
+void nssf_oauth2_outbound_set_backoff_sleep(nssf_oauth2_outbound_t *ob,
+                                            nssf_oauth2_backoff_sleep_fn sleep_fn,
+                                            void *ctx);
+
+/*
+ * Dead-letter observability seam (M4 decision #11). When a token acquire fails
+ * non-retriably (HTTP 400/401/403 or other 4xx, or an OAuth2 error body of
+ * invalid_client / invalid_scope), the acquire records a dead-letter event: it
+ * bumps a per-handle counter and, if set, invokes the operator callback with a
+ * MINIMAL non-secret reason — an HTTP status (e.g. 401) and/or a short OAuth2
+ * error code string (e.g. "invalid_client"). NEVER are tokens, secrets, the
+ * secret_ref, request bodies, or basic-auth material passed to the callback or
+ * logged. http_status==0 means "no HTTP status" (the reason is the oauth error
+ * code); oauth_error==NULL means "no error code parsed". The callback must NOT
+ * retain the oauth_error pointer past the call (it is borrowed).
+ *
+ * There is NO dead-letter queue and NO worker — this is a call-driven signal
+ * only. A dead-letter outcome ALWAYS fail-closes the acquire (ABORT). cb==NULL
+ * disables the callback (the counter still increments). ctx lifetime is the
+ * caller's.
+ */
+typedef void (*nssf_oauth2_dead_letter_cb)(long http_status,
+                                           const char *oauth_error,
+                                           void *ctx);
+
+void nssf_oauth2_outbound_set_dead_letter_cb(nssf_oauth2_outbound_t *ob,
+                                             nssf_oauth2_dead_letter_cb cb,
+                                             void *ctx);
+
+/*
+ * Observability accessors (TEST/DEV/operator). dead_letter_count returns the
+ * cumulative number of dead-letter (non-retriable failure) outcomes since the
+ * handle was created. retry_count returns the cumulative number of RETRIABLE
+ * retries actually performed (i.e. the number of backoff-sleep invocations) —
+ * tests assert this to confirm backoff happened. Both return 0 for a NULL
+ * handle. Reads are mutex-guarded.
+ */
+uint32_t nssf_oauth2_outbound_dead_letter_count(const nssf_oauth2_outbound_t *ob);
+uint32_t nssf_oauth2_outbound_retry_count(const nssf_oauth2_outbound_t *ob);
 
 /*
  * Acquire (or return cached) a bearer token via the client_credentials grant.
