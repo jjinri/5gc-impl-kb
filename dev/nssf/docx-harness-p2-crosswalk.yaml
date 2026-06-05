@@ -1,0 +1,390 @@
+schema_version: docx-harness-p2-crosswalk-v1
+nf: nssf
+generated_at: "2026-06-05"
+status: analysis_only
+branch_scope:
+  modifies_src: false
+  modifies_tests: false
+  modifies_pr_slicing_plan: false
+  source_inputs:
+    docx_gaps: dev/nssf/docx-derived-design-gaps.yaml
+    docx_semantic_analysis: design/nssf/_docx_semantic_analysis.yaml
+    opus_corpus: docs/opus_0526/*.md
+    implementation_surface:
+      - src/nssf/engine/selection_engine.{h,c}
+      - src/nssf/engine/availability_engine.{h,c}
+      - src/nssf/handlers/subscription_{post,patch,unsubscribe}_handler.{h,c}
+      - src/nssf/store/subscription_store.{h,c}
+      - src/nssf/dispatcher/notification_dispatcher.{h,c}
+      - src/nssf/runtime/oauth2_outbound.{h,c}
+      - tests/nssf/**
+summary:
+  phase4_gate_verdict: proceed_after_absorbing_matrix
+  source_of_truth_note: >-
+    Current NSSF execution truth remains dev/nssf/pr-slicing-plan.yaml plus merged
+    implementation. Opus is treated as a secondary requirement/procedure/test
+    corpus, not as an executable plan replacement.
+  high_value_opus_additions:
+    - procedure registry for NSSelection variants (NSSF-PROC-0006..0012)
+    - FEAT/TC mapping for subscription PATCH event immutability and expiry spread
+    - explicit TC rows for NSAG/NSSRG/feature-negotiated behavior
+    - explicit 307/308 Target-Nf header requirement
+    - warning that 29.531 Nnssf APIs do not define resource-level OAuth2 scopes
+
+# Output 1: DOCX gap status revalidation against Phase1-3 implementation.
+gap_status_revalidation:
+  - id: DOCX-GAP-001
+    title: Fan-out suppresses notification to the AMF that triggered availability update
+    p2_status: closed
+    current_impl_evidence:
+      - src/nssf/store/subscription_store.c:self_notification_suppressed exact amf_id == ev->nf_id predicate
+      - src/nssf/store/subscription_store.c:fanout_one skips enqueue only, tombstone cleanup remains match-based
+      - tests/nssf/integration/test_fanout_integration.c:GAP-001 same-AMF suppress/different-AMF notify/DELETE tombstone retained cases
+    opus_coverage:
+      classification: both
+      refs:
+        - docs/opus_0526/NSSF-procedure-analysis.md:47-49
+        - docs/opus_0526/NSSF-procedure-analysis.md:886-925
+      note: Opus covers notification fan-out procedures and callback retry behavior, but the exact self-originating AMF suppression was sharper in DOCX P1.
+    impact: no Phase4 blocker; keep as regression row in e2e fan-out matrix.
+    recommended_phase4_rows:
+      - type: e2e
+        row: fanout_same_amf_originator_is_not_enqueued_or_posted
+        priority: regression
+    plan_amendment: no_new_slice
+
+  - id: DOCX-GAP-002
+    title: Subscription PATCH must not change event IE; empty taiList is ONSSAI-gated
+    p2_status: partial_open
+    current_impl_evidence:
+      - src/nssf/store/subscription_store.c:patch resource is callbackUri/filter/expiry only; /event is rejected because absent
+      - src/nssf/store/subscription_store.c:if create stored whole document as filter, nested /filter/event remains patch-addressable
+      - tests/nssf/unit/test_subscription_store_patch.c:atomicity/content-type/not-found coverage exists, but no event-IE immutability test
+      - src/nssf/handlers/subscription_post_handler.c:filter defaults to whole document when explicit filter is absent
+    opus_coverage:
+      classification: both_opus_stronger
+      refs:
+        - docs/opus_0526/29.531-features.md:87-92
+        - docs/opus_0526/NSSF-procedure-analysis.md:790-842
+        - docs/opus_0526/NSSF-test-spec.md:80-82
+        - docs/opus_0526/NSSF-test-spec.md:173
+        - docs/opus_0526/NSSF-test-spec.md:232-234
+      note: Opus already has FEAT DAT-0025/SVC-0020 and TC-0025/0073/0074; it should seed Phase4 rows directly.
+    impact: >-
+      Risk that Phase3 PATCH accepts mutation through /filter/event when the original create body was stored as filter. Empty taiList ONSSAI semantics are not first-class.
+    recommended_phase4_rows:
+      - type: contract
+        row: submodifypatch_replace_event_or_filter_event_returns_400_modification_not_allowed_and_original_event_survives
+        priority: P0
+      - type: contract
+        row: submodifypatch_empty_taiList_rejected_without_ONSSAI_or_explicitly_not_supported
+        priority: P0
+      - type: security
+        row: mutation_reject_happens_after_auth_but_before_persisted_state_change
+        priority: P1
+    plan_amendment: absorb_into_PR-phase4-contract-tests
+
+  - id: DOCX-GAP-003
+    title: Subscription expiry policy needs jitter/spread semantics, not only default TTL
+    p2_status: open_phase5_with_phase4_marker
+    current_impl_evidence:
+      - src/nssf/store/subscription_store.h:NSSF_SUBSCRIPTION_DEFAULT_EXPIRY_SECONDS is 24h default
+      - src/nssf/store/subscription_store.c:format_expiry adds a fixed offset from now
+      - tests/nssf/unit/test_subscription_store_create.c:default 24h and explicit expiry honored; no spread/jitter/indefinite test
+    opus_coverage:
+      classification: both_opus_stronger
+      refs:
+        - docs/opus_0526/29.531-features.md:78-84
+        - docs/opus_0526/NSSF-procedure-analysis.md:1101-1120
+        - docs/opus_0526/NSSF-db-design.md:61-63
+        - docs/opus_0526/NSSF-test-spec.md:171
+        - docs/opus_0526/NSSF-test-spec.md:232
+        - docs/opus_0526/NSSF-test-spec.md:319
+      note: Opus has explicit expiry distribution/cleanup tests (TC-0023/0072/0142) and ENT-0010 TTL semantics.
+    impact: >-
+      Not a Phase4 entry blocker if operator policy is deferred, but Phase4 should mark the current 24h fixed default as temporary and avoid claiming spec-complete expiry behavior.
+    recommended_phase4_rows:
+      - type: contract
+        row: subscription_expiry_policy_marked_deferred_or_operator_configurable_not_spec_complete
+        priority: marker
+      - type: e2e
+        row: no_many_subscriptions_same_expiry_claim_until_jitter_slice_exists
+        priority: negative_claim_guard
+    plan_amendment: phase5_operator_guide_plus_possible_expiry_policy_slice
+
+  - id: DOCX-GAP-004
+    title: NSSelection needs procedure-specific test matrix beyond one generic GET path
+    p2_status: open
+    current_impl_evidence:
+      - src/nssf/engine/selection_engine.c:handles sliceInfoForRegistration, sliceInfoForPDUSession, sliceInfoForUEConfigurationUpdate only
+      - tests/nssf/unit/test_selection_engine_registration.c:registration path covered
+      - tests/nssf/unit/test_selection_engine_pdu.c:PDU session path covered
+      - tests/nssf/unit/test_selection_engine_ueconfig.c:UE configuration update path covered
+      - no code/test evidence for PDN Connection, Other Purpose/NWDAF, or Inter-PLMN V/H-NSSF procedure variants
+    opus_coverage:
+      classification: both_opus_stronger
+      refs:
+        - docs/opus_0526/NSSF-procedure-analysis.md:38-44
+        - docs/opus_0526/NSSF-procedure-analysis.md:315-339
+        - docs/opus_0526/NSSF-procedure-analysis.md:393-411
+        - docs/opus_0526/NSSF-procedure-analysis.md:451-471
+        - docs/opus_0526/NSSF-procedure-analysis.md:513-538
+        - docs/opus_0526/NSSF-procedure-analysis.md:561-582
+        - docs/opus_0526/NSSF-procedure-analysis.md:603-635
+        - docs/opus_0526/NSSF-procedure-analysis.md:646-670
+      note: Opus procedure registry is the strongest input for Phase4 matrix generation.
+    impact: >-
+      Phase1 selection code is correct for the implemented subset, but Phase4 cannot call NSSelection complete without procedure rows for unsupported/deferred variants.
+    recommended_phase4_rows:
+      - type: contract
+        row: nsselection_registration_allowed_configured_target_amfset_matrix
+        priority: P0
+      - type: contract
+        row: nsselection_reallocation_candidate_amf_list_or_explicit_defer
+        priority: P1
+      - type: contract
+        row: nsselection_pdu_session_mapping_of_nssai_hr_roaming_marker
+        priority: P0
+      - type: contract
+        row: nsselection_ue_configuration_update_configured_nssai_matrix
+        priority: P0
+      - type: contract
+        row: nsselection_pdn_connection_RSIPCE_feature_negotiation_unsupported_or_implemented
+        priority: P1
+      - type: contract
+        row: nsselection_other_purpose_NWDAF_SIOP_feature_negotiation_unsupported_or_implemented
+        priority: P1
+      - type: e2e
+        row: inter_plmn_vnssf_hnssf_role_split_marked_deferred_until_SEPP_N32_policy
+        priority: P1
+    plan_amendment: absorb_into_PR-phase4-contract-tests_and_PR-phase4-e2e-tests
+
+  - id: DOCX-GAP-005
+    title: SelectionEngine conditional behavior should cover NSSRG, UDM provide-all flag, and NSAG support
+    p2_status: open
+    current_impl_evidence:
+      - src/nssf/engine/selection_engine.h:UDM seam returns subscribed S-NSSAI only; no provide-all or NSSRG-specific seam
+      - src/nssf/engine/selection_engine.c:selection formula is requested ∩ subscribed ∩ PLMN policy ∩ availability; no NSSRG/NSAG response construction
+      - generated models include NSAG fields, but handwritten engine/tests do not assert NSAG/NSSRG behavior
+    opus_coverage:
+      classification: both_opus_stronger
+      refs:
+        - docs/opus_0526/NSSF-hints.md:71-75
+        - docs/opus_0526/NSSF-db-design.md:36-40
+        - docs/opus_0526/NSSF-test-spec.md:237-240
+        - docs/opus_0526/NSSF-test-spec.md:1388-1421
+      note: Opus has concrete TC-0077..0080 rows for NSSRG and NSAG triggers.
+    impact: >-
+      Potential undercoverage of conditional response fields. If unsupported for this implementation, Phase4 must make that explicit instead of silently omitting fields.
+    recommended_phase4_rows:
+      - type: e2e
+        row: nsselection_nssrg_present_returns_nssrgList_or_explicit_unsupported_policy
+        priority: P1
+      - type: e2e
+        row: nsselection_nsag_supported_returns_nsagInfoList_or_explicit_unsupported_policy
+        priority: P1
+      - type: e2e
+        row: nsselection_udm_provide_all_flag_behavior_marked_supported_or_deferred
+        priority: P1
+    plan_amendment: absorb_into_PR-phase4-e2e-tests
+
+  - id: DOCX-GAP-006
+    title: NSSF discovery/home-NSSF/FQDN operator policy should be separated from OAuth2/NRF token config
+    p2_status: open_phase5
+    current_impl_evidence:
+      - src/nssf/engine/selection_engine.h:redirect_table is operator-provided but not an NSSF discovery/home-NSSF policy model
+      - src/nssf/runtime/oauth2_outbound.h:NRF token URL/scope configuration exists separately for outbound OAuth2
+      - no operator guide artifact found that separates same-PLMN local NSSF, NRF-discovered NSSF, home NSSF URL, or FQDN construction policy
+    opus_coverage:
+      classification: both_opus_adds_context
+      refs:
+        - docs/opus_0526/NSSF-hints.md:58
+        - docs/opus_0526/NSSF-procedure-analysis.md:646-670
+      note: Opus highlights V-NSSF/H-NSSF and SEPP role split but does not provide final deployment values.
+    impact: >-
+      Not a Phase4 code blocker; avoid conflating OAuth2 token endpoint config with NSSF discovery/home-NSSF routing in operator docs.
+    recommended_phase4_rows:
+      - type: e2e
+        row: inter_plmn_home_nssf_discovery_explicitly_deferred_until_operator_policy
+        priority: marker
+    plan_amendment: phase5_operator_guide
+
+  - id: DOCX-GAP-007
+    title: 307/308 server-side redirect needs 3gpp-Sbi-Target-Nf-Id evidence or explicit unsupported status
+    p2_status: open
+    current_impl_evidence:
+      - src/nssf/engine/selection_engine.h:redirect_table reserved; engine reads but never invents redirect
+      - tests/nssf/unit/test_selection_engine_redirect.c:asserts no invented redirect even when redirect_table is present
+      - src/nssf/server/router.c:no evidence of 307/308 response construction or 3gpp-Sbi-Target-Nf-Id header emission
+      - outbound OAuth2/notification dispatcher correctly no-follow redirects, but this gap is inbound/server-side redirect behavior
+    opus_coverage:
+      classification: both_opus_stronger
+      refs:
+        - docs/opus_0526/NSSF-api-spec.md:517
+        - docs/opus_0526/NSSF-api-spec.md:548-549
+        - docs/opus_0526/NSSF-api-spec.md:568-569
+        - docs/opus_0526/NSSF-test-spec.md:253-254
+        - docs/opus_0526/NSSF-test-spec.md:1464-1476
+      note: Opus states the header rule and has E1 307/308 test rows, but current implementation intentionally does not synthesize redirect.
+    impact: >-
+      Phase4 must either prove server-side redirect unsupported/deferred with no accidental 3xx, or implement/verify 307/308 with Location plus 3gpp-Sbi-Target-Nf-Id.
+    recommended_phase4_rows:
+      - type: contract
+        row: nsselection_307_308_unsupported_returns_no_redirect_and_documented_policy_or_includes_target_nf_header_if_enabled
+        priority: P0
+      - type: security
+        row: server_redirect_never_emitted_without_operator_target_nf_id
+        priority: P0
+    plan_amendment: absorb_into_PR-phase4-contract-tests_and_PR-phase4-security-tests
+
+  - id: DOCX-GAP-008
+    title: Feature-gated notification payloads need explicit coverage or unsupported policy
+    p2_status: open
+    current_impl_evidence:
+      - src/nssf/generated/model/nssf_event_notification.h:generated payload supports altNssai/unavailableNsiList/validityTime fields
+      - src/nssf/dispatcher/notification_dispatcher.c:event_to_payload emits nfId/tai/changeType/authorizedNssaiAvailabilityData only
+      - src/nssf/handlers/subscription_post_handler.c:persists create document/filter but does not enforce feature-specific subscription payload requirements
+      - tests/nssf/integration/test_fanout_integration.c:covers generic fan-out and self-suppression, not NSRP/NSIUN/ONSSAI/SATAS/NSAG feature payload matrix
+    opus_coverage:
+      classification: both_opus_stronger
+      refs:
+        - docs/opus_0526/29.531-features.md:81-85
+        - docs/opus_0526/29.531-features.md:132-140
+        - docs/opus_0526/NSSF-procedure-analysis.md:47-49
+        - docs/opus_0526/NSSF-test-spec.md:222
+      note: Opus links notification variants and retry tests but current code only sends generic availability-change payloads.
+    impact: >-
+      Risk of overclaiming notification feature support. Phase4 should include feature-matrix rows that either expect exact payloads or assert explicit unsupported behavior.
+    recommended_phase4_rows:
+      - type: e2e
+        row: notification_sNssai_status_change_generic_payload_current_supported_subset
+        priority: P0
+      - type: e2e
+        row: notification_NSRP_NSIUN_validity_time_feature_payloads_supported_or_501_unsupported
+        priority: P1
+      - type: e2e
+        row: subscription_ONSSAI_SATAS_NSAG_feature_flags_do_not_silently_accept_invalid_payloads
+        priority: P1
+    plan_amendment: absorb_into_PR-phase4-e2e-tests
+
+  - id: DOCX-GAP-009
+    title: 29.531 Nnssf APIs define no OAuth2 scopes
+    p2_status: open_documentation_advisory
+    current_impl_evidence:
+      - src/nssf/runtime/oauth2_scope_check.c and tests enforce deployment scope strings nnssf-nsselection/nnssf-nssaiavailability for ADR-0004 inbound security
+      - engineering/nssf/dependency-decisions.yaml outbound OAuth2 uses NRF/operator policy scopes nnrf-disc nnrf-nfm
+      - no operator guide note separating deployment/NRF policy scopes from 29.531-defined Nnssf API scopes
+    opus_coverage:
+      classification: both_conflict_needs_wording
+      refs:
+        - docs/opus_0526/NSSF-hints.md:101
+        - docs/opus_0526/NSSF-api-spec.md:499-509
+        - docs/opus_0526/NSSF-api-spec.md:986
+      note: Opus itself mixes API-level scope suggestions with the no-resource-level-scope caveat; final docs must be precise.
+    impact: >-
+      Security implementation can remain, but docs/tests must not claim 29.531 defines these scopes. They are ADR-0004/deployment/NRF policy values.
+    recommended_phase4_rows:
+      - type: security
+        row: inbound_scope_enforcement_is_project_policy_not_29_531_resource_scope_claim
+        priority: wording_guard
+      - type: operator_guide
+        row: document_Nnssf_no_spec_scopes_and_configured_deployment_scopes
+        priority: P1
+    plan_amendment: phase5_operator_guide_with_phase4_security_wording_guard
+
+# Output 2: Opus crosswalk matrix, condensed by gap.
+opus_crosswalk_matrix:
+  DOCX_only:
+    - DOCX-GAP-001 exact same-origin AMF notification suppression predicate
+  Opus_only_candidates_for_future_backlog:
+    - NF registration/deregistration/heartbeat lifecycle beyond current NSSF API slices
+    - gzip content-encoding support rows
+    - detailed mock-data corpus and FEAT/TC registry not yet imported into current harness
+  Both:
+    - DOCX-GAP-002 subscription modify event immutability and ONSSAI-related taiList constraints
+    - DOCX-GAP-003 expiry spread/cleanup semantics
+    - DOCX-GAP-004 NSSelection procedure variants
+    - DOCX-GAP-005 NSSRG/NSAG/UDM conditional behavior
+    - DOCX-GAP-006 roaming/home-NSSF discovery policy
+    - DOCX-GAP-007 307/308 redirect behavior
+    - DOCX-GAP-008 feature-gated notification payloads
+    - DOCX-GAP-009 OAuth2 scope wording caveat
+  conflicts_or_tensions:
+    - id: OPUS-TENSION-001
+      topic: Notification callback 307 handling
+      opus_position: docs/opus_0526/NSSF-test-spec.md expects callback 307 retry for C1 notification.
+      current_project_position: notification_dispatcher and oauth2_outbound enforce no redirect-follow for fail-closed security.
+      resolution: Treat Opus row as candidate only; current ADR-0004/security ratification wins unless explicitly re-ratified.
+    - id: OPUS-TENSION-002
+      topic: OAuth2 scopes
+      opus_position: api-spec suggests endpoint-level scope strings but also says Nnssf API has no resource-level scopes.
+      current_project_position: inbound scopes are ADR-0004/project deployment policy; outbound scopes are NRF/operator policy.
+      resolution: Keep code; amend wording in operator/security docs.
+
+# Output 3: Phase1-3 impact summary.
+phase1_3_impact:
+  regression_risks:
+    - gap: DOCX-GAP-002
+      risk: patching nested /filter/event may allow event-IE semantic mutation depending on create shape
+      affected_surface: SubscriptionStore patch + subscription PATCH handler
+    - gap: DOCX-GAP-007
+      risk: redirect support can be overclaimed because current engine intentionally does not emit server redirects
+      affected_surface: SelectionEngine/router contract tests
+    - gap: DOCX-GAP-008
+      risk: generic notification payload can be mistaken for feature-complete NSRP/NSIUN/validity payload support
+      affected_surface: NotificationDispatcher fan-out/e2e tests
+  missing_implementation_surfaces:
+    - gap: DOCX-GAP-004
+      surface: PDN Connection, Other Purpose/NWDAF, Inter-PLMN NSSelection variants
+    - gap: DOCX-GAP-005
+      surface: NSSRG, UDM provide-all, NSAG response shaping
+    - gap: DOCX-GAP-003
+      surface: expiry jitter/spread/indefinite/operator policy
+    - gap: DOCX-GAP-006
+      surface: NSSF discovery/home-NSSF/FQDN policy
+  no_code_change_required_before_phase4_if:
+    - Phase4 tests include explicit unsupported/deferred rows for unimplemented procedure/feature variants.
+    - Operator/security docs later correct scope and expiry/discovery policy wording.
+
+# Output 4: Phase4 test/backfill candidates.
+phase4_test_rows:
+  PR-phase4-contract-tests:
+    - DOCX-GAP-002: submodifypatch event IE immutable, including /event and /filter/event variants
+    - DOCX-GAP-002: empty taiList requires ONSSAI support or explicit unsupported response
+    - DOCX-GAP-004: NSSelection registration/PDU/UE-config existing subset matrix
+    - DOCX-GAP-004: PDN/OtherPurpose/InterPLMN rows as supported-or-deferred markers
+    - DOCX-GAP-007: server-side 307/308 either unsupported or Location + 3gpp-Sbi-Target-Nf-Id
+  PR-phase4-security-tests:
+    - DOCX-GAP-002: mutation rejection must be fail-closed and leave persisted event/filter unchanged
+    - DOCX-GAP-007: no redirect without operator target NF identity
+    - DOCX-GAP-009: scope test labels must say project/deployment policy, not 29.531-defined scope
+  PR-phase4-e2e-tests:
+    - DOCX-GAP-001: self-originating AMF fan-out regression guard
+    - DOCX-GAP-004: procedure flow rows for implemented NSSelection variants
+    - DOCX-GAP-005: NSSRG/NSAG/UDM conditional rows as supported-or-deferred
+    - DOCX-GAP-008: notification feature payload rows as supported-or-unsupported
+  phase5_operator_guide:
+    - DOCX-GAP-003: default_expiry/allow_indefinite/expiry_jitter_seconds/cleanup policy
+    - DOCX-GAP-006: same-PLMN local vs NRF discovery vs home-NSSF/FQDN fields
+    - DOCX-GAP-009: no 29.531-defined Nnssf scopes; configured scopes are deployment/NRF policy
+
+# Output 5: plan-amendment recommendation only; pr-slicing-plan.yaml intentionally unchanged.
+plan_amendment_recommendation:
+  required_now: true
+  direct_plan_file_changed_by_this_pr: false
+  recommended_registration: >-
+    Register this PR as the DOCX-HARNESS-PHASE-2 gate evidence, then amend Phase4
+    contract/security/e2e acceptance rows to consume the matrix above. Do not add
+    a new runtime implementation slice before Phase4 unless a Phase4 test row is
+    declared must-pass and currently impossible.
+  new_slice_needed_before_phase4: false
+  absorb_into_existing_phase4:
+    - PR-phase4-contract-tests
+    - PR-phase4-security-tests
+    - PR-phase4-e2e-tests
+  defer_to_phase5:
+    - PR-phase5-operator-configuration-guide
+  possible_future_slices_after_phase4_findings:
+    - subscription_patch_semantic_hardening_if_event_filter_mutation_is_confirmed
+    - nsselection_procedure_variant_expansion_if unsupported markers are not acceptable
+    - notification_feature_payload_support_if NSRP/NSIUN/validity notifications are required
