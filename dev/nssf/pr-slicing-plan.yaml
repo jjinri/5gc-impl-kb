@@ -61,6 +61,8 @@ plan_history:
   - '#147 merged (6d20bdf) — PR-phase2-config-hardening (default self-merge, 4-condition PASS). standalone secret_ref env:/file: resolver seam (oauth2_outbound.h TODO seam 구현) — env:NAME getenv verbatim / file:/path read, 값 직접 보유 금지, fail-fast (bad-format/NOT_FOUND/IO_ERROR/TOO_LARGE 64KiB), secure_scrub(volatile memset)-before-free, file trailing-newline 1개만 strip. secret hygiene — VALUE 절대 미로그 (scheme/NAME/PATH/status class 만). M4 token-attach path 무변경 (standalone). no worker/polling loop, no new dep, no new spec dep. 4-lane: reviewer approve (secret hygiene PASS) + verifier 5/5 (full 40/40, sanitizers clean, CI-parity all green). RELIABILITY gate 2/2 CLOSED (oauth2-resilience+config-hardening) — Phase-4/e2e + dispatcher worker loop un-gated (operator 결정 대상, 자동 진입 금지).'
   - '#152 merged — plan-amendment status-sync — PR-phase2-dispatcher-enqueue-hardening → merged.'
   - '#153 merged (ba8cea6) — round-2 plan-amendment (F1 callback redirect no-follow + F2 callback_url_allowed control/malformed strictness) phase4 acceptance_round2_rows. round-1 NEEDS-REWORK (F2 문구 overclaim — "enqueue 에서 https-only admit" 가 #151 permissive 2-layer 와 충돌) → docs-only reword round-2 (F2 = admit 집합 좁히기 아님, 모든 모드 공통 control/whitespace/malformed reject 추가) → operator+Pane2 APPROVE. F1/F2 follow-up 완전 종결, 별도 follow-up 없음.'
+  - '#154 merged (7870208) — plan-amendment status-sync — #152/#153 plan_history terminal lines (self-merged bookkeeping).'
+  - '#155 merged (de1ffdf) — PR-phase2-dispatcher-body-strict-json (EYEBALL slice, operator EYEBALL PASS + Pane2 approve). envelope_split strict-valid-JSON gate — non-empty invalid-JSON body 가 application/json 으로 POST 되던 #135 F7 잔여 창 차단 (envelope_build string-store → split string branch → POST). split 에서 out_body cJSON_Parse 실패 시 기존 F7 null/empty quarantine 과 동일 free+NULL+return -1 (caller terminal drop). fail-closed 오직 stricter (valid-JSON delivery 무변, invalid body 절대 POST 안 됨), no worker/loop, no body/token log, OAuth2/callback-gate/TLS/signature 무변. 4-lane: reviewer approve + verifier 5/5 (full 40/40). Pane2 reconcile: trailing-garbage 는 envelope_build 선-strip 으로 wire-hole 미발생 → #155 정확. silent-strip vs quarantine 의미변경 = F8 follow-up (deferred decision, open-gaps memo).'
 
 # ─── 2. PR 시퀀스 ─────────────────────────────────────────────────────
 prs:
@@ -954,7 +956,7 @@ prs:
       - PR-phase2-notification-dispatcher
       # sequencing gate (amendment 2026-06-04, phase3-first): phase3 integration 후로 정렬.
       - PR-phase3-fanout-integration
-    status: deferred
+    status: merged   # #155 (de1ffdf) EYEBALL-STOP, operator PASS + Pane2 approve. envelope_split strict-valid-JSON gate, fail-closed quarantine, no-worker. F8 (build+split 양쪽 strict / silent-strip) = deferred decision (open-gaps memo).
     required_checks: []
     estimated_loc: 150
     notes: |
