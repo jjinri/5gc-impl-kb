@@ -211,6 +211,136 @@ static void test_enqueue_rejects_invalid_args(void)
 }
 
 /* ===================================================================
+ * 1b. EYEBALL-STOP — enqueue-time STRUCTURAL callback_uri hard-reject
+ *
+ * PR-phase2-dispatcher-enqueue-hardening 의 핵심. nssf_retry_store_enqueue 가
+ * structurally un-dispatchable 한 callback_uri 를 backend 진입 BEFORE 에 -1 로
+ * hard-reject 한다 (permissive structural gate, allow_insecure_loopback=true).
+ * 이것은 dispatch-time https-only gate + OAuth2 fail-closed 앞단의 추가
+ * defense-in-depth 계층 — bad URL 은 애초에 row 가 되지 못한다.
+ *
+ * REJECT (-1, no row): NULL/empty, userinfo('@'), fragment('#'),
+ *   empty-authority, non-loopback plaintext http, un-dispatchable scheme.
+ * ACCEPT (0, row lands): production https, 그리고 test loopback http
+ *   (127.0.0.1 / [::1] / localhost) — 둘 다 admit 해야 test path 가 생존.
+ *
+ * 핵심 invariant — reject 된 callback_uri 는 NEVER dispatchable row 가 된다:
+ * 매 -1 직후 dequeue 가 0 (no due row) 이어야 한다 (fail-closed/no-row).
+ * =================================================================== */
+
+/* helper — enqueue 가 -1 reject 이고 그 직후 큐에 due row 가 없음을 단언한다.
+ * 매 케이스마다 "rejected callback_uri 는 dispatchable row 가 되지 않는다"
+ * 의 fail-closed invariant 를 함께 검증한다 (no-row invariant). */
+static void assert_enqueue_rejected_no_row(nssf_retry_store_t *store,
+                                           const char *callback_uri,
+                                           const char *label)
+{
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+             "enqueue 가 [%s] 를 -1 로 reject 하지 않음 (structural gate)", label);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        -1,
+        nssf_retry_store_enqueue(store, SUB_UUID, callback_uri,
+                                 "{\"changeType\":\"REPLACED\"}", "corr-rej"),
+        msg);
+
+    /* fail-closed/no-row invariant — rejected URI 는 due row 가 되지 않는다. */
+    nssf_retry_item_t none;
+    snprintf(msg, sizeof(msg),
+             "[%s] reject 후 dequeue 가 due row 반환 — rejected URI 가 "
+             "dispatchable row 가 됨 (fail-closed/no-row 위반)", label);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, nssf_retry_store_dequeue(store, &none), msg);
+    nssf_retry_item_clear(&none);
+}
+
+/* helper — enqueue 가 0 accept 이고 그 직후 dequeue 가 정확히 해당 row 를
+ * 돌려줌을 단언한다 (accepted URI 는 dispatchable row 가 된다). */
+static void assert_enqueue_accepted_one_row(nssf_retry_store_t *store,
+                                            const char *callback_uri,
+                                            const char *label)
+{
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+             "enqueue 가 [%s] 를 accept (0) 하지 않음 — production/loopback "
+             "path 가 막힘", label);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        0,
+        nssf_retry_store_enqueue(store, SUB_UUID, callback_uri,
+                                 "{\"changeType\":\"REPLACED\"}", "corr-acc"),
+        msg);
+
+    nssf_retry_item_t item;
+    snprintf(msg, sizeof(msg), "[%s] accept 후 dequeue 가 row 반환 실패", label);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, nssf_retry_store_dequeue(store, &item), msg);
+    snprintf(msg, sizeof(msg), "[%s] dequeue row 의 callback_uri 불일치", label);
+    TEST_ASSERT_EQUAL_STRING_MESSAGE(callback_uri, item.callback_uri, msg);
+    nssf_retry_store_complete(store, item.id);
+    nssf_retry_item_clear(&item);
+}
+
+/* REJECT set (cases 1~7,10) — structurally un-dispatchable callback_uri 는
+ * enqueue 에서 -1, 그리고 row 가 되지 않는다 (no-row invariant). 하나의 store
+ * 를 공유해 매 reject 직후 큐가 비어있음(0)을 확인한다. */
+static void test_enqueue_rejects_structural_callback_uri(void)
+{
+    nssf_retry_store_t *store = nssf_retry_store_new_inmemory();
+    TEST_ASSERT_NOT_NULL(store);
+
+    /* 1. NULL callback_uri → -1, no row. */
+    assert_enqueue_rejected_no_row(store, NULL, "NULL");
+    /* 2. empty "" → -1. */
+    assert_enqueue_rejected_no_row(store, "", "empty");
+    /* 3. userinfo('@') — credential-in-URL / host-confusion. */
+    assert_enqueue_rejected_no_row(
+        store, "https://user:pass@amf.example.com/cb", "userinfo@");
+    /* 4. fragment('#') — never sent to server, a config/data error. */
+    assert_enqueue_rejected_no_row(
+        store, "https://amf.example.com/cb#frag", "fragment#");
+    /* 5. empty authority — nothing between :// and the path. */
+    assert_enqueue_rejected_no_row(store, "https:///cb", "empty-authority(/cb)");
+    assert_enqueue_rejected_no_row(store, "https://", "empty-authority(bare)");
+    /* 6. non-loopback plaintext http — no ctor dispatches it (loopback only). */
+    assert_enqueue_rejected_no_row(
+        store, "http://amf.example.com/cb", "non-loopback-http");
+    /* 7. bad / un-dispatchable scheme. */
+    assert_enqueue_rejected_no_row(store, "ftp://amf.example.com/cb", "ftp://");
+    assert_enqueue_rejected_no_row(store, "garbage", "garbage(no-scheme)");
+    assert_enqueue_rejected_no_row(store, "://nohost", "://nohost");
+
+    /* 10. (cumulative) every reject above left the queue empty — re-confirm the
+     * store NEVER accumulated a dispatchable poison row across the whole set. */
+    nssf_retry_item_t none;
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        0, nssf_retry_store_dequeue(store, &none),
+        "rejected URI 들 이후 큐에 dispatchable row 가 남음 (no-row invariant 위반)");
+    nssf_retry_item_clear(&none);
+
+    nssf_retry_store_free(store);
+}
+
+/* ACCEPT set (cases 8,9) — production https AND the test loopback-http targets
+ * MUST survive enqueue (each becomes exactly one dispatchable row). The store
+ * is ctor-agnostic, so the permissive gate admits BOTH the https production path
+ * and the http://127.0.0.1|[::1]|localhost test path. */
+static void test_enqueue_accepts_https_and_loopback(void)
+{
+    nssf_retry_store_t *store = nssf_retry_store_new_inmemory();
+    TEST_ASSERT_NOT_NULL(store);
+
+    /* 8. production https. */
+    assert_enqueue_accepted_one_row(
+        store, "https://amf.example.com/cb", "https-production");
+    /* 9. test loopback http — all three loopback host forms must pass enqueue. */
+    assert_enqueue_accepted_one_row(
+        store, "http://127.0.0.1:8080/cb", "http-loopback-127");
+    assert_enqueue_accepted_one_row(store, "http://[::1]/cb", "http-loopback-v6");
+    assert_enqueue_accepted_one_row(
+        store, "http://localhost/cb", "http-loopback-localhost");
+
+    nssf_retry_store_free(store);
+}
+
+/* ===================================================================
  * 2. dequeue ordering + SKIP-LOCKED claim
  * =================================================================== */
 
@@ -399,6 +529,8 @@ int main(void)
     RUN_TEST(test_enqueue_seam_one_row);
     RUN_TEST(test_change_publish_takes_not_ready_path);
     RUN_TEST(test_enqueue_rejects_invalid_args);
+    RUN_TEST(test_enqueue_rejects_structural_callback_uri);
+    RUN_TEST(test_enqueue_accepts_https_and_loopback);
     RUN_TEST(test_dequeue_fifo_order_and_claim_once);
     RUN_TEST(test_complete_removes_row);
     RUN_TEST(test_requeue_rearms_row);

@@ -28,9 +28,16 @@
  *     failure → retriable) stands in for the not-directly-observable curl flags.
  *
  * REWORK round-1 regression blockers (this suite's new cases):
- *   B1: an http:// callback URL is DROPPED by the production https-only gate       — #B1
- *     BEFORE the transport seam runs — no POST emitted, no bearer attached.
- *   B1: a callback URL with userinfo('@') or fragment('#') is rejected — no POST.  — #B1
+ *   B1: a callback URL with userinfo('@') or fragment('#') or a non-loopback      — #B1
+ *     http:// scheme is HARD-REJECTED at enqueue (PR-phase2-dispatcher-enqueue-
+ *     hardening) — nssf_retry_store_enqueue returns -1, NO row ever exists, so NO
+ *     POST and NO bearer can ever happen. This is a STRONGER assertion than the
+ *     old dispatch-time drop: the bad callbackUri is stopped at the EARLIEST layer
+ *     (defense-in-depth), proven from observable behaviour (the queue is empty).
+ *   B1: the dispatch-time https-only DROP layer (second defense) is STILL covered  — #B1
+ *     with an ENQUEUABLE URI — a loopback http row (passes the permissive enqueue
+ *     gate) dispatched through a PRODUCTION https-only dispatcher is DROPPED with
+ *     no POST and no bearer.
  *   B2: a correlation id with CR/LF / control chars / over-length does NOT split   — #B2
  *     or inject the 3gpp-Sbi-Correlation-Info / traceparent header — a safe id is
  *     emitted (the outgoing header value is clean).
@@ -158,6 +165,30 @@ static void seed_row_corr(nssf_retry_store_t *store, const char *sub,
         0, nssf_retry_store_enqueue(store, sub, callback,
                                     "{\"changeType\":\"REPLACED\"}",
                                     correlation_id));
+}
+
+/* Assert a structurally-invalid callback_uri is HARD-REJECTED at enqueue
+ * (PR-phase2-dispatcher-enqueue-hardening): -1 return AND no dispatchable row
+ * lands (a subsequent dequeue finds nothing). The bad callbackUri is stopped at
+ * the EARLIEST layer — it can never become a POST or carry a bearer. */
+static void assert_seed_rejected_at_enqueue(nssf_retry_store_t *store,
+                                            const char *sub, const char *callback,
+                                            const char *label)
+{
+    char msg[256];
+    snprintf(msg, sizeof(msg),
+             "[%s] callback_uri 가 enqueue 에서 -1 reject 되지 않음 "
+             "(enqueue-time hardening)", label);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        -1,
+        nssf_retry_store_enqueue(store, sub, callback,
+                                 "{\"changeType\":\"REPLACED\"}", "corr-fixed-0001"),
+        msg);
+    nssf_retry_item_t none;
+    snprintf(msg, sizeof(msg),
+             "[%s] reject 후 dispatchable row 가 남음 — bad URI 가 row 가 됨", label);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, nssf_retry_store_dequeue(store, &none), msg);
+    nssf_retry_item_clear(&none);
 }
 
 /* loopback oauth handle wired to a mock NRF token transport. staged_status<0 (or a
@@ -453,15 +484,69 @@ static void test_oauth_fail_closed_no_post_row_preserved(void)
  * B1 — https-only URL gate runs BEFORE the transport seam
  * =================================================================== */
 
-/* http:// callback under the PRODUCTION ctor (gate active) → row DROPPED, NO POST
- * emitted, NO bearer attached, terminal classification. The mock would have
- * accepted (200) — but the gate fires before the transport and before any token
- * attach, so the mock is NEVER invoked. */
-static void test_http_callback_dropped_no_post_no_bearer(void)
+/* RETARGETED (PR-phase2-dispatcher-enqueue-hardening) — a non-loopback plaintext
+ * http:// callback is now HARD-REJECTED at ENQUEUE: it never becomes a row, so no
+ * POST and no bearer can ever happen. This is a STRONGER assertion than the old
+ * dispatch-time drop (the bad URI is stopped at the EARLIEST layer). The mock
+ * transport is installed only to prove it is NEVER invoked (g_amf.calls == 0). */
+static void test_http_callback_rejected_at_enqueue_no_post_no_bearer(void)
 {
     nssf_retry_store_t *store = nssf_retry_store_new_inmemory();
     TEST_ASSERT_NOT_NULL(store);
-    seed_row(store, "sub-http", "http://amf.example.com/cb"); /* plaintext! */
+
+    /* oauth ENABLED so we could (in principle) prove no bearer — but the row never
+     * exists, so the dispatch path that would attach a bearer is never reached. */
+    nssf_oauth2_outbound_config_t cfg = oauth_loopback_cfg(true);
+    nssf_oauth2_outbound_t *oauth = nssf_oauth2_outbound_create_insecure(&cfg);
+    TEST_ASSERT_NOT_NULL(oauth);
+    nrf_stub_t nrf = {.reply_status = 200,
+                      .reply_body =
+                          "{\"access_token\":\"amf-bearer-xyz\","
+                          "\"token_type\":\"Bearer\",\"expires_in\":300}"};
+    nssf_oauth2_outbound_set_transport(oauth, nrf_stub_transport, &nrf);
+
+    nssf_notification_dispatcher_t *disp =
+        nssf_notification_dispatcher_new(store, oauth);
+    TEST_ASSERT_NOT_NULL(disp);
+    nssf_notification_dispatcher_set_transport(disp, amf_mock_transport, &g_amf);
+
+    /* PRIMARY defense — the plaintext non-loopback http callback is rejected at
+     * enqueue: -1, and no dispatchable row lands. */
+    assert_seed_rejected_at_enqueue(store, "sub-http", "http://amf.example.com/cb",
+                                    "non-loopback-http");
+
+    /* dispatch on the (empty) queue finds NOTHING due → NONE, ZERO POSTs, never a
+     * bearer — the bad callbackUri can never reach the transport or token attach. */
+    g_amf.reply[0] = 200; /* mock would accept — must NEVER be reached. */
+    g_amf.reply_len = 1;
+    nssf_dispatch_result_e r =
+        nssf_notification_dispatcher_dispatch_pending(disp, NULL);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        NSSF_DISPATCH_NONE, r,
+        "enqueue-reject 후 큐에 row 가 없어야 하므로 dispatch 는 NONE");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        0, g_amf.calls,
+        "enqueue 에서 reject 되었는데 POST 가 emit 됨 (no-row invariant 위반)");
+    TEST_ASSERT_FALSE_MESSAGE(g_amf.saw_bearer,
+                              "rejected callback 에 bearer 가 부착됨");
+
+    nssf_notification_dispatcher_free(disp);
+    nssf_oauth2_outbound_free(oauth);
+    nssf_retry_store_free(store);
+}
+
+/* SECOND defense STILL covered — the dispatch-time https-only DROP layer. An
+ * ENQUEUABLE loopback http row (passes the permissive enqueue gate) dispatched
+ * through a PRODUCTION (https-only) dispatcher is DROPPED at dispatch time: the
+ * https-only gate fires BEFORE the transport and BEFORE any token attach, so no
+ * POST is emitted and no bearer is attached. This keeps the dispatch-time layer
+ * proven WITHOUT relying on a now-rejected enqueue. */
+static void test_loopback_http_dropped_by_production_https_only_gate(void)
+{
+    nssf_retry_store_t *store = nssf_retry_store_new_inmemory();
+    TEST_ASSERT_NOT_NULL(store);
+    /* loopback http PASSES the permissive enqueue gate (a real row lands). */
+    seed_row(store, "sub-loop-drop", "http://127.0.0.1:9090/cb");
 
     /* oauth ENABLED so we can prove no bearer is attached on the dropped row. */
     nssf_oauth2_outbound_config_t cfg = oauth_loopback_cfg(true);
@@ -473,7 +558,7 @@ static void test_http_callback_dropped_no_post_no_bearer(void)
                           "\"token_type\":\"Bearer\",\"expires_in\":300}"};
     nssf_oauth2_outbound_set_transport(oauth, nrf_stub_transport, &nrf);
 
-    /* PRODUCTION ctor — https-only gate ACTIVE. */
+    /* PRODUCTION ctor — https-only dispatch gate ACTIVE (no loopback relaxation). */
     nssf_notification_dispatcher_t *disp =
         nssf_notification_dispatcher_new(store, oauth);
     TEST_ASSERT_NOT_NULL(disp);
@@ -486,19 +571,19 @@ static void test_http_callback_dropped_no_post_no_bearer(void)
         nssf_notification_dispatcher_dispatch_pending(disp, NULL);
     TEST_ASSERT_EQUAL_INT_MESSAGE(
         NSSF_DISPATCH_DROPPED, r,
-        "http:// callback 이 https-only gate 로 DROPPED (terminal) 되지 않음");
+        "loopback http row 가 production https-only gate 로 DROPPED 되지 않음");
     TEST_ASSERT_EQUAL_INT_MESSAGE(
         0, g_amf.calls,
-        "https-only gate 가 transport 앞에서 막지 못함 — POST 가 emit 됨");
+        "https-only dispatch gate 가 transport 앞에서 막지 못함 — POST emit 됨");
     TEST_ASSERT_FALSE_MESSAGE(
         g_amf.saw_bearer,
         "dropped row 에 bearer 가 부착됨 (gate 가 token attach 앞에서 막아야)");
 
-    /* terminal — the poison row is removed (not re-armed to loop forever). */
+    /* terminal — the dropped row is removed (not re-armed to loop forever). */
     nssf_retry_item_t none;
     TEST_ASSERT_EQUAL_INT_MESSAGE(
         0, nssf_retry_store_dequeue(store, &none),
-        "http:// DROPPED 후 row 가 terminal 제거되지 않음");
+        "dispatch-time DROPPED 후 row 가 terminal 제거되지 않음");
     nssf_retry_item_clear(&none);
 
     nssf_notification_dispatcher_free(disp);
@@ -536,15 +621,22 @@ static void test_http_loopback_insecure_ctor_allows_post(void)
     nssf_retry_store_free(store);
 }
 
-/* B1 — userinfo('@') and fragment('#') are rejected on BOTH ctors → NO POST. */
+/* RETARGETED (PR-phase2-dispatcher-enqueue-hardening) — B1 userinfo('@') and
+ * fragment('#') callbacks are now HARD-REJECTED at ENQUEUE: each returns -1, no
+ * row ever lands, and a follow-up dispatch finds NOTHING → NONE with ZERO POSTs.
+ * STRONGER than the old dispatch-time drop — the hostile callbackUri is stopped at
+ * the EARLIEST layer (defense-in-depth), proven from observable behaviour (empty
+ * queue + no POST). The store is always torn down (no LeakSanitizer artifact). */
 static void test_userinfo_and_fragment_callback_rejected(void)
 {
     /* userinfo: an '@' shifts the real host (credential-in-URL / host confusion). */
     {
         nssf_retry_store_t *store = nssf_retry_store_new_inmemory();
         TEST_ASSERT_NOT_NULL(store);
-        seed_row(store, "sub-userinfo",
-                 "https://user:pass@evil.example.com/cb");
+        assert_seed_rejected_at_enqueue(
+            store, "sub-userinfo", "https://user:pass@evil.example.com/cb",
+            "userinfo@");
+
         nssf_notification_dispatcher_t *disp =
             nssf_notification_dispatcher_new(store, NULL);
         TEST_ASSERT_NOT_NULL(disp);
@@ -555,8 +647,8 @@ static void test_userinfo_and_fragment_callback_rejected(void)
         nssf_dispatch_result_e r =
             nssf_notification_dispatcher_dispatch_pending(disp, NULL);
         TEST_ASSERT_EQUAL_INT_MESSAGE(
-            NSSF_DISPATCH_DROPPED, r,
-            "userinfo('@') callback 이 DROPPED 되지 않음");
+            NSSF_DISPATCH_NONE, r,
+            "userinfo('@') enqueue-reject 후 dispatch 가 NONE 이 아님");
         TEST_ASSERT_EQUAL_INT_MESSAGE(
             0, g_amf.calls, "userinfo('@') callback 에 POST 가 emit 됨");
         nssf_notification_dispatcher_free(disp);
@@ -569,8 +661,10 @@ static void test_userinfo_and_fragment_callback_rejected(void)
     {
         nssf_retry_store_t *store = nssf_retry_store_new_inmemory();
         TEST_ASSERT_NOT_NULL(store);
-        seed_row(store, "sub-fragment",
-                 "https://amf.example.com/cb#section");
+        assert_seed_rejected_at_enqueue(
+            store, "sub-fragment", "https://amf.example.com/cb#section",
+            "fragment#");
+
         nssf_notification_dispatcher_t *disp =
             nssf_notification_dispatcher_new(store, NULL);
         TEST_ASSERT_NOT_NULL(disp);
@@ -581,8 +675,8 @@ static void test_userinfo_and_fragment_callback_rejected(void)
         nssf_dispatch_result_e r =
             nssf_notification_dispatcher_dispatch_pending(disp, NULL);
         TEST_ASSERT_EQUAL_INT_MESSAGE(
-            NSSF_DISPATCH_DROPPED, r,
-            "fragment('#') callback 이 DROPPED 되지 않음");
+            NSSF_DISPATCH_NONE, r,
+            "fragment('#') enqueue-reject 후 dispatch 가 NONE 이 아님");
         TEST_ASSERT_EQUAL_INT_MESSAGE(
             0, g_amf.calls, "fragment('#') callback 에 POST 가 emit 됨");
         nssf_notification_dispatcher_free(disp);
@@ -767,7 +861,8 @@ int main(void)
     RUN_TEST(test_transport_error_then_200_retried);
     RUN_TEST(test_4xx_no_retry_dropped);
     RUN_TEST(test_oauth_fail_closed_no_post_row_preserved);
-    RUN_TEST(test_http_callback_dropped_no_post_no_bearer);
+    RUN_TEST(test_http_callback_rejected_at_enqueue_no_post_no_bearer);
+    RUN_TEST(test_loopback_http_dropped_by_production_https_only_gate);
     RUN_TEST(test_http_loopback_insecure_ctor_allows_post);
     RUN_TEST(test_userinfo_and_fragment_callback_rejected);
     RUN_TEST(test_crlf_inbound_correlation_not_injected);
