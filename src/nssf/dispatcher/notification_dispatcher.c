@@ -756,6 +756,30 @@ int nssf_retry_store_enqueue(nssf_retry_store_t *store, const char *subscription
     if (store == NULL || subscription_id == NULL || payload_json == NULL) {
         return -1;
     }
+    /*
+     * Defense-in-depth (ADR-0004 M4/M2) — enqueue-time STRUCTURAL callback_uri
+     * hard-reject, layered IN FRONT of the dispatch-time callback_url_allowed gate
+     * (which STAYS as the second layer). A structurally un-dispatchable callback_uri
+     * (NULL/empty, userinfo('@'), fragment('#'), empty-authority, or a scheme no
+     * dispatcher ctor could ever emit) must never enter the retry queue, so it is
+     * rejected here BEFORE any row is written.
+     *
+     * WHY permissive mode (allow_insecure_loopback=true) and NOT https-only: the
+     * store is ctor-agnostic — it cannot know whether its rows feed a production
+     * https-only dispatcher (_new) or a test loopback dispatcher (_new_insecure).
+     * Enforcing https-only here would wrongly reject the legitimate test
+     * loopback-http path. So we reject ONLY what NO ctor could dispatch, while still
+     * admitting both the production https path AND the test http-loopback path. The
+     * https-only decision stays a dispatch-time / ctor concern (the second layer).
+     * This only makes enqueue STRICTER (bad URL → no row, -1); it weakens no
+     * existing reject. Pure synchronous validation — no worker / poll / loop (G-08).
+     */
+    if (!callback_url_allowed(callback_uri, /*allow_insecure_loopback=*/true)) {
+        fprintf(stderr,
+                "nssf_dispatcher: callback_uri rejected at enqueue (structural) — "
+                "no retry_queue row written.\n");
+        return -1;
+    }
     return store->vt->enqueue(store, subscription_id, callback_uri, payload_json,
                               correlation_id);
 }

@@ -135,6 +135,13 @@ void nssf_retry_store_free(nssf_retry_store_t *store);
  * Enqueue one pending row. `subscription_id`, `callback_uri`, `payload_json` and
  * (optional) `correlation_id` are borrowed — the store copies what it keeps.
  * Returns 0 on commit, -1 on error.
+ *
+ * Defense-in-depth: a STRUCTURALLY un-dispatchable callback_uri is hard-rejected
+ * at THIS enqueue boundary (returns -1, no row written) — NULL/empty, userinfo
+ * ('@'), fragment('#'), empty-authority, or an un-dispatchable scheme. This is the
+ * permissive structural check (it admits BOTH production https and the test
+ * loopback-http target); the https-only decision stays a dispatch-time / ctor
+ * concern, re-checked by the dispatch-path policy gate as the second layer.
  */
 int nssf_retry_store_enqueue(nssf_retry_store_t *store,
                              const char *subscription_id,
