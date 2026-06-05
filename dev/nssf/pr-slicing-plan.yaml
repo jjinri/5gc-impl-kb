@@ -56,6 +56,7 @@ plan_history:
   - 'phase4-rows amendment 2026-06-05 (crosswalk #149, planner-mode) — DOCX-derived acceptance rows 를 기존 phase4 slice 에 흡수 (신규 slice 없음). contract += GAP-002/004/007 (+GAP-003 negative-claim marker); security += GAP-002/007/009-wording-guard; e2e += GAP-001/004/005/008. GAP-003/006/009 = phase5 operator-guide defer. ⚠ OPUS-TENSION-001: callback 307 retry 미채택 — ADR-0004 no-follow/fail-closed ratification 우선 (redirect unsupported 선언이 정답). three_trigger_escape=false (ADR/eng_frozen/ADR-0004 본문 무변, test acceptance row 확장만). self-merge 금지 — operator review.'
   - '#150 merged (f79cfc9) — plan-amendment phase4-rows (crosswalk #149) absorb.'
   - '#151 merged (fa8ffb7) — PR-phase2-dispatcher-enqueue-hardening (EYEBALL slice, operator EYEBALL PASS + Pane2 approve-with-followup). nssf_retry_store_enqueue enqueue-time structural callback_uri hard-reject (API-level defense-in-depth) — permissive gate callback_url_allowed(uri, allow_insecure_loopback=true): NULL/empty/userinfo/fragment/empty-authority/non-loopback-http/bad-scheme → -1 no row; https + http loopback → 0. https-only 는 enqueue 미강제 (store ctor-agnostic). fail-closed 무변 (오직 stricter, single hunk), dispatch-time gate + OAuth2 ABORT untouched (2-layer). no worker/polling loop. 4-lane: reviewer approve + verifier 5/5 (full 40/40). Pane2 follow-up 2건 (F1 outbound-callback 3xx no-follow regression guard / F2 callback_url_allowed well-formed strictness) → round-2 plan-amendment 으로 phase4 acceptance row 흡수.'
+  - 'round-2 plan-amendment 2026-06-05 (#150/#151 Pane2 follow-up, planner-mode) — phase4 slice 에 acceptance_round2_rows 추가 (신규 slice 없음, src/tests 무변). F1 (OPUS-TENSION-001, outbound-callback 3xx no-follow regression guard) → security + e2e; F2 (callback_url_allowed well-formed/control-char strictness) → security + contract. F1 = GAP-007 server-side redirect 와 구분되는 outbound-callback 축 (두 축 plan 가시성 구분). 현 libcurl FOLLOWLOCATION=0 라 F1 = regression guard (live hole 아님). three_trigger_escape=false (ADR/eng_frozen/ADR-0004 본문 무변). 기록: pr-slicing-plan + open-gaps addendum + dev/nssf/plan-amendments/2026-06-05-callback-redirect-and-url-strictness.md. self-merge 금지 — operator+Pane2 review.'
   - '#146 merged (e352ba8) — plan-amendment status-sync — PR-phase2-oauth2-resilience → merged.'
   - '#147 merged (6d20bdf) — PR-phase2-config-hardening (default self-merge, 4-condition PASS). standalone secret_ref env:/file: resolver seam (oauth2_outbound.h TODO seam 구현) — env:NAME getenv verbatim / file:/path read, 값 직접 보유 금지, fail-fast (bad-format/NOT_FOUND/IO_ERROR/TOO_LARGE 64KiB), secure_scrub(volatile memset)-before-free, file trailing-newline 1개만 strip. secret hygiene — VALUE 절대 미로그 (scheme/NAME/PATH/status class 만). M4 token-attach path 무변경 (standalone). no worker/polling loop, no new dep, no new spec dep. 4-lane: reviewer approve (secret hygiene PASS) + verifier 5/5 (full 40/40, sanitizers clean, CI-parity all green). RELIABILITY gate 2/2 CLOSED (oauth2-resilience+config-hardening) — Phase-4/e2e + dispatcher worker loop un-gated (operator 결정 대상, 자동 진입 금지).'
 
@@ -643,6 +644,8 @@ prs:
       - 'DOCX-GAP-004: PDN-Connection / Other-Purpose(NWDAF) / Inter-PLMN(V/H-NSSF) variants = supported-or-deferred marker (미구현이면 explicit unsupported, silent omit 금지).'
       - 'DOCX-GAP-007: server-side 307/308 = unsupported/no-redirect 증명 (no accidental 3xx) OR (enabled 시) Location + 3gpp-Sbi-Target-Nf-Id. ⚠ ADR-0004 no-follow ratification 우선 — redirect unsupported 선언이 정답 (OPUS-TENSION-001).'
       - 'DOCX-GAP-003 (marker): subscription expiry policy = deferred/operator-configurable — spec-complete expiry 주장 금지 (negative-claim guard). 본격 정책 = phase5 operator-guide.'
+    acceptance_round2_rows:   # round-2 amendment 2026-06-05 (#150/#151 Pane2 follow-up). base gate = callback_url_allowed (notification_dispatcher.c).
+      - 'F2 (URL strictness, #151 Pane2): inbound Subscription Post 의 callbackUri 가 shared gate callback_url_allowed 로 검증 — ASCII control/whitespace (CR/LF/TAB/space) 또는 malformed authority/port/IPv6 면 well-formed 아님 → 400 reject (well-formed https URL 만 admit). 비고: percent-encoded %40(@)/%23(#) 은 literal userinfo/fragment 아니라 reject 필수 아님 (현 정책 OK).'
 
   - id: PR-phase4-security-tests
     title: 'test(nssf): WI-security-tests — ADR-0004 7 항목 baseline evidence'
@@ -665,6 +668,9 @@ prs:
       - 'DOCX-GAP-002: mutation rejection 은 fail-closed — auth 후 / persist 전 거부, persisted event/filter state 불변.'
       - 'DOCX-GAP-007: operator target NF identity 없이 server redirect 절대 미발생 (no redirect without 3gpp-Sbi-Target-Nf-Id). ADR-0004 no-follow 일관.'
       - 'DOCX-GAP-009 (wording-guard): inbound scope enforcement test label = project/deployment policy (ADR-0004) 로 표기 — 29.531 resource-level scope 정의라 주장 금지. full operator-guide wording = phase5 defer.'
+    acceptance_round2_rows:   # round-2 amendment 2026-06-05 (#150/#151 Pane2 follow-up). ADR-0004 no-follow/fail-closed regression guard.
+      - 'F1 (outbound-callback 3xx, #150 Pane2 / OPUS-TENSION-001): NotificationDispatcher 의 *outbound callback* POST 가 307/308/3xx 응답을 절대 follow 안 함 (libcurl FOLLOWLOCATION=0). 3xx 는 retry/dead-letter/fail-closed 로 처리, redirect Location host 로 credential/header(bearer) leak 없음. ⚠ 이건 GAP-007 의 *server-side* 307/308 (NSSF 가 발신하는 redirect 응답) 과 다른 *outbound-callback* 축 — 두 축 plan 가시성 구분 유지. 현 libcurl FOLLOWLOCATION=0 라 live hole 아님 → regression guard (Opus callback 307-retry row 미채택, ADR-0004 ratification 우선).'
+      - 'F2 (URL strictness, #151 Pane2): shared URL gate callback_url_allowed (enqueue + dispatch 공유 정책) 가 ASCII control/whitespace (CR/LF/TAB/space) 및 malformed authority/port/IPv6 를 enqueue 단계에서 명시 reject — well-formed https URL 만 admit (libcurl 가 나중에 reject 할 malformed URL 앞단 차단). reject test 포함. 비고: percent-encoded %40(@)/%23(#) 은 literal userinfo/fragment 아니라 reject 필수 아님 (현 정책 OK, row 에 명시).'
 
   - id: PR-phase4-e2e-tests
     title: 'test(nssf): WI-e2e-tests — request-flow e2e 시나리오'
@@ -688,6 +694,8 @@ prs:
       - 'DOCX-GAP-004: implemented NSSelection procedure 흐름 rows (registration/PDU/UE-config); unsupported variants = explicit deferred marker.'
       - 'DOCX-GAP-005: NSSRG present → nssrgList OR explicit unsupported policy; NSAG supported → nsagInfoList OR explicit unsupported; UDM provide-all flag = supported-or-deferred.'
       - 'DOCX-GAP-008: notification feature payload matrix — sNssai status-change generic payload = 현 supported subset; NSRP/NSIUN/validityTime = supported OR 501 unsupported; ONSSAI/SATAS/NSAG flag = invalid payload silent accept 금지 (overclaim 방지).'
+    acceptance_round2_rows:   # round-2 amendment 2026-06-05 (#150 Pane2 follow-up). outbound-callback 3xx no-follow e2e regression guard.
+      - 'F1 (outbound-callback 3xx, #150 Pane2): e2e — mock AMF callback 이 307/308/3xx 를 응답하면 dispatcher 가 follow 안 하고 (no second POST to redirect Location), 결과를 retry/drop(fail-closed) 로 처리 + redirect host 로 bearer/credential 미전송. GAP-007 server-side redirect 와 구분되는 outbound-callback 축. regression guard.'
 
   - id: PR-phase5-observability-finalize
     title: 'feat(nssf): WI-observability-finalize — metric / log / trace seam'
