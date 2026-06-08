@@ -906,6 +906,13 @@ prs:
       # retry_store(pg+inmemory) 는 notification_dispatcher.c 내부 = 기존 scope.
       - infra/nssf/schema.sql
       - infra/nssf/migrations/manifest.yaml
+      # scope amendment 2026-06-08 round-2 (resume #10, OPTION 1 + fanout fix(d) split/hybrid,
+      # operator+Pane2(codex)+orchestrator 수렴). ratified requeue→backoff semantics 가 fanout
+      # integration test 의 dequeue→requeue→즉시-dispatch=SENT 기대치를 깨뜨림 (production bug
+      # 아님 — 초기 fanout enqueue 는 next_attempt_at=NOW 라 due-now 즉시 배달; 깨진 2 case 는
+      # requeue 를 unlock/return-to-queue 용도로 쓴 것, 이제 requeue=backoff 라 not-due 가 정당).
+      # test 기대치/구조 갱신 (semantics 정상). explicit single file — glob 확장 금지 (scope-gate 정밀).
+      - tests/nssf/integration/test_fanout_integration.c
     depends_on:
       - PR-phase2-notification-dispatcher
       - PR-phase3-fanout-integration
