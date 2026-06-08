@@ -901,6 +901,11 @@ prs:
     scope_files:
       - src/nssf/dispatcher/notification_dispatcher.{h,c}
       - tests/nssf/**/test_notification_dispatcher_*.c
+      # scope amendment 2026-06-08 (resume #10, OPTION 1 — operator+Pane2(codex)+orchestrator 수렴).
+      # dead-letter = 명시적 status enum column → persistence contract 변경 = 아래 2 파일 in-scope.
+      # retry_store(pg+inmemory) 는 notification_dispatcher.c 내부 = 기존 scope.
+      - infra/nssf/schema.sql
+      - infra/nssf/migrations/manifest.yaml
     depends_on:
       - PR-phase2-notification-dispatcher
       - PR-phase3-fanout-integration
@@ -923,6 +928,23 @@ prs:
       oauth2-resilience/config-hardening 을 depends_on 으로 선행 강제 (위 참조,
       open-gaps G-08 annotate). WI-dispatcher-resilience first-class 승격은 readiness
       regen follow-up.
+
+      ── scope amendment 2026-06-08 (resume #10, OPTION 1, operator+Pane2(codex)+orchestrator 수렴) ──
+      dead-letter REPRESENTATION = 명시적 `status` enum column (pending / dead_letter) on
+      retry_queue. attempt_count>=max encoding 채택 안 함 — terminal state 암묵화로
+      audit/replay/observability/phase4 검증 약화, max_attempts 정책 변경 시 과거 terminal
+      row 의미 흔들림. status column 이 fail-closed 도 구조적으로 안전 — claim query =
+      `status='pending' AND next_attempt_at <= now` 이면 dead_letter row 는 구조적
+      unclaimable (attempt_count ceiling 은 WHERE 누락/reset 버그 취약). 그래서 scope_files
+      += infra/nssf/schema.sql + infra/nssf/migrations/manifest.yaml (persistence contract).
+      G-08 재확인: 본 slice 는 CALL-DRIVEN — NO worker/polling loop/thread/timer/sleep.
+      dispatch_pending 이 *호출 시* due (status='pending' AND next_attempt_at<=now) row 1개만
+      claim/attempt/schedule/dead-letter. retriable(5xx/timeout/429/conn/TLS) → attempt_count++
+      + next_attempt_at = now + backoff + jitter (re-arm). max 초과 OR terminal(4xx / OAuth2
+      NSSF_OAUTH2_ABORT/FORBIDDEN) → status=dead_letter (terminal, no further claim). fail-closed
+      (unauth outbound 절대 금지). 본 amendment = ratified design (engineering-design +
+      6/5 G-08 checkpoint, 둘 다 status column 명시) 의 transcription/scope-fix — design
+      변경 아님. three-trigger escape=false (ADR/eng_frozen/ADR-0004 본문 무변).
 
   - id: PR-phase2-dispatcher-enqueue-hardening
     title: 'feat(nssf): dispatcher enqueue defense-in-depth — callback_uri NULL/invalid hard-reject'
