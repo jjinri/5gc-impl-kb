@@ -63,6 +63,9 @@ CREATE INDEX IF NOT EXISTS subscription_expiry_idx
 -- 4. retry_queue — NotificationDispatcher outbound retry.
 --    FOR UPDATE SKIP LOCKED 로 dequeue.
 --    subscription cascade delete — subscription 삭제 시 pending retry 동시 정리.
+--    status — Phase 4 fail-closed bounded retry 의 row lifecycle marker.
+--    enum-by-convention — 'pending' (claimable) / 'dead_letter' (terminal failure,
+--    audit 보존, 재claim 불가). DEFAULT 'pending' 로 bootstrap row 는 즉시 claim 대상.
 CREATE TABLE IF NOT EXISTS retry_queue (
     id                BIGSERIAL    PRIMARY KEY,
     subscription_id   UUID         NOT NULL
@@ -70,15 +73,30 @@ CREATE TABLE IF NOT EXISTS retry_queue (
     payload           JSONB        NOT NULL,
     attempt_count     INT          NOT NULL DEFAULT 0,
     next_attempt_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    status            TEXT         NOT NULL DEFAULT 'pending'
+                                   CHECK (status IN ('pending', 'dead_letter')),
     created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX IF NOT EXISTS retry_queue_next_attempt_idx
-    ON retry_queue (next_attempt_at);
+-- Bootstrap 가 M002 이전 schema 위에 재적용될 때도 idempotent — status 가 없으면
+-- 추가한다 (CREATE TABLE IF NOT EXISTS 는 기존 table 의 누락 column 을 채우지 않음).
+ALTER TABLE retry_queue ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending';
+
+-- Partial index — claim query (status='pending' AND next_attempt_at <= NOW()) 만
+-- 지원. dead_letter row 는 구조적으로 claim 대상에서 제외되므로 index 에서도 제외.
+CREATE INDEX IF NOT EXISTS retry_queue_claim_idx
+    ON retry_queue (next_attempt_at) WHERE status = 'pending';
 
 -- 5. M001-bootstrap version row — bootstrap 적용 표식 (idempotent).
 INSERT INTO nssf_schema_version (version, description)
 VALUES (1, 'M001-bootstrap — availability/subscription/retry_queue tables')
+ON CONFLICT (version) DO NOTHING;
+
+-- 6. M002 version row — retry_queue.status (fail-closed bounded retry / dead-letter).
+--    Fresh bootstrap 는 이미 status column 을 포함하므로 version=2 도 함께 등재한다.
+--    M002 migration 을 v1 위에 따로 apply 하는 경로도 동일 row 를 idempotent 하게 insert.
+INSERT INTO nssf_schema_version (version, description)
+VALUES (2, 'M002 — retry_queue.status (pending/dead_letter) for bounded retry + dead-letter')
 ON CONFLICT (version) DO NOTHING;
 
 COMMIT;

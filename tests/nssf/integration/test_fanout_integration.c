@@ -26,9 +26,12 @@
  * row. That isolates the fan-out enqueue under test — every retry_queue row
  * observed here is produced by fanout_change, not by create().
  *
- * Cases (PR-phase3-fanout-integration acceptance):
- *   1. broad subscriber (no-tai filter) → ONE row (real UUID + callbackUri) →    — #1
- *      ONE dispatch → mock POST count == 1.
+ * Cases (PR-phase3-fanout-integration acceptance; Phase-4 backoff-aware):
+ *   1a. broad subscriber (no-tai filter) → ONE row (real UUID + callbackUri);    — #1
+ *       after requeue the re-armed row is NOT immediately re-claimable
+ *       (dispatch → NSSF_DISPATCH_NONE, 0 POSTs — Phase-4 backoff lock).
+ *   1b. broad subscriber → ONE DUE-now fan-out row dispatched DIRECTLY →
+ *       SENT + EXACTLY ONE POST to the callbackUri (the delivery proof).
  *   2. TAI-scoped match vs non-match → only the matching sub's UUID enqueued.    — #2
  *   3. multi-subscriber fan-out → N rows, each its OWN distinct UUID+callbackUri. — #3
  *   4. callbackUri B1 gate (http:// non-loopback / userinfo@ / fragment#) →      — #4
@@ -188,10 +191,19 @@ static int drain_rows(nssf_retry_store_t *retry, drained_row_t *out, int cap)
 }
 
 /* ===================================================================
- * 1. broad subscriber → ONE row (real UUID + callbackUri) → ONE dispatch → POST 1
+ * 1a. broad subscriber → ONE row carrying the REAL UUID + callbackUri; after a
+ *     requeue the re-armed row is NOT immediately re-claimable (backoff lock).
+ *
+ * Phase-4 backoff semantics: nssf_retry_store_requeue re-arms next_attempt_at to
+ * `now + backoff` (NOT NOW()), so the row is NOT due until the backoff elapses.
+ * This case proves (a) the fan-out row carries the real subscription identity,
+ * and (b) the no-hot-loop invariant — a freshly re-armed row cannot be re-claimed
+ * by the very next dispatch_pending (returns NONE / not due, NO POST). The
+ * delivery ("one POST") proof for a fan-out row lives in case 1b below, which
+ * dispatches the DUE-now initial enqueue directly (no requeue dance).
  * =================================================================== */
 
-static void test_broad_subscriber_one_row_one_post(void)
+static void test_broad_subscriber_requeue_backoff_not_due(void)
 {
     nssf_subscription_store_t *store = nssf_subscription_store_new_inmemory();
     TEST_ASSERT_NOT_NULL(store);
@@ -222,11 +234,66 @@ static void test_broad_subscriber_one_row_one_post(void)
                                      "row 가 real subscription UUID 를 담지 않음");
     TEST_ASSERT_EQUAL_STRING_MESSAGE(cb, item.callback_uri,
                                      "row 가 sub 의 callbackUri 를 담지 않음");
-    /* requeue so the dispatcher (built below) can drive the actual POST. */
+    /* requeue re-arms with backoff (now + backoff, NOT NOW()). */
     TEST_ASSERT_EQUAL_INT(0, nssf_retry_store_requeue(retry, item.id));
     nssf_retry_item_clear(&item);
 
-    /* ONE call-driven dispatch → mock POST count == 1 (the wired cascade tail). */
+    /* backoff lock: the very next dispatch finds the re-armed row NOT yet due →
+     * NSSF_DISPATCH_NONE, and ZERO outbound POSTs (no hot-loop re-claim). */
+    nssf_notification_dispatcher_t *disp =
+        nssf_notification_dispatcher_new(retry, NULL);
+    TEST_ASSERT_NOT_NULL(disp);
+    nssf_notification_dispatcher_set_transport(disp, amf_mock_transport, &g_amf);
+
+    nssf_dispatch_result_e dr =
+        nssf_notification_dispatcher_dispatch_pending(disp, NULL);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        NSSF_DISPATCH_NONE, dr,
+        "requeue 로 backoff re-arm 된 row 가 즉시 다시 due 로 dispatch 됨 (hot-loop)");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        0, g_amf.calls,
+        "not-due row 인데 POST 가 발사됨 (backoff lock 위반)");
+
+    cJSON_Delete(ev_tai);
+    nssf_notification_dispatcher_free(disp);
+    nssf_retry_store_free(retry);
+    nssf_subscription_store_free(store);
+}
+
+/* ===================================================================
+ * 1b. broad subscriber → ONE fan-out row, dispatched DIRECTLY (no requeue) →
+ *     SENT + EXACTLY ONE outbound POST to the sub's callbackUri.
+ *
+ * This is the delivery proof the original test_broad_subscriber_one_row_one_post
+ * carried, retargeted onto the DUE-now initial fan-out enqueue (next_attempt_at =
+ * NOW), which the dispatcher delivers immediately — no requeue/backoff dance.
+ * =================================================================== */
+
+static void test_broad_subscriber_one_row_one_post(void)
+{
+    nssf_subscription_store_t *store = nssf_subscription_store_new_inmemory();
+    TEST_ASSERT_NOT_NULL(store);
+    nssf_retry_store_t *retry = nssf_retry_store_new_inmemory();
+    TEST_ASSERT_NOT_NULL(retry);
+
+    char sub_id[37];
+    cJSON *filter = make_broad_filter();
+    const char *cb = "https://amf.example.com/n1n2/notify";
+    create_sub(store, cb, filter, sub_id);
+    cJSON_Delete(filter);
+
+    /* a REPLACED (Put) committed change with a serving TAI. */
+    cJSON *ev_tai = make_tai("001", "01", "000001");
+    nssf_availability_change_event_t ev =
+        make_event("amf-nf-001", NSSF_AVAIL_CHANGE_REPLACED, ev_tai);
+
+    /* fresh fan-out enqueue: the row is DUE-now (next_attempt_at = NOW). */
+    int enq = nssf_subscription_store_fanout_change(store, retry, &ev);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        1, enq, "broad subscriber 가 정확히 1 row 로 fan-out 되지 않음");
+
+    /* ONE call-driven dispatch on the DUE-now row → mock POST count == 1
+     * to the sub's real callbackUri (the wired cascade tail). */
     nssf_notification_dispatcher_t *disp =
         nssf_notification_dispatcher_new(retry, NULL);
     TEST_ASSERT_NOT_NULL(disp);
@@ -235,7 +302,7 @@ static void test_broad_subscriber_one_row_one_post(void)
     nssf_dispatch_result_e dr =
         nssf_notification_dispatcher_dispatch_pending(disp, NULL);
     TEST_ASSERT_EQUAL_INT_MESSAGE(NSSF_DISPATCH_SENT, dr,
-                                  "fan-out row 의 dispatch 가 SENT 되지 않음");
+                                  "due-now fan-out row 의 dispatch 가 SENT 되지 않음");
     TEST_ASSERT_EQUAL_INT_MESSAGE(
         1, g_amf.calls, "ONE dispatch 가 정확히 1 outbound POST 가 아님");
     TEST_ASSERT_EQUAL_STRING(cb, g_amf.last_uri);
@@ -610,9 +677,11 @@ static void test_gap001_same_amf_id_suppressed(void)
     nssf_subscription_store_free(store);
 }
 
-/* GAP-001 #2 — different amf_id → NOTIFIED. A subscriber whose amf_id differs
- * from the change originator's nfId must be enqueued and POSTed (no suppression
- * of foreign AMFs). */
+/* GAP-001 #2 — different amf_id → NOTIFIED (delivery proof). A subscriber whose
+ * amf_id differs from the change originator's nfId must be enqueued and POSTed (no
+ * suppression of foreign AMFs). The fan-out row is DUE-now, so a single dispatch
+ * delivers it directly — SENT + EXACTLY ONE POST to the foreign AMF's callbackUri
+ * (no requeue/backoff dance). The requeue→backoff-lock companion lives below. */
 static void test_gap001_different_amf_id_notified(void)
 {
     nssf_subscription_store_t *store = nssf_subscription_store_new_inmemory();
@@ -631,12 +700,59 @@ static void test_gap001_different_amf_id_notified(void)
     nssf_availability_change_event_t ev =
         make_event("amf-originator-B", NSSF_AVAIL_CHANGE_REPLACED, ev_tai);
 
+    /* fresh fan-out enqueue: foreign AMF (different amf_id) is NOT suppressed →
+     * exactly 1 DUE-now row. */
     int enq = nssf_subscription_store_fanout_change(store, retry, &ev);
     TEST_ASSERT_EQUAL_INT_MESSAGE(
         1, enq, "foreign AMF (different amf_id) 가 enqueue 되지 않음 (over-suppress)");
 
-    /* the enqueued row carries the REAL sub UUID + callbackUri; requeue it so the
-     * dispatcher can drive the actual POST (same pattern as the broad-sub case). */
+    /* a single dispatch on the DUE-now row fires exactly one outbound POST to the
+     * foreign AMF's callbackUri (the wired cascade tail). */
+    nssf_notification_dispatcher_t *disp =
+        nssf_notification_dispatcher_new(retry, NULL);
+    TEST_ASSERT_NOT_NULL(disp);
+    nssf_notification_dispatcher_set_transport(disp, amf_mock_transport, &g_amf);
+    nssf_dispatch_result_e dr =
+        nssf_notification_dispatcher_dispatch_pending(disp, NULL);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(NSSF_DISPATCH_SENT, dr,
+                                  "foreign-AMF due-now fan-out row 의 dispatch 가 SENT 아님");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        1, g_amf.calls, "different amf_id 인데 POST 가 1 회 발사되지 않음");
+    TEST_ASSERT_EQUAL_STRING(cb, g_amf.last_uri);
+
+    cJSON_Delete(ev_tai);
+    nssf_notification_dispatcher_free(disp);
+    nssf_retry_store_free(retry);
+    nssf_subscription_store_free(store);
+}
+
+/* GAP-001 #2b — different amf_id row carries the REAL UUID + callbackUri, and
+ * after a requeue the re-armed foreign-AMF row is NOT immediately re-claimable
+ * (Phase-4 backoff lock). Companion to #2: #2 proves the foreign AMF IS delivered
+ * (the GAP-001 "different amf_id notified" intent); this proves the row's real
+ * identity AND the no-hot-loop invariant on a re-armed foreign-AMF row. */
+static void test_gap001_different_amf_id_requeue_backoff_not_due(void)
+{
+    nssf_subscription_store_t *store = nssf_subscription_store_new_inmemory();
+    TEST_ASSERT_NOT_NULL(store);
+    nssf_retry_store_t *retry = nssf_retry_store_new_inmemory();
+    TEST_ASSERT_NOT_NULL(retry);
+
+    char sub_id[37];
+    cJSON *filter = make_broad_filter();
+    const char *cb = "https://amf-other.example.com/cb";
+    create_sub_id(store, cb, filter, "amf-subscriber-A", NULL, sub_id);
+    cJSON_Delete(filter);
+
+    cJSON *ev_tai = make_tai("001", "01", "000001");
+    nssf_availability_change_event_t ev =
+        make_event("amf-originator-B", NSSF_AVAIL_CHANGE_REPLACED, ev_tai);
+
+    int enq = nssf_subscription_store_fanout_change(store, retry, &ev);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        1, enq, "foreign AMF (different amf_id) 가 enqueue 되지 않음 (over-suppress)");
+
+    /* the enqueued row carries the REAL sub UUID + callbackUri. */
     nssf_retry_item_t item;
     TEST_ASSERT_EQUAL_INT_MESSAGE(
         1, nssf_retry_store_dequeue(retry, &item),
@@ -645,21 +761,24 @@ static void test_gap001_different_amf_id_notified(void)
                                      "row 가 real subscription UUID 를 담지 않음");
     TEST_ASSERT_EQUAL_STRING_MESSAGE(cb, item.callback_uri,
                                      "row 가 sub 의 callbackUri 를 담지 않음");
+    /* requeue re-arms with backoff (now + backoff, NOT NOW()). */
     TEST_ASSERT_EQUAL_INT(0, nssf_retry_store_requeue(retry, item.id));
     nssf_retry_item_clear(&item);
 
-    /* a single dispatch fires exactly one outbound POST (the wired cascade tail). */
+    /* backoff lock: the re-armed foreign-AMF row is NOT yet due → the next
+     * dispatch returns NSSF_DISPATCH_NONE, ZERO outbound POSTs (no hot-loop). */
     nssf_notification_dispatcher_t *disp =
         nssf_notification_dispatcher_new(retry, NULL);
     TEST_ASSERT_NOT_NULL(disp);
     nssf_notification_dispatcher_set_transport(disp, amf_mock_transport, &g_amf);
     nssf_dispatch_result_e dr =
         nssf_notification_dispatcher_dispatch_pending(disp, NULL);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(NSSF_DISPATCH_SENT, dr,
-                                  "foreign-AMF fan-out row 의 dispatch 가 SENT 아님");
     TEST_ASSERT_EQUAL_INT_MESSAGE(
-        1, g_amf.calls, "different amf_id 인데 POST 가 1 회 발사되지 않음");
-    TEST_ASSERT_EQUAL_STRING(cb, g_amf.last_uri);
+        NSSF_DISPATCH_NONE, dr,
+        "requeue 로 backoff re-arm 된 foreign-AMF row 가 즉시 다시 due 로 dispatch 됨 (hot-loop)");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        0, g_amf.calls,
+        "not-due foreign-AMF row 인데 POST 가 발사됨 (backoff lock 위반)");
 
     cJSON_Delete(ev_tai);
     nssf_notification_dispatcher_free(disp);
@@ -877,6 +996,7 @@ static void test_null_and_nomatch_contract(void)
 int main(void)
 {
     UNITY_BEGIN();
+    RUN_TEST(test_broad_subscriber_requeue_backoff_not_due);
     RUN_TEST(test_broad_subscriber_one_row_one_post);
     RUN_TEST(test_tai_scoped_match_vs_nonmatch);
     RUN_TEST(test_multi_subscriber_distinct_rows);
@@ -887,6 +1007,7 @@ int main(void)
     /* DOCX-GAP-001 self-notification suppression (5 mandatory cases). */
     RUN_TEST(test_gap001_same_amf_id_suppressed);
     RUN_TEST(test_gap001_different_amf_id_notified);
+    RUN_TEST(test_gap001_different_amf_id_requeue_backoff_not_due);
     RUN_TEST(test_gap001_explicit_filter_amf_id_persisted);
     RUN_TEST(test_gap001_amf_set_id_only_not_suppressed);
     RUN_TEST(test_gap001_delete_self_matched_tombstone_retained);

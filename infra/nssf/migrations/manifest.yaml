@@ -19,7 +19,7 @@ versioning:
   scheme: monotonic_int
   table: nssf_schema_version
   bootstrap_version: 1
-  current_planned_version: 1  # WI-schema-bootstrap 도달 시 schema.sql 가 version 1 등재
+  current_planned_version: 2  # M002 (retry_queue.status) 적용 시 schema 가 version 2 등재
   policy: |
     schema_version 의 increment = migration script 1 개 발행.
     각 migration 은 *forward only* (rollback script 별도 권고, 동일 PR 산출).
@@ -64,11 +64,13 @@ tables:
       - 'payload JSONB NOT NULL'
       - 'attempt_count INT NOT NULL DEFAULT 0'
       - 'next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW()'
+      - "status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','dead_letter'))"  # M002 — bounded retry + dead-letter lifecycle
       - 'created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()'
     indexes:
       - 'CREATE INDEX retry_queue_next_attempt_idx ON retry_queue (next_attempt_at)'
-      # FOR UPDATE SKIP LOCKED 패턴 — explicit index 불필요, query 가 next_attempt_at 기준 정렬
-    purpose: 'NotificationDispatcher 의 retry queue. FOR UPDATE SKIP LOCKED 로 dequeue.'
+      - "CREATE INDEX retry_queue_claim_idx ON retry_queue (next_attempt_at) WHERE status = 'pending'"  # M002 — claim query (pending + due) 전용 partial index
+      # FOR UPDATE SKIP LOCKED 패턴 — claim 은 status='pending' AND next_attempt_at <= NOW() 기준 정렬
+    purpose: 'NotificationDispatcher 의 retry queue. FOR UPDATE SKIP LOCKED 로 dequeue. status=pending row 만 claim, dead_letter 는 terminal 보존.'
 
   - name: nssf_schema_version
     work_item: WI-schema-bootstrap
@@ -97,6 +99,46 @@ migrations:
       -- DROP TABLE IF EXISTS availability;
       -- DROP TABLE IF EXISTS nssf_schema_version;
     expected_pr: PR-phase1-wave1-schema-bootstrap
+
+  - id: M002-retry-queue-status
+    work_item: WI-notification-dispatcher
+    file: infra/nssf/schema.sql  # bootstrap 가 M002 target state 를 포함 — 별도 standalone migration 은 아래 forward_sql 가 진실 출처.
+    schema_version_after: 2
+    idempotent: true
+    forward_sql: |
+      -- M002 — retry_queue.status (fail-closed bounded retry + dead-letter).
+      -- forward-only, idempotent — v1 schema 위에 단독 적용 가능. fresh bootstrap
+      -- (schema.sql) 은 동일 결과를 CREATE TABLE 단계에서 이미 포함한다.
+      BEGIN;
+      ALTER TABLE retry_queue
+          ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending';
+      -- CHECK 제약 — ADD COLUMN IF NOT EXISTS 는 기존 column 에 제약을 붙이지 않으므로
+      -- 존재하지 않을 때만 named constraint 를 추가 (idempotent guard).
+      DO $$
+      BEGIN
+          IF NOT EXISTS (
+              SELECT 1 FROM pg_constraint WHERE conname = 'retry_queue_status_check'
+          ) THEN
+              ALTER TABLE retry_queue
+                  ADD CONSTRAINT retry_queue_status_check
+                  CHECK (status IN ('pending', 'dead_letter'));
+          END IF;
+      END $$;
+      CREATE INDEX IF NOT EXISTS retry_queue_claim_idx
+          ON retry_queue (next_attempt_at) WHERE status = 'pending';
+      INSERT INTO nssf_schema_version (version, description)
+      VALUES (2, 'M002 — retry_queue.status (pending/dead_letter) for bounded retry + dead-letter')
+      ON CONFLICT (version) DO NOTHING;
+      COMMIT;
+    rollback_sql: |
+      -- M002 rollback (test 또는 disaster 용) — dead_letter audit row 손실 주의.
+      BEGIN;
+      DROP INDEX IF EXISTS retry_queue_claim_idx;
+      ALTER TABLE retry_queue DROP CONSTRAINT IF EXISTS retry_queue_status_check;
+      ALTER TABLE retry_queue DROP COLUMN IF EXISTS status;
+      DELETE FROM nssf_schema_version WHERE version = 2;
+      COMMIT;
+    expected_pr: PR-phase4-dispatcher-resilience
 
 # ─── 4. Operator apply procedure ──────────────────────────────────────
 operator_apply:
