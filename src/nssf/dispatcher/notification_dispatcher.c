@@ -3,11 +3,16 @@
  *
  * NSSF_GENERATED_BOUNDARY_STUB: none — handwritten outbound module.
  *
- * Phase 1~3 MINIMUM (open-gaps-and-assumptions G-08): synchronous dispatch plus
- * ONE retry. No exponential backoff / max_attempts ceiling / jitter / dead-letter
- * table — those are Phase 4 hardening. The retry_queue persists only
- * subscription_id/payload/attempt_count/next_attempt_at (infra/nssf/schema.sql),
- * so callback_uri + correlation_id ride inside the row's payload envelope.
+ * Phase 4 RESILIENCE (open-gaps-and-assumptions G-08): fail-closed BOUNDED retry.
+ * A claimed row is attempted EXACTLY ONCE per call (no in-line immediate retry); a
+ * retriable failure RE-ARMS the row with exponential backoff + bounded jitter for
+ * a LATER call (caller-driven cadence), and a terminal failure or an exhausted
+ * attempt budget moves the row to a terminal `dead_letter` status that is RETAINED
+ * for audit and never re-claimed. Stays CALL-DRIVEN — AT MOST one row per call,
+ * NO worker / poll / sleep / thread / timer. The retry_queue persists
+ * subscription_id/payload/attempt_count/next_attempt_at/status
+ * (infra/nssf/schema.sql), so callback_uri + correlation_id ride inside the row's
+ * payload envelope.
  *
  * The outbound POST uses libcurl with TLS peer + hostname verification always on
  * (ADR-0004 M2), min TLS 1.2 (M1), and redirect-follow always off (M2) —
@@ -36,8 +41,24 @@
 
 #include "cJSON.h"
 
-/* Phase 1~3 retry budget — ONE retry after the first attempt (G-08). */
-#define NSSF_DISPATCH_MAX_ATTEMPTS 2
+/*
+ * Phase 4 bounded-retry budget. A row is delivered AT MOST NSSF_DISPATCH_MAX_ATTEMPTS
+ * times across calls (the first attempt counts); once attempt_count reaches the
+ * ceiling a retriable failure goes to dead_letter instead of re-arming. WHY 5:
+ * with the backoff schedule below (200ms base, 30s cap) five attempts span ~tens
+ * of seconds, enough to ride out a transient AMF/NRF blip without an unbounded
+ * queue residency.
+ */
+#define NSSF_DISPATCH_MAX_ATTEMPTS 5
+
+/*
+ * Exponential backoff bounds (milliseconds). delay = base * 2^attempt_count,
+ * capped at max, plus a bounded "equal jitter" term in [0, capped/2] (see
+ * nssf_retry_backoff_delay_ms). base/max are operator-tunable in spirit; with no
+ * dispatcher config struct on this seam they are fixed named defaults here.
+ */
+#define NSSF_DISPATCH_BACKOFF_BASE_MS 200L
+#define NSSF_DISPATCH_BACKOFF_MAX_MS  30000L
 
 /* Outbound POST timeouts (seconds). Conservative fixed defaults this slice. */
 #define NSSF_DISPATCH_CONNECT_TIMEOUT_S 2L
@@ -53,7 +74,11 @@ typedef struct {
                    const char *correlation_id);
     int (*dequeue)(nssf_retry_store_t *, nssf_retry_item_t *out);
     int (*complete)(nssf_retry_store_t *, const char *id);
+    /* re-arm with backoff — next_attempt_at = now + backoff(attempt_count),
+     * attempt_count++ (backoff computed inside the store from the row). */
     int (*requeue)(nssf_retry_store_t *, const char *id);
+    /* terminal failure — status='dead_letter', row RETAINED (never re-claimed). */
+    int (*dead_letter)(nssf_retry_store_t *, const char *id);
     void (*destroy)(nssf_retry_store_t *);
 } nssf_retry_vtable_t;
 
@@ -77,6 +102,65 @@ void nssf_retry_item_clear(nssf_retry_item_t *item)
 static char *dup_or_null(const char *s)
 {
     return s != NULL ? strdup(s) : NULL;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+ * backoff schedule — pure, deterministic-given-rand (tester bounds it)
+ * ────────────────────────────────────────────────────────────────────────── */
+
+/*
+ * delay_ms for a row that has already made `attempt_count` attempts. Exponential
+ * (base * 2^attempt_count) capped at max, then an "equal jitter" component in
+ * [0, capped/2] scaled by rand_unit ∈ [0,1) is ADDED. So the result is bounded:
+ *   capped     = min(base * 2^attempt_count, max)              (overflow-safe)
+ *   delay      = capped + floor(rand_unit * (capped / 2))      ∈ [capped, capped + capped/2)
+ * Tester invariants: monotonic non-decreasing `capped` floor up to the cap, never
+ * below base, never above max + max/2, and exactly `capped` when rand_unit==0.
+ * WHY equal-jitter (not full): keeps a guaranteed minimum spacing (the `capped`
+ * floor) so a thundering-herd of re-armed rows still spreads, without ever firing
+ * sooner than the deterministic floor.
+ */
+long nssf_retry_backoff_delay_ms(int attempt_count, long base_ms, long max_ms,
+                                 double rand_unit)
+{
+    if (base_ms < 0) {
+        base_ms = 0;
+    }
+    if (max_ms < base_ms) {
+        max_ms = base_ms;
+    }
+    /* capped = min(base << attempt_count, max), shift computed overflow-safe. */
+    long capped = max_ms;
+    if (attempt_count < 0) {
+        attempt_count = 0;
+    }
+    /* Stop doubling as soon as we reach/exceed max — avoids long overflow on a
+     * pathological attempt_count and keeps the cap exact. */
+    long step = base_ms;
+    for (int i = 0; i < attempt_count; ++i) {
+        if (step >= max_ms || step > (max_ms / 2)) {
+            step = max_ms;
+            break;
+        }
+        step *= 2;
+    }
+    if (step < max_ms) {
+        capped = step;
+    }
+    if (rand_unit < 0.0) {
+        rand_unit = 0.0;
+    } else if (rand_unit >= 1.0) {
+        rand_unit = 0.999999;
+    }
+    long jitter = (long)(rand_unit * (double)(capped / 2));
+    return capped + jitter;
+}
+
+/* Draw a jitter unit in [0,1). Trace-correlator grade, NOT crypto (M6) — rand()
+ * is sufficient; the schedule bound does not depend on randomness quality. */
+static double jitter_unit(void)
+{
+    return (double)rand() / ((double)RAND_MAX + 1.0);
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -439,10 +523,12 @@ static int pg_dequeue(nssf_retry_store_t *s, nssf_retry_item_t *out)
     if (pg_cmd(self->conn, "BEGIN") != 0) {
         return -1;
     }
+    /* Claim = next DUE pending row only. dead_letter rows are structurally
+     * unclaimable (status filter). */
     const char *sql =
         "SELECT id, subscription_id, payload, attempt_count "
         "FROM retry_queue "
-        "WHERE next_attempt_at <= NOW() "
+        "WHERE status = 'pending' AND next_attempt_at <= NOW() "
         "ORDER BY next_attempt_at ASC, id ASC "
         "LIMIT 1 FOR UPDATE SKIP LOCKED";
     PGresult *res = PQexecParams(self->conn, sql, 0, NULL, NULL, NULL, NULL, 0);
@@ -516,12 +602,48 @@ static int pg_requeue(nssf_retry_store_t *s, const char *id)
 {
     pg_store_t *self = (pg_store_t *)s;
     pg_assert_owner(self);
-    const char *params[1] = {id};
-    /* Phase 1~3: no backoff — re-arm for an immediate next attempt (G-08). */
+    /*
+     * Phase 4 — re-arm with backoff computed SQL-side from the row's CURRENT
+     * attempt_count, then bump attempt_count, keep status='pending'. The schedule
+     * mirrors nssf_retry_backoff_delay_ms exactly:
+     *   capped = LEAST(base_ms * 2^attempt_count, max_ms)   (equal-jitter floor)
+     *   delay  = capped + random()*(capped/2)               (equal jitter, [0,half))
+     * base/max are positional params (never concatenated). random() is Postgres's
+     * jitter source — trace-grade, not crypto (M6). next_attempt_at moves into the
+     * future so the row is not immediately re-claimable.
+     */
+    char basebuf[32];
+    char maxbuf[32];
+    snprintf(basebuf, sizeof(basebuf), "%ld", NSSF_DISPATCH_BACKOFF_BASE_MS);
+    snprintf(maxbuf, sizeof(maxbuf), "%ld", NSSF_DISPATCH_BACKOFF_MAX_MS);
+    const char *params[3] = {id, basebuf, maxbuf};
     const char *sql =
-        "UPDATE retry_queue "
-        "SET attempt_count = attempt_count + 1, next_attempt_at = NOW() "
-        "WHERE id = $1::bigint";
+        "WITH b AS ("
+        "  SELECT LEAST($2::double precision * power(2, attempt_count),"
+        "               $3::double precision) AS capped"
+        "  FROM retry_queue WHERE id = $1::bigint"
+        ") "
+        "UPDATE retry_queue SET "
+        "  attempt_count = attempt_count + 1, "
+        "  next_attempt_at = NOW() + "
+        "    (((SELECT capped FROM b) + random() * ((SELECT capped FROM b) / 2.0))"
+        "     * INTERVAL '1 millisecond') "
+        "WHERE id = $1::bigint AND status = 'pending'";
+    PGresult *res = PQexecParams(self->conn, sql, 3, NULL, params, NULL, NULL, 0);
+    int ok = (PQresultStatus(res) == PGRES_COMMAND_OK);
+    PQclear(res);
+    (void)pg_cmd(self->conn, ok ? "COMMIT" : "ROLLBACK");
+    return ok ? 0 : -1;
+}
+
+/* Terminal failure — set status='dead_letter' and RETAIN the row (audit). */
+static int pg_dead_letter(nssf_retry_store_t *s, const char *id)
+{
+    pg_store_t *self = (pg_store_t *)s;
+    pg_assert_owner(self);
+    const char *params[1] = {id};
+    const char *sql =
+        "UPDATE retry_queue SET status = 'dead_letter' WHERE id = $1::bigint";
     PGresult *res = PQexecParams(self->conn, sql, 1, NULL, params, NULL, NULL, 0);
     int ok = (PQresultStatus(res) == PGRES_COMMAND_OK);
     PQclear(res);
@@ -543,6 +665,7 @@ static const nssf_retry_vtable_t PG_VTABLE = {
     .dequeue = pg_dequeue,
     .complete = pg_complete,
     .requeue = pg_requeue,
+    .dead_letter = pg_dead_letter,
     .destroy = pg_destroy,
 };
 
@@ -575,13 +698,29 @@ nssf_retry_store_t *nssf_retry_store_new_pg(const char *conninfo,
 
 /* ── in-memory backend (test seam) ─────────────────────────────────────── */
 
+/* In-memory mirror of retry_queue.status (enum-by-convention in the schema). */
+typedef enum {
+    MEM_STATUS_PENDING = 0,
+    MEM_STATUS_DEAD_LETTER = 1,
+} mem_status_e;
+
 typedef struct {
     long long id;
     char *subscription_id;
     char *envelope; /* same envelope JSON the PG backend stores in `payload`. */
     int attempt_count;
-    bool claimed; /* mirrors FOR UPDATE — a claimed row is hidden from dequeue. */
+    bool claimed;      /* mirrors FOR UPDATE — a claimed row is hidden from dequeue. */
+    mem_status_e status; /* mirrors the retry_queue.status column. */
+    long long due_at_ms; /* next_attempt_at as monotonic wall ms; claim needs due. */
 } mem_row_t;
+
+/* Monotonic-ish wall clock in milliseconds for the in-memory due-time mirror. */
+static long long mem_now_ms(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_REALTIME, &ts);
+    return (long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
 
 typedef struct {
     nssf_retry_store_t base;
@@ -636,6 +775,8 @@ static int mem_enqueue(nssf_retry_store_t *s, const char *sub_id,
     row->envelope = envelope;
     row->attempt_count = 0;
     row->claimed = false;
+    row->status = MEM_STATUS_PENDING;
+    row->due_at_ms = mem_now_ms(); /* due immediately, like next_attempt_at=NOW(). */
     pthread_mutex_unlock(&self->lock);
     return 0;
 }
@@ -646,13 +787,24 @@ static int mem_dequeue(nssf_retry_store_t *s, nssf_retry_item_t *out)
     memset(out, 0, sizeof(*out));
 
     pthread_mutex_lock(&self->lock);
-    /* Lowest id among unclaimed rows = FIFO insertion order (SKIP LOCKED). */
+    /*
+     * Claim = lowest-id row that is pending, unclaimed, AND due — mirrors the PG
+     * claim `status='pending' AND next_attempt_at <= NOW()` ordered by
+     * next_attempt_at ASC, id ASC. dead_letter rows are skipped (unclaimable), and
+     * a re-armed row whose backoff has not elapsed (due_at_ms > now) is not yet
+     * due. We order by due_at_ms then id to match the PG ORDER BY.
+     */
+    long long now_ms = mem_now_ms();
     long pick = -1;
     for (size_t i = 0; i < self->count; ++i) {
-        if (self->rows[i].claimed) {
+        mem_row_t *r = &self->rows[i];
+        if (r->claimed || r->status != MEM_STATUS_PENDING || r->due_at_ms > now_ms) {
             continue;
         }
-        if (pick < 0 || self->rows[i].id < self->rows[pick].id) {
+        if (pick < 0 ||
+            r->due_at_ms < self->rows[pick].due_at_ms ||
+            (r->due_at_ms == self->rows[pick].due_at_ms &&
+             r->id < self->rows[pick].id)) {
             pick = (long)i;
         }
     }
@@ -725,8 +877,33 @@ static int mem_requeue(nssf_retry_store_t *s, const char *id)
     pthread_mutex_lock(&self->lock);
     long idx = mem_index_of(self, key);
     if (idx >= 0) {
+        /* Phase 4 — backoff computed from the row's CURRENT attempt_count (the
+         * same input as the PG path), then bump attempt_count. Pushes due_at_ms
+         * into the future so the row is NOT immediately re-claimable. status stays
+         * pending. */
+        long delay = nssf_retry_backoff_delay_ms(self->rows[idx].attempt_count,
+                                                 NSSF_DISPATCH_BACKOFF_BASE_MS,
+                                                 NSSF_DISPATCH_BACKOFF_MAX_MS,
+                                                 jitter_unit());
         self->rows[idx].attempt_count += 1;
-        self->rows[idx].claimed = false; /* re-arm for an immediate attempt. */
+        self->rows[idx].claimed = false;
+        self->rows[idx].due_at_ms = mem_now_ms() + delay;
+    }
+    pthread_mutex_unlock(&self->lock);
+    return 0;
+}
+
+/* Terminal failure — mark dead_letter and RETAIN (row stays for audit, never
+ * claimed: claim filters status==pending). Also un-claim so it is not stuck. */
+static int mem_dead_letter(nssf_retry_store_t *s, const char *id)
+{
+    mem_store_t *self = (mem_store_t *)s;
+    long long key = atoll(id);
+    pthread_mutex_lock(&self->lock);
+    long idx = mem_index_of(self, key);
+    if (idx >= 0) {
+        self->rows[idx].status = MEM_STATUS_DEAD_LETTER;
+        self->rows[idx].claimed = false;
     }
     pthread_mutex_unlock(&self->lock);
     return 0;
@@ -749,6 +926,7 @@ static const nssf_retry_vtable_t MEM_VTABLE = {
     .dequeue = mem_dequeue,
     .complete = mem_complete,
     .requeue = mem_requeue,
+    .dead_letter = mem_dead_letter,
     .destroy = mem_destroy,
 };
 
@@ -834,6 +1012,14 @@ int nssf_retry_store_requeue(nssf_retry_store_t *store, const char *id)
         return -1;
     }
     return store->vt->requeue(store, id);
+}
+
+int nssf_retry_store_dead_letter(nssf_retry_store_t *store, const char *id)
+{
+    if (store == NULL || id == NULL) {
+        return -1;
+    }
+    return store->vt->dead_letter(store, id);
 }
 
 /* ──────────────────────────────────────────────────────────────────────────
@@ -1131,16 +1317,22 @@ void nssf_notification_dispatcher_set_transport(
 
 /* ── dispatch one row ──────────────────────────────────────────────────── */
 
-/* HTTP 4xx is a terminal client error — no retry (NotificationDispatcher.md). */
-static bool is_terminal_status(long status)
-{
-    return status >= 400 && status < 500;
-}
-
 /* 2xx is success. */
 static bool is_success_status(long status)
 {
     return status >= 200 && status < 300;
+}
+
+/*
+ * Retriable on the HTTP status (transport-level failures are classified
+ * separately, by the nonzero transport return). 5xx is a server-side transient;
+ * 429 Too Many Requests is an explicit back-pressure signal — both re-arm with
+ * backoff. WHY 429 here and not under is_terminal: a 429 is the server asking us
+ * to slow down, which is exactly what backoff does.
+ */
+static bool is_retriable_status(long status)
+{
+    return (status >= 500 && status < 600) || status == 429;
 }
 
 /*
@@ -1233,57 +1425,81 @@ nssf_dispatch_result_e nssf_notification_dispatcher_dispatch_pending(
     }
 
     /*
-     * In-line attempt budget for THIS dispatch call. Phase 1~3 (G-08) is the
-     * first attempt + at most ONE retry, capped further by any attempts the row
-     * already carries from a prior call. The retry happens in-line only on a
-     * RETRIABLE failure (5xx / timeout / connection / TLS handshake); a 4xx is
-     * terminal immediately and a 2xx succeeds. After the budget is spent the row
-     * is removed — there is no dead-letter table this phase.
+     * Phase 4 fail-closed bounded retry — attempt the claimed row EXACTLY ONCE
+     * this call (NO in-line immediate retry, G-08). The decision after the attempt
+     * routes the row to one of three terminal/non-terminal store ops:
+     *   - complete()     — terminal SUCCESS (2xx): delete the row.
+     *   - requeue(delay) — retriable failure WITH budget remaining: re-arm with
+     *                      backoff for a LATER call (status stays pending).
+     *   - dead_letter()  — terminal failure (4xx≠429, OAuth2 ABORT) OR retriable
+     *                      failure that EXHAUSTED the budget: retain for audit.
      */
-    int budget = NSSF_DISPATCH_MAX_ATTEMPTS - item.attempt_count;
-    if (budget < 1) {
-        budget = 1; /* always make at least one attempt for a claimed row. */
+    struct curl_slist *headers = NULL;
+    int hb = build_headers(disp, corr, &headers);
+    if (hb == 1) {
+        /*
+         * fail-closed (ADR-0004 M4 / Phase 4 ratified design) — no unauthenticated
+         * POST is ever emitted. Per the ratified design an OAuth2 ABORT is TERMINAL:
+         * dead_letter the row (do NOT re-arm into a hot retry against the NRF token
+         * endpoint) and report FORBIDDEN. NO POST was emitted.
+         */
+        (void)nssf_retry_store_dead_letter(disp->store, item.id);
+        nssf_retry_item_clear(&item);
+        return NSSF_DISPATCH_FORBIDDEN;
+    }
+    if (hb < 0) {
+        /* Header build OOM — transient, NOT a delivery decision. Re-arm with
+         * backoff (no POST emitted) so the row is retried on a later call. The
+         * store computes the backoff from the row's attempt_count. */
+        (void)nssf_retry_store_requeue(disp->store, item.id);
+        nssf_retry_item_clear(&item);
+        return NSSF_DISPATCH_ERROR;
     }
 
-    nssf_dispatch_result_e result = NSSF_DISPATCH_ERROR;
-    for (int i = 0; i < budget; ++i) {
-        struct curl_slist *headers = NULL;
-        int hb = build_headers(disp, corr, &headers);
-        if (hb == 1) {
-            /*
-             * fail-closed (ADR-0004 M4 / ratified decision #7) — no unauthenticated
-             * POST. Re-arm the row so it is retried once M4 token acquire recovers
-             * rather than silently dropped.
-             */
-            (void)nssf_retry_store_requeue(disp->store, item.id);
-            nssf_retry_item_clear(&item);
-            return NSSF_DISPATCH_FORBIDDEN;
-        }
-        if (hb < 0) {
-            (void)nssf_retry_store_requeue(disp->store, item.id);
-            nssf_retry_item_clear(&item);
-            return NSSF_DISPATCH_ERROR;
-        }
+    long status = 0;
+    int trc = disp->transport(disp, item.callback_uri, item.payload_json,
+                              headers, &status, disp->transport_ctx);
+    curl_slist_free_all(headers);
 
-        long status = 0;
-        int trc = disp->transport(disp, item.callback_uri, item.payload_json,
-                                  headers, &status, disp->transport_ctx);
-        curl_slist_free_all(headers);
-
-        if (trc == 0 && is_success_status(status)) {
-            result = NSSF_DISPATCH_SENT;
-            break;
-        }
-        if (trc == 0 && is_terminal_status(status)) {
-            result = NSSF_DISPATCH_DROPPED; /* 4xx → no retry. */
-            break;
-        }
-        /* trc != 0 (connection/timeout/TLS) or 5xx → retriable; loop once more. */
-        result = NSSF_DISPATCH_DROPPED;
+    /* SUCCESS (2xx) — terminal, delete the row. */
+    if (trc == 0 && is_success_status(status)) {
+        (void)nssf_retry_store_complete(disp->store, item.id);
+        nssf_retry_item_clear(&item);
+        return NSSF_DISPATCH_SENT;
     }
 
-    /* Terminal either way — remove the row (no dead-letter table, G-08). */
-    (void)nssf_retry_store_complete(disp->store, item.id);
+    /*
+     * RETRIABLE — transport nonzero (timeout/connection/TLS handshake) OR an HTTP
+     * 5xx OR 429. item.attempt_count is the number of attempts ALREADY made before
+     * this one; this call made one more, so attempts-so-far = attempt_count + 1. If
+     * that reaches the ceiling, the budget is spent → dead_letter; otherwise re-arm
+     * with backoff for a LATER call (status stays pending).
+     */
+    bool retriable = (trc != 0) || is_retriable_status(status);
+    if (retriable) {
+        if (item.attempt_count + 1 >= NSSF_DISPATCH_MAX_ATTEMPTS) {
+            (void)nssf_retry_store_dead_letter(disp->store, item.id);
+            nssf_retry_item_clear(&item);
+            return NSSF_DISPATCH_DROPPED;
+        }
+        /* Re-arm with backoff — the store pushes next_attempt_at by
+         * backoff(attempt_count) so this row is claimed again only on a LATER
+         * call once the backoff elapses (no in-line retry, G-08). */
+        (void)nssf_retry_store_requeue(disp->store, item.id);
+        nssf_retry_item_clear(&item);
+        return NSSF_DISPATCH_DROPPED;
+    }
+
+    /*
+     * TERMINAL failure — a 4xx other than 429, or any other non-success /
+     * non-retriable status (e.g. an unexpected 3xx/1xx the transport surfaced).
+     * Dead_letter and retain for audit; never re-claimed. WHY treat the residual
+     * bucket as terminal: a status we cannot classify as success or retriable will
+     * not be fixed by waiting, and re-arming it would loop forever. (429 is NOT
+     * here — it is folded into the retriable bucket above as a back-pressure
+     * signal.)
+     */
+    (void)nssf_retry_store_dead_letter(disp->store, item.id);
     nssf_retry_item_clear(&item);
-    return result;
+    return NSSF_DISPATCH_DROPPED;
 }

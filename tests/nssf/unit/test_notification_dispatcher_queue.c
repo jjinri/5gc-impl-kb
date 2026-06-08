@@ -417,7 +417,19 @@ static void test_complete_removes_row(void)
     nssf_retry_store_free(store);
 }
 
-static void test_requeue_rearms_row(void)
+/* RETARGETED (Phase 4 fail-closed bounded retry) — requeue() SEMANTICS changed.
+ * The 2-arg signature is retained, but re-arm now applies BACKOFF: attempt_count
+ * is bumped AND next_attempt_at is pushed to `now + backoff(attempt_count) +
+ * jitter` (status stays pending). Because next_attempt_at moves into the FUTURE,
+ * an IMMEDIATE dequeue after requeue returns 0 (the row is NOT yet due) — this is
+ * the call-driven, no-in-line-retry property. (Old Phase 1~3 semantics re-armed to
+ * NOW() so an immediate dequeue handed the row straight back; that is no longer
+ * true and is precisely what the resilience slice changed.) We assert the NEW
+ * behaviour from the store seam: requeue bumps attempt_count to 1, and the row is
+ * not-due-immediately. We do NOT sleep here — the backoff floor (base=200ms) makes
+ * "not due now" deterministic; the due-after-backoff delivery is covered by the
+ * integration suite's smallest-window case. */
+static void test_requeue_rearms_with_backoff_not_due_immediately(void)
 {
     nssf_retry_store_t *store = nssf_retry_store_new_inmemory();
     TEST_ASSERT_NOT_NULL(store);
@@ -435,19 +447,164 @@ static void test_requeue_rearms_row(void)
     TEST_ASSERT_EQUAL_INT(0, nssf_retry_store_dequeue(store, &hidden));
     nssf_retry_item_clear(&hidden);
 
-    /* requeue re-arms it for an immediate next attempt + bumps attempt_count. */
+    /* requeue re-arms with BACKOFF (next_attempt_at pushed to the future) and bumps
+     * attempt_count. The row is now NOT due — backoff has not elapsed. */
     TEST_ASSERT_EQUAL_INT(0, nssf_retry_store_requeue(store, first.id));
     nssf_retry_item_clear(&first);
 
-    nssf_retry_item_t again;
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, nssf_retry_store_dequeue(store, &again),
-                                  "requeue 후 row 가 재배포되지 않음");
-    TEST_ASSERT_EQUAL_STRING("sub-retry", again.subscription_id);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(1, again.attempt_count,
-                                  "requeue 가 attempt_count 증가 실패");
-    nssf_retry_store_complete(store, again.id);
-    nssf_retry_item_clear(&again);
+    /* NEW SEMANTICS — an IMMEDIATE dequeue returns 0: the re-armed row's backoff
+     * (>= base 200ms) has not elapsed, so it is not yet due (no in-line retry). */
+    nssf_retry_item_t not_due;
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        0, nssf_retry_store_dequeue(store, &not_due),
+        "requeue 직후 dequeue 가 row 를 반환 — backoff 미적용 (in-line retry 금지 위반)");
+    nssf_retry_item_clear(&not_due);
+
     nssf_retry_store_free(store);
+}
+
+/* NEW (#3 dead_letter terminal) — after dead_letter(id) the row is RETAINED (not
+ * deleted) but is NEVER re-claimed: dequeue returns 0 even though the row's
+ * next_attempt_at is in the past (a fresh row enqueues due-now). dead_letter rows
+ * are structurally unclaimable (the claim filters status='pending'). No sleep —
+ * the row is due-now and would dequeue but for the dead_letter status. */
+static void test_dead_letter_retains_row_but_never_reclaimed(void)
+{
+    nssf_retry_store_t *store = nssf_retry_store_new_inmemory();
+    TEST_ASSERT_NOT_NULL(store);
+
+    TEST_ASSERT_EQUAL_INT(
+        0, nssf_retry_store_enqueue(store, "sub-dead",
+                                    "https://amf.example/cb", "{}", NULL));
+
+    /* claim it (due now), then move it to the terminal dead_letter status. */
+    nssf_retry_item_t item;
+    TEST_ASSERT_EQUAL_INT(1, nssf_retry_store_dequeue(store, &item));
+    TEST_ASSERT_EQUAL_INT(0, nssf_retry_store_dead_letter(store, item.id));
+    nssf_retry_item_clear(&item);
+
+    /* the row is dead-lettered: a subsequent dequeue NEVER re-claims it, even
+     * though its next_attempt_at (enqueued due-now) is in the past. */
+    nssf_retry_item_t none;
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        0, nssf_retry_store_dequeue(store, &none),
+        "dead_letter 후 row 가 재배포됨 — dead_letter 는 unclaimable 이어야");
+    nssf_retry_item_clear(&none);
+
+    /* a SECOND dequeue likewise finds nothing — the row stays terminally parked
+     * (retained for audit, never re-dealt). */
+    nssf_retry_item_t none2;
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        0, nssf_retry_store_dequeue(store, &none2),
+        "dead_letter row 가 반복 dequeue 에서 재등장 (terminal 위반)");
+    nssf_retry_item_clear(&none2);
+
+    nssf_retry_store_free(store);
+}
+
+/* NEW (#1 backoff schedule) — bound nssf_retry_backoff_delay_ms across
+ * attempt_count 0..N with rand_unit==0 (the exact `delay==capped` points). The
+ * `capped` floor is exponential (base * 2^attempt_count) doubling, monotonic
+ * non-decreasing, and saturates at max_ms. base/max mirror the dispatcher's
+ * NSSF_DISPATCH_BACKOFF_* defaults (200ms / 30000ms). */
+static void test_backoff_schedule_capped_exponential_rand0(void)
+{
+    const long base = 200;
+    const long max = 30000;
+
+    /* rand_unit==0 → delay == capped exactly (the deterministic floor). */
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        200, nssf_retry_backoff_delay_ms(0, base, max, 0.0),
+        "attempt 0 floor 가 base(200) 가 아님");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        400, nssf_retry_backoff_delay_ms(1, base, max, 0.0), "attempt 1 floor != 400");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        800, nssf_retry_backoff_delay_ms(2, base, max, 0.0), "attempt 2 floor != 800");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        1600, nssf_retry_backoff_delay_ms(3, base, max, 0.0), "attempt 3 floor != 1600");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        3200, nssf_retry_backoff_delay_ms(4, base, max, 0.0), "attempt 4 floor != 3200");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        6400, nssf_retry_backoff_delay_ms(5, base, max, 0.0), "attempt 5 floor != 6400");
+
+    /* doubling continues until the cap; 200*2^7 = 25600 (still < 30000), and the
+     * next double (51200) exceeds max, so the schedule saturates at max=30000. */
+    long prev = -1;
+    long saw_cap = 0;
+    for (int a = 0; a <= 12; ++a) {
+        long capped = nssf_retry_backoff_delay_ms(a, base, max, 0.0);
+        /* monotonic non-decreasing floor. */
+        TEST_ASSERT_TRUE_MESSAGE(capped >= prev,
+                                 "capped 가 attempt 증가에 대해 단조 비감소가 아님");
+        /* never above the cap (rand_unit==0 → no jitter added). */
+        TEST_ASSERT_TRUE_MESSAGE(capped <= max,
+                                 "capped(rand0) 가 max_ms 를 초과");
+        if (capped == max) {
+            saw_cap = 1;
+        }
+        prev = capped;
+    }
+    /* the schedule DOES reach the cap within the tested range. */
+    TEST_ASSERT_TRUE_MESSAGE(saw_cap,
+                             "backoff 가 max_ms cap 에 도달하지 않음 (saturate 실패)");
+    /* a pathologically large attempt_count is overflow-safe and pinned at the cap. */
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        max, nssf_retry_backoff_delay_ms(1000, base, max, 0.0),
+        "거대한 attempt_count 가 cap(max) 으로 clamp 되지 않음 (overflow-safe)");
+}
+
+/* NEW (#2 jitter bound) — for rand_unit sampled across [0,1) the equal-jitter
+ * delay stays in [capped, capped + capped/2): never below the capped floor (and
+ * thus never below base), never at/above capped + capped/2, and never above
+ * max_ms + max_ms/2. delay==capped iff rand_unit==0. */
+static void test_backoff_jitter_bounds(void)
+{
+    const long base = 200;
+    const long max = 30000;
+
+    /* sample rand_unit across [0,1) at several attempt_counts (incl. the capped
+     * region) and assert the equal-jitter bounds at every point. */
+    const double units[] = {0.0,  0.0001, 0.25, 0.5, 0.75, 0.999, 0.999999};
+    const int attempts[] = {0, 1, 2, 4, 7, 8, 20};
+    for (size_t ai = 0; ai < sizeof(attempts) / sizeof(attempts[0]); ++ai) {
+        int a = attempts[ai];
+        long capped = nssf_retry_backoff_delay_ms(a, base, max, 0.0); /* floor. */
+        for (size_t ui = 0; ui < sizeof(units) / sizeof(units[0]); ++ui) {
+            double u = units[ui];
+            long d = nssf_retry_backoff_delay_ms(a, base, max, u);
+            /* LOWER edge — never below the capped floor (⇒ never below base). */
+            TEST_ASSERT_TRUE_MESSAGE(d >= capped,
+                                     "jitter delay 가 capped floor 미만 (하한 위반)");
+            TEST_ASSERT_TRUE_MESSAGE(d >= base,
+                                     "jitter delay 가 base 미만 (절대 하한 위반)");
+            /* UPPER edge — strictly below capped + capped/2 (half-open jitter). */
+            TEST_ASSERT_TRUE_MESSAGE(
+                d < capped + (capped / 2) + 1,
+                "jitter delay 가 capped + capped/2 상한 도달/초과 (상한 위반)");
+            /* GLOBAL upper bound — never above max_ms + max_ms/2. */
+            TEST_ASSERT_TRUE_MESSAGE(d <= max + max / 2,
+                                     "jitter delay 가 max*1.5 전역 상한 초과");
+            /* equality edge — delay==capped iff rand_unit==0. */
+            if (u == 0.0) {
+                TEST_ASSERT_EQUAL_INT_MESSAGE(
+                    capped, d, "rand_unit==0 인데 delay != capped");
+            } else {
+                /* a positive rand_unit on a non-degenerate capped adds >=0 jitter;
+                 * for capped>=2 the floor stays exact only at u==0. (capped is
+                 * always >= base=200 here, so capped/2 >= 100 and jitter can be >0.) */
+                TEST_ASSERT_TRUE_MESSAGE(d >= capped,
+                                         "positive jitter 가 floor 아래로 내려감");
+            }
+        }
+    }
+
+    /* defensive clamps — out-of-range rand_unit is clamped, not propagated. */
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        200, nssf_retry_backoff_delay_ms(0, base, max, -1.0),
+        "rand_unit<0 가 0 으로 clamp 되지 않음 (delay != capped)");
+    long d_over = nssf_retry_backoff_delay_ms(0, base, max, 5.0);
+    TEST_ASSERT_TRUE_MESSAGE(d_over >= 200 && d_over < 200 + 100 + 1,
+                             "rand_unit>=1 가 [0,1) 로 clamp 되지 않음 (상한 위반)");
 }
 
 /* ===================================================================
@@ -533,7 +690,10 @@ int main(void)
     RUN_TEST(test_enqueue_accepts_https_and_loopback);
     RUN_TEST(test_dequeue_fifo_order_and_claim_once);
     RUN_TEST(test_complete_removes_row);
-    RUN_TEST(test_requeue_rearms_row);
+    RUN_TEST(test_requeue_rearms_with_backoff_not_due_immediately);
+    RUN_TEST(test_dead_letter_retains_row_but_never_reclaimed);
+    RUN_TEST(test_backoff_schedule_capped_exponential_rand0);
+    RUN_TEST(test_backoff_jitter_bounds);
     RUN_TEST(test_pg_enqueue_invalid_subscription_fails);
     return UNITY_END();
 }

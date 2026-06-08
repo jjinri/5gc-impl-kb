@@ -5,10 +5,19 @@
  *
  * The NSSF's single outbound responsibility (NotificationDispatcher.md
  * §Responsibility) — turn a committed AvailabilityEngine change event into an
- * outbound notification POST to a subscription's callback URI (AMF). This slice
- * is the Phase 1~3 MINIMUM (open-gaps-and-assumptions G-08): synchronous
- * dispatch + ONE retry. There is no exponential backoff, no max_attempts ceiling,
- * no jitter, and no dead-letter table here — those are Phase 4 hardening.
+ * outbound notification POST to a subscription's callback URI (AMF).
+ *
+ * Phase 4 RESILIENCE (this slice) upgrades the Phase 1~3 minimum (inline single
+ * retry, no dead-letter) to FAIL-CLOSED BOUNDED RETRY: bounded attempts
+ * (max_attempts ceiling), exponential backoff with bounded jitter, and a
+ * dead-letter terminal state. It stays CALL-DRIVEN (G-08): dispatch_pending()
+ * claims AT MOST one due row per call and NEVER spins a worker / poll / sleep /
+ * thread / timer. A retriable failure no longer retries in-line — it RE-ARMS the
+ * row (attempt_count++ + next_attempt_at = now + backoff + jitter) for the next
+ * CALL; the caller drives the cadence. When the attempt budget is exhausted, or
+ * on a terminal failure (4xx other than 429, or OAuth2 fail-closed ABORT), the
+ * row is moved to a terminal `dead_letter` status and RETAINED for audit — it is
+ * never claimed again.
  *
  * Two responsibilities behind one handle:
  *   1. PRODUCER — change_publish() matches the engine's
@@ -23,10 +32,14 @@
  *      production producer-to-PG wiring stays behind a not-ready path until
  *      Phase 3 — see change_publish()). The slice deliverable is the
  *      enqueue-on-commit SEAM, not the fan-out.
- *   2. CONSUMER — dispatch_pending() dequeues a row (FOR UPDATE SKIP LOCKED on
- *      the libpq backend), POSTs once to the callback URI, and on a retriable
- *      failure (5xx / timeout / connection / TLS handshake) retries exactly once
- *      before stopping (4xx → no retry).
+ *   2. CONSUMER — dispatch_pending() claims the next DUE pending row (FOR UPDATE
+ *      SKIP LOCKED on the libpq backend; `status='pending' AND next_attempt_at <=
+ *      now`) and POSTs once to the callback URI. A retriable failure (transport
+ *      nonzero = timeout/connection/TLS, OR HTTP 5xx, OR HTTP 429) RE-ARMS the
+ *      row with backoff for a later call while attempts remain; once the budget
+ *      is exhausted it goes to terminal `dead_letter`. A terminal failure (4xx
+ *      other than 429) goes straight to `dead_letter`. Success (2xx) deletes the
+ *      row. There is NO in-line immediate retry — cadence is the caller's.
  *
  * Security baseline (ADR-0004 Layer A) on the outbound POST:
  *   - The callback URI is validated by a SHARED url policy gate BEFORE any token
@@ -42,7 +55,10 @@
  *     mirrors oauth2_outbound's create/create_insecure split for http://127.0.0.1
  *     mocks (nssf_notification_dispatcher_new vs _new_insecure).
  *   - OAuth2 bearer attach via nssf_oauth2_outbound_attach_bearer (first M4
- *     consumer); fail-closed — NSSF_OAUTH2_ABORT FORBIDS the POST.
+ *     consumer); fail-closed — NSSF_OAUTH2_ABORT FORBIDS the POST. Per the Phase 4
+ *     ratified design an ABORT is TERMINAL: the row is moved to `dead_letter`
+ *     (never re-armed into a hot retry against the NRF token endpoint) and the
+ *     dispatch returns NSSF_DISPATCH_FORBIDDEN.
  *
  * Two injected seams keep the module unit-testable with no DB and no network:
  *   - the retry-queue STORE seam (in-memory test backend / libpq production),
@@ -81,14 +97,16 @@ typedef struct nssf_notification_dispatcher nssf_notification_dispatcher_t;
 bool nssf_notification_dispatcher_callback_url_allowed(const char *url);
 
 /*
- * One dequeued retry-queue work item. The dispatcher OWNS the heap strings and
- * frees them; a backend that fills this on dequeue transfers ownership to the
- * dispatcher. `id` keys the row for the done/requeue follow-up (an opaque text
- * form of the BIGSERIAL primary key). `payload_json` is the serialized
- * notification body that gets POSTed; callback_uri + correlation_id are carried
- * alongside the body because the Phase 1~3 retry_queue schema persists only
- * subscription_id/payload/attempt_count/next_attempt_at (infra/nssf/schema.sql)
- * — the per-row routing/trace metadata rides in the row's payload envelope.
+ * One claimed retry-queue work item. The dispatcher OWNS the heap strings and
+ * frees them; a backend that fills this on a claim transfers ownership to the
+ * dispatcher. `id` keys the row for the complete/rearm/dead_letter follow-up (an
+ * opaque text form of the BIGSERIAL primary key). `payload_json` is the
+ * serialized notification body that gets POSTed; callback_uri + correlation_id
+ * are carried alongside the body because the retry_queue schema persists only
+ * subscription_id/payload/attempt_count/next_attempt_at/status
+ * (infra/nssf/schema.sql) — the per-row routing/trace metadata rides in the row's
+ * payload envelope. Only `status='pending'` rows are ever claimed, so a claimed
+ * item is implicitly pending and carries no status field of its own.
  */
 typedef struct {
     char *id;              /* opaque row key (BIGSERIAL text). */
@@ -114,7 +132,7 @@ typedef struct nssf_retry_store nssf_retry_store_t;
  * CONCURRENCY CONTRACT (F4) — the PG store is SINGLE-WORKER / NOT thread-safe.
  * Ownership unit = ONE store (and its one PGconn) per worker. dequeue() opens a
  * transaction on that single connection and holds the row under FOR UPDATE SKIP
- * LOCKED until complete()/requeue() commits; a second concurrent caller on the
+ * LOCKED until complete()/rearm()/dead_letter() commits; a second concurrent caller on the
  * SAME store would corrupt that in-flight transaction. Cross-WORKER concurrency
  * is safe (SKIP LOCKED prevents double-send across separate conns); intra-store
  * concurrency is the caller's contract to forbid — give each worker its own
@@ -150,22 +168,57 @@ int nssf_retry_store_enqueue(nssf_retry_store_t *store,
                              const char *correlation_id);
 
 /*
- * Dequeue the next due pending row (lowest next_attempt_at). On the libpq backend
- * this opens a transaction and locks the row with FOR UPDATE SKIP LOCKED so
- * concurrent dispatchers do not double-send. Returns 1 and fills *out (owned, the
- * dispatcher frees with nssf_retry_item_clear) when a row was claimed, 0 when the
- * queue has no due row, -1 on error. *out is zeroed on 0/-1.
+ * Claim the next DUE pending row: `status='pending' AND next_attempt_at <= now`,
+ * lowest next_attempt_at first (id ASC tiebreak). dead_letter rows are
+ * structurally unclaimable, and a row whose backoff has not elapsed is NOT due.
+ * On the libpq backend this opens a transaction and locks the row with FOR UPDATE
+ * SKIP LOCKED so concurrent dispatchers do not double-send. Returns 1 and fills
+ * *out (owned, the dispatcher frees with nssf_retry_item_clear) when a row was
+ * claimed, 0 when the queue has no DUE pending row, -1 on error. *out is zeroed
+ * on 0/-1.
  */
 int nssf_retry_store_dequeue(nssf_retry_store_t *store, nssf_retry_item_t *out);
 
-/* Delete the claimed row — terminal success or terminal (non-retriable) failure. */
+/* Delete the claimed row — terminal SUCCESS (2xx). */
 int nssf_retry_store_complete(nssf_retry_store_t *store, const char *id);
 
 /*
- * Re-arm the claimed row for ONE more immediate attempt (Phase 1~3: no backoff —
- * next_attempt_at = NOW()). attempt_count is incremented. Returns 0 on success.
+ * Re-arm the claimed row for a LATER attempt (Phase 4 fail-closed bounded retry).
+ * attempt_count is incremented and next_attempt_at is pushed to `now + backoff`,
+ * where backoff = exponential-backoff + bounded jitter computed by the store from
+ * the row's CURRENT attempt_count (the formula is nssf_retry_backoff_delay_ms,
+ * exposed below so the tester can bound the schedule). status STAYS 'pending'.
+ * Because next_attempt_at moves into the future, the row is NOT immediately
+ * re-claimable — the next dequeue returns it only once the backoff has elapsed
+ * (call-driven, no in-line retry). Returns 0 on success.
+ *
+ * NOTE — the 2-arg public name is retained from Phase 1~3 for ABI/test
+ * continuity, but the SEMANTICS changed: re-arm now applies backoff; it is no
+ * longer an immediate (next_attempt_at = NOW()) re-arm. The backoff is computed
+ * inside the store because only the store holds the row's attempt_count.
  */
 int nssf_retry_store_requeue(nssf_retry_store_t *store, const char *id);
+
+/*
+ * Move the claimed row to the TERMINAL `dead_letter` status and RETAIN it (the
+ * row is NOT deleted — it is kept for audit). A dead_letter row is never claimed
+ * again by dequeue. This is the terminal FAILURE counterpart to complete()
+ * (terminal SUCCESS delete): attempt budget exhausted, a non-retriable 4xx, or an
+ * OAuth2 fail-closed ABORT all land here. Returns 0 on success.
+ */
+int nssf_retry_store_dead_letter(nssf_retry_store_t *store, const char *id);
+
+/*
+ * Compute the re-arm backoff delay (milliseconds) for a row that has already made
+ * `attempt_count` attempts. Exponential — base * 2^(attempt_count), capped at
+ * max; then a bounded "equal jitter" component in [0, half] is added so the total
+ * stays within [base..max + max/2]. Exposed (pure, deterministic-given-rand) so
+ * the tester can bound the schedule. `rand_unit` is a caller-supplied value in
+ * [0.0, 1.0) that scales the jitter; pass a PRNG draw in production. Defaults for
+ * base/max are the NSSF_DISPATCH_BACKOFF_* constants in the .c.
+ */
+long nssf_retry_backoff_delay_ms(int attempt_count, long base_ms, long max_ms,
+                                 double rand_unit);
 
 /* Free the heap strings of a dequeued item and zero it. */
 void nssf_retry_item_clear(nssf_retry_item_t *item);
@@ -240,30 +293,50 @@ void nssf_notification_dispatcher_change_publish(
 
 /*
  * Outcome of dispatching one row.
+ *
+ * DROPPED carries two precise sub-meanings this phase (both leave NO live POST in
+ * flight, both are reported as DROPPED):
+ *   (a) RE-ARMED — a retriable failure with budget remaining; the row was pushed
+ *       to a future next_attempt_at (backoff) and will be retried on a LATER call.
+ *   (b) DEAD-LETTERED — a terminal failure (4xx other than 429) OR a retriable
+ *       failure that exhausted the attempt budget; the row was moved to the
+ *       terminal `dead_letter` status (retained for audit, never re-claimed).
+ * FORBIDDEN keeps its exact Phase 1~3 meaning — the OAuth2 attach ABORTed the
+ * POST (fail-closed, ZERO unauthenticated outbound). Per the Phase 4 design a
+ * FORBIDDEN row is TERMINAL: it is moved to `dead_letter`, NOT re-armed into a
+ * hot retry against the token endpoint.
  */
 typedef enum {
-    NSSF_DISPATCH_SENT = 0,      /* a row was delivered (2xx). */
-    NSSF_DISPATCH_NONE = 1,      /* queue had no due row. */
-    NSSF_DISPATCH_DROPPED = 2,   /* terminal failure (4xx, or retry exhausted). */
-    NSSF_DISPATCH_FORBIDDEN = 3, /* fail-closed: OAuth2 attach ABORTed the POST. */
+    NSSF_DISPATCH_SENT = 0,      /* a row was delivered (2xx) and deleted. */
+    NSSF_DISPATCH_NONE = 1,      /* queue had no DUE pending row. */
+    NSSF_DISPATCH_DROPPED = 2,   /* re-armed for a later call, OR dead-lettered (terminal). */
+    NSSF_DISPATCH_FORBIDDEN = 3, /* fail-closed: OAuth2 attach ABORTed → dead_letter (terminal). */
     NSSF_DISPATCH_ERROR = 4,     /* store/internal error. */
 } nssf_dispatch_result_e;
 
 /*
- * Dequeue the next due row and attempt delivery. On a retriable failure
- * (5xx / timeout / connection / TLS handshake) it retries EXACTLY ONCE in-line
- * (Phase 1~3 minimum, G-08) and then stops — no dead-letter table. A 4xx is
- * terminal (no retry). Returns the outcome classification.
+ * Claim the next DUE pending row and attempt delivery EXACTLY ONCE (Phase 4
+ * fail-closed bounded retry, G-08). There is NO in-line immediate retry. On the
+ * transport result:
+ *   - success (2xx)                  → complete() (row deleted), NSSF_DISPATCH_SENT.
+ *   - retriable (transport nonzero = timeout/connection/TLS, OR 5xx, OR 429):
+ *       if attempts remain → re-arm with backoff (next_attempt_at = now +
+ *       exponential backoff + bounded jitter, attempt_count++, status pending);
+ *       if the budget is exhausted → dead_letter (terminal, retained). Either way
+ *       returns NSSF_DISPATCH_DROPPED.
+ *   - terminal (4xx other than 429)  → dead_letter (terminal), NSSF_DISPATCH_DROPPED.
+ *   - OAuth2 fail-closed ABORT       → dead_letter (terminal), NSSF_DISPATCH_FORBIDDEN.
  *
  * This entry is CALL-DRIVEN — it dispatches AT MOST one row per call and does
- * NOT spin an internal polling/worker loop. The caller drives the cadence.
+ * NOT spin an internal polling/worker loop / sleep / thread / timer. The caller
+ * drives the cadence; a re-armed row only becomes claimable once its backoff
+ * elapses, so a caller that polls faster than the backoff simply gets
+ * NSSF_DISPATCH_NONE until the row is due.
  *
- * CALLER CONTRACT (F3, deferred backoff) — when this returns
- * NSSF_DISPATCH_FORBIDDEN (fail-closed OAuth2 ABORT, row re-armed) or any
- * retriable outcome, the caller MUST NOT tight-loop calling back immediately.
- * There is no backoff / dead-letter / hot-loop guard in THIS phase; a follow-up
- * WI (Phase 4) adds fail-closed backoff + dead-letter. Until then a tight retry
- * loop on FORBIDDEN/retriable status would hammer the NRF token endpoint / AMF.
+ * CALLER CONTRACT — a retriable outcome already pushed the row's next_attempt_at
+ * into the future (backoff), and FORBIDDEN / terminal outcomes moved the row to
+ * dead_letter. So a tight caller loop CANNOT hammer the AMF / NRF token endpoint
+ * via this queue: there is no hot row left to re-claim immediately.
  *
  * `inbound_correlation_id` overrides the row's stored correlation id for this
  * dispatch when non-NULL; otherwise the row's id (or a freshly generated one) is

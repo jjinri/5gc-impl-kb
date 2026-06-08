@@ -16,14 +16,21 @@
  *
  *   happy path: 200 → NSSF_DISPATCH_SENT, exactly ONE POST, headers carry        — #1
  *     3gpp-Sbi-Correlation-Info + traceparent (+ Authorization: Bearer w/ oauth)
- *   retry-once: 5xx then 200 → SENT after EXACTLY 2 transport calls (G-08 one     — #2
- *     retry, no exponential/multi-attempt loop)
- *   5xx twice  → DROPPED after EXACTLY 2 calls (retry budget spent, no            — #2
- *     dead-letter, no third attempt)
- *   4xx no-retry: 404 → DROPPED after EXACTLY ONE call (terminal client error)    — #3
+ *   Phase 4 fail-closed bounded retry (G-08, CALL-DRIVEN, no in-line retry):
+ *     5xx → re-arm with backoff (DROPPED, ONE attempt); an IMMEDIATE re-dispatch   — #2
+ *       is NONE (not yet due — no inline loop); after the backoff window the SECOND
+ *       dispatch delivers 200 → SENT (2 transport attempts across 2 caller calls).
+ *     retriable budget = TEST_DISPATCH_MAX_ATTEMPTS (5); on EXHAUSTION the row goes  — #2
+ *       to terminal dead_letter, RETAINED (not deleted) but never re-claimed.
+ *     transport error (TLS/conn/timeout) is retriable exactly like a 5xx.          — #5
+ *   terminal 4xx (≠429): 404/400 → dead_letter terminal (ONE call, no retry,      — #3
+ *     row unclaimable). 429 → retriable back-pressure (re-arm with backoff).       — #8
  *   oauth fail-closed: attach ABORT → NSSF_DISPATCH_FORBIDDEN, ZERO POSTs, and    — #4
- *     the row is re-armed (still dequeuable later — not lost)
- *   TLS hardening is exercised THROUGH the seam: the mock cannot read curl opts,  — #5
+ *     the row is TERMINAL dead_letter (NOT re-armed — no token-endpoint hot loop),
+ *     so it is never re-claimed (a follow-up dequeue is empty).
+ *   no-worker / call-driven: with a due row + transport installed but NO dispatch  — #6
+ *     call, NO transport fires (nothing happens between caller-driven dispatches).
+ *   TLS hardening is exercised THROUGH the seam: the mock cannot read curl opts,
  *     so the dispatch-status contract (a forced transport error == a TLS/conn
  *     failure → retriable) stands in for the not-directly-observable curl flags.
  *
@@ -66,10 +73,19 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include <curl/curl.h>
 
 #include "cJSON.h"
+
+/* Mirror of the production NSSF_DISPATCH_MAX_ATTEMPTS (notification_dispatcher.c)
+ * — the retry budget is NOT exported in the public header, so the test pins it as
+ * a local constant. This MUST stay equal to the .c #define (ratified design = 5);
+ * if nf-code changes the budget, the exhaustion test's attempt walk must be
+ * updated in lockstep. We do NOT include the .c — the value is part of the
+ * ratified Phase 4 design contract. */
+#define TEST_DISPATCH_MAX_ATTEMPTS 5
 
 /* ---- mock AMF callback transport (captured POST + staged reply sequence) ---- */
 
@@ -167,6 +183,47 @@ static void seed_row_corr(nssf_retry_store_t *store, const char *sub,
         0, nssf_retry_store_enqueue(store, sub, callback,
                                     "{\"changeType\":\"REPLACED\"}",
                                     correlation_id));
+}
+
+/* Sleep `ms` milliseconds — used ONLY to let a re-armed row's BACKOFF window
+ * elapse so it becomes due again on the next dispatch (Phase 4 call-driven retry:
+ * a re-armed row is not claimable until its next_attempt_at passes). We sleep the
+ * SMALLEST necessary window (the attempt_count=0 backoff floor is base=200ms; with
+ * equal jitter the worst case is base*1.5=300ms) plus a small slack. This is NOT a
+ * spin/poll loop — it is one bounded sleep over the one known backoff window. */
+static void sleep_ms(long ms)
+{
+    struct timespec ts;
+    ts.tv_sec = ms / 1000;
+    ts.tv_nsec = (ms % 1000) * 1000000L;
+    nanosleep(&ts, NULL);
+}
+
+/* Drive dispatch_pending in a BOUNDED wait-until-due loop: a re-armed row is not
+ * claimable until its backoff elapses, so an immediate dispatch returns NONE. We
+ * sleep a short fixed step and re-dispatch, capped at `budget_ms` total, until the
+ * call yields a non-NONE result (the row became due and was dispatched once). This
+ * is deterministic in OUTCOME (the row WILL become due) and bounded in time; it is
+ * the minimal real-time wait the call-driven design forces for an across-backoff
+ * delivery assertion. Returns the final dispatch result; the caller asserts it.
+ * `step_ms` is the poll granularity; total real sleep <= budget_ms. */
+static nssf_dispatch_result_e dispatch_when_due(
+    nssf_notification_dispatcher_t *disp, const char *corr, long step_ms,
+    long budget_ms)
+{
+    long waited = 0;
+    for (;;) {
+        nssf_dispatch_result_e r =
+            nssf_notification_dispatcher_dispatch_pending(disp, corr);
+        if (r != NSSF_DISPATCH_NONE) {
+            return r; /* the row became due and was dispatched this call. */
+        }
+        if (waited >= budget_ms) {
+            return r; /* timed out still NONE — caller's assertion will fail. */
+        }
+        sleep_ms(step_ms);
+        waited += step_ms;
+    }
 }
 
 /* Assert a structurally-invalid callback_uri is HARD-REJECTED at enqueue
@@ -309,10 +366,20 @@ static void test_happy_path_with_oauth_attaches_bearer(void)
 }
 
 /* ===================================================================
- * 2. retry-once (G-08 minimal): 5xx then 200 → SENT after EXACTLY 2 calls
+ * 2. fail-closed bounded retry (Phase 4): retriable failure RE-ARMS with backoff
+ *    for a LATER call — NO in-line retry. The first call makes EXACTLY ONE
+ *    transport attempt (DROPPED), and the success arrives only on a SECOND
+ *    dispatch once the backoff window elapses (call-driven cadence, G-08).
  * =================================================================== */
 
-static void test_retry_once_5xx_then_200_sent(void)
+/* RETARGETED (Phase 4) — 503 then 200 across TWO dispatch calls. There is NO
+ * in-line retry: the first dispatch makes EXACTLY ONE transport attempt (503 →
+ * re-arm with backoff → DROPPED). An IMMEDIATE re-dispatch returns NONE (the
+ * re-armed row is not yet due — proving no inline retry / no internal loop). After
+ * the (smallest) backoff window elapses the SECOND dispatch makes the 2nd transport
+ * attempt (200 → SENT). Total transport calls == 2, spread across two caller-driven
+ * dispatches, never inside one call. */
+static void test_retriable_5xx_rearms_then_200_on_second_call(void)
 {
     nssf_retry_store_t *store = nssf_retry_store_new_inmemory();
     TEST_ASSERT_NOT_NULL(store);
@@ -323,26 +390,61 @@ static void test_retry_once_5xx_then_200_sent(void)
     TEST_ASSERT_NOT_NULL(disp);
     nssf_notification_dispatcher_set_transport(disp, amf_mock_transport, &g_amf);
 
-    /* call0 → 503 (retriable), call1 → 200. */
+    /* call0 → 503 (retriable, re-arm), call1 → 200 (the recovery). */
     g_amf.reply[0] = 503;
     g_amf.reply[1] = 200;
     g_amf.reply_len = 2;
 
-    nssf_dispatch_result_e r =
+    /* FIRST dispatch — exactly ONE transport attempt, 503 → re-arm → DROPPED. */
+    nssf_dispatch_result_e r1 =
         nssf_notification_dispatcher_dispatch_pending(disp, NULL);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(NSSF_DISPATCH_SENT, r,
-                                  "5xx→200 이 SENT 로 분류되지 않음");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(NSSF_DISPATCH_DROPPED, r1,
+                                  "5xx 가 re-arm(DROPPED) 로 분류되지 않음");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        1, g_amf.calls, "첫 dispatch 가 EXACTLY 1 transport attempt 가 아님 (no in-line retry)");
+
+    /* IMMEDIATE re-dispatch — the re-armed row's backoff has NOT elapsed, so the
+     * row is not due → NONE, and NO additional transport attempt fires. This is the
+     * no-inline-retry / no-internal-loop proof. */
+    nssf_dispatch_result_e rnow =
+        nssf_notification_dispatcher_dispatch_pending(disp, NULL);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        NSSF_DISPATCH_NONE, rnow,
+        "re-arm 직후 즉시 dispatch 가 NONE 이 아님 — backoff 무시 (in-line retry)");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        1, g_amf.calls,
+        "not-due dispatch 가 transport 를 호출함 (call-driven 위반)");
+
+    /* SECOND (due) dispatch — after the smallest backoff window (200ms floor, up to
+     * 300ms with jitter) the row is due; 200 → SENT, the 2nd transport attempt. */
+    nssf_dispatch_result_e r2 = dispatch_when_due(disp, NULL, 50, 2000);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        NSSF_DISPATCH_SENT, r2,
+        "backoff 경과 후 second dispatch 가 SENT(200) 가 아님");
     TEST_ASSERT_EQUAL_INT_MESSAGE(
         2, g_amf.calls,
-        "G-08: 정확히 1회 retry (총 2 attempt) 가 아님 — exponential/multi-loop 금지");
+        "총 transport attempt 가 2 가 아님 (1 fail + 1 success, 각각 별도 call)");
+
+    /* SENT row deleted — queue empty. */
+    nssf_retry_item_t none;
+    TEST_ASSERT_EQUAL_INT_MESSAGE(0, nssf_retry_store_dequeue(store, &none),
+                                  "SENT 후 row 가 제거되지 않음");
+    nssf_retry_item_clear(&none);
 
     nssf_notification_dispatcher_free(disp);
     nssf_retry_store_free(store);
 }
 
-/* retriable failure twice → DROPPED after EXACTLY 2 calls (budget spent, no
- * dead-letter, no third attempt). */
-static void test_retry_exhausted_5xx_twice_dropped(void)
+/* RETARGETED (Phase 4) — budget is TEST_DISPATCH_MAX_ATTEMPTS (5), and a retriable
+ * failure that EXHAUSTS the budget moves the row to terminal dead_letter, RETAINED
+ * (not physically deleted) but never re-claimed. We drive each retriable attempt
+ * across its backoff window (call-driven, no in-line loop): attempts 1..4 re-arm
+ * (DROPPED), and the 5th attempt (attempt_count reaches MAX-1=4) dead-letters
+ * (DROPPED). Each dispatch makes EXACTLY ONE transport attempt — so after 5 calls
+ * the transport was invoked exactly 5 times, never more (no hidden inline loop).
+ * After exhaustion the row is dead_letter: a follow-up dequeue returns 0 (the row
+ * is RETAINED but structurally unclaimable — we do NOT assert physical deletion). */
+static void test_retriable_exhausts_budget_then_dead_letter(void)
 {
     nssf_retry_store_t *store = nssf_retry_store_new_inmemory();
     TEST_ASSERT_NOT_NULL(store);
@@ -353,33 +455,68 @@ static void test_retry_exhausted_5xx_twice_dropped(void)
     TEST_ASSERT_NOT_NULL(disp);
     nssf_notification_dispatcher_set_transport(disp, amf_mock_transport, &g_amf);
 
+    /* every attempt is a retriable 5xx (clamped to the last staged entry). A 6th
+     * transport attempt would land here too — it must NEVER be reached. */
     g_amf.reply[0] = 502;
-    g_amf.reply[1] = 502;
-    g_amf.reply[2] = 502; /* would be a 3rd attempt — must NEVER be reached. */
-    g_amf.reply_len = 3;
+    g_amf.reply_len = 1;
 
-    nssf_dispatch_result_e r =
+    /* FIRST attempt — due immediately. The remaining attempts each wait out the
+     * growing backoff (200, 400, 800, 1600ms floors + jitter). Budget = 5. */
+    nssf_dispatch_result_e r0 =
         nssf_notification_dispatcher_dispatch_pending(disp, NULL);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(NSSF_DISPATCH_DROPPED, r,
-                                  "retry 소진이 DROPPED 로 분류되지 않음");
-    TEST_ASSERT_EQUAL_INT_MESSAGE(
-        2, g_amf.calls,
-        "G-08: retry budget 2 attempt 초과 (3rd attempt 발생) — no dead-letter loop");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(NSSF_DISPATCH_DROPPED, r0,
+                                  "attempt#1 5xx 가 DROPPED(re-arm) 가 아님");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, g_amf.calls, "attempt#1 가 1 transport call 이 아님");
 
-    /* no dead-letter table this phase — the row is removed terminally. */
+    /* attempts #2..#5 — each becomes due after its backoff; #2..#4 re-arm, #5
+     * exhausts the budget → dead_letter. All DROPPED, EXACTLY one transport call
+     * each. The wait budget (~7s cap) generously covers 400+800+1600+3200ms floors
+     * plus jitter; the loop returns as soon as each row is due (no over-sleep). */
+    for (int attempt = 2; attempt <= TEST_DISPATCH_MAX_ATTEMPTS; ++attempt) {
+        int calls_before = g_amf.calls;
+        nssf_dispatch_result_e r = dispatch_when_due(disp, NULL, 50, 7000);
+        char msg[128];
+        snprintf(msg, sizeof(msg), "attempt#%d 가 DROPPED 가 아님", attempt);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(NSSF_DISPATCH_DROPPED, r, msg);
+        snprintf(msg, sizeof(msg),
+                 "attempt#%d 가 EXACTLY 1 transport call 이 아님 (inline loop?)",
+                 attempt);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(calls_before + 1, g_amf.calls, msg);
+    }
+
+    /* exactly MAX_ATTEMPTS transport invocations total — never a 6th. */
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        TEST_DISPATCH_MAX_ATTEMPTS, g_amf.calls,
+        "총 transport attempt 가 budget(5) 와 불일치 — 6th attempt 발생 (no inline loop)");
+
+    /* the row is now dead_letter: RETAINED (not deleted) but never re-claimed — a
+     * follow-up dequeue returns 0. We do NOT assert physical deletion. */
     nssf_retry_item_t none;
-    TEST_ASSERT_EQUAL_INT_MESSAGE(0, nssf_retry_store_dequeue(store, &none),
-                                  "retry 소진 후 row 가 제거되지 않음 (dead-letter 없음)");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        0, nssf_retry_store_dequeue(store, &none),
+        "budget 소진 후 dead_letter row 가 재배포됨 (terminal/unclaimable 위반)");
     nssf_retry_item_clear(&none);
+
+    /* a further dispatch finds nothing due → NONE, ZERO additional transport. */
+    nssf_dispatch_result_e rdead =
+        nssf_notification_dispatcher_dispatch_pending(disp, NULL);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        NSSF_DISPATCH_NONE, rdead,
+        "dead_letter 후 dispatch 가 NONE 이 아님 (dead_letter 가 다시 claim 됨)");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        TEST_DISPATCH_MAX_ATTEMPTS, g_amf.calls,
+        "dead_letter row 에 대해 추가 transport attempt 가 발생");
 
     nssf_notification_dispatcher_free(disp);
     nssf_retry_store_free(store);
 }
 
-/* transport error (TLS/conn/timeout) then 200 → retriable, SENT after 2 calls.
- * This is the TLS-hardening-through-the-seam case (#5): a forced transport error
- * stands in for a TLS-handshake/connect failure, classified retriable. */
-static void test_transport_error_then_200_retried(void)
+/* RETARGETED (Phase 4) — transport error (TLS/conn/timeout) is RETRIABLE and
+ * re-arms with backoff (DROPPED), then recovers to 200 → SENT across a backoff
+ * window (TWO dispatch calls). The TLS-hardening-through-the-seam case (#5): a
+ * forced transport error stands in for a TLS-handshake/connect failure, classified
+ * retriable exactly like a 5xx. */
+static void test_transport_error_rearms_then_200_on_second_call(void)
 {
     nssf_retry_store_t *store = nssf_retry_store_new_inmemory();
     TEST_ASSERT_NOT_NULL(store);
@@ -390,15 +527,31 @@ static void test_transport_error_then_200_retried(void)
     TEST_ASSERT_NOT_NULL(disp);
     nssf_notification_dispatcher_set_transport(disp, amf_mock_transport, &g_amf);
 
-    g_amf.reply[0] = -1;  /* transport/TLS failure → retriable. */
-    g_amf.reply[1] = 200; /* recovery on the single retry. */
+    g_amf.reply[0] = -1;  /* transport/TLS failure → retriable (re-arm). */
+    g_amf.reply[1] = 200; /* recovery on the next (later) call. */
     g_amf.reply_len = 2;
 
-    nssf_dispatch_result_e r =
+    /* FIRST dispatch — one transport attempt, transport error → re-arm → DROPPED. */
+    nssf_dispatch_result_e r1 =
         nssf_notification_dispatcher_dispatch_pending(disp, NULL);
     TEST_ASSERT_EQUAL_INT_MESSAGE(
-        NSSF_DISPATCH_SENT, r,
-        "TLS/conn 실패가 retriable 로 분류되어 retry 후 SENT 되지 않음");
+        NSSF_DISPATCH_DROPPED, r1,
+        "transport error 가 retriable re-arm(DROPPED) 로 분류되지 않음");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, g_amf.calls,
+                                  "transport error dispatch 가 1 attempt 가 아님");
+
+    /* immediate re-dispatch is not-due → NONE, no extra transport attempt. */
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        NSSF_DISPATCH_NONE,
+        nssf_notification_dispatcher_dispatch_pending(disp, NULL),
+        "transport-error re-arm 직후 즉시 dispatch 가 NONE 이 아님");
+    TEST_ASSERT_EQUAL_INT(1, g_amf.calls);
+
+    /* SECOND (due) dispatch — recovery 200 → SENT, the 2nd transport attempt. */
+    nssf_dispatch_result_e r2 = dispatch_when_due(disp, NULL, 50, 2000);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        NSSF_DISPATCH_SENT, r2,
+        "TLS/conn 실패 retriable 재시도 후 SENT 되지 않음");
     TEST_ASSERT_EQUAL_INT(2, g_amf.calls);
 
     nssf_notification_dispatcher_free(disp);
@@ -406,40 +559,126 @@ static void test_transport_error_then_200_retried(void)
 }
 
 /* ===================================================================
- * 3. 4xx no-retry: 404 → DROPPED after EXACTLY ONE call
+ * 3. terminal 4xx (≠429) vs retriable 429
+ *    404/400 → dead_letter terminal (ONE call, no retry, unclaimable);
+ *    429 → re-arm with backoff (retriable back-pressure signal)
  * =================================================================== */
 
-static void test_4xx_no_retry_dropped(void)
+/* RETARGETED (Phase 4) — a 4xx other than 429 is TERMINAL: 404 → DROPPED after
+ * EXACTLY ONE transport attempt (no retry), and the row is moved to dead_letter,
+ * RETAINED (not physically deleted) but never re-claimed — a follow-up dequeue
+ * returns 0. We do NOT assert physical deletion (the old "row removed" assertion is
+ * replaced by "row unclaimable"). 400 is checked the same way. */
+static void test_terminal_4xx_dead_letter_no_retry(void)
+{
+    const long terminal[] = {404, 400};
+    for (size_t i = 0; i < sizeof(terminal) / sizeof(terminal[0]); ++i) {
+        memset(&g_amf, 0, sizeof(g_amf));
+        nssf_retry_store_t *store = nssf_retry_store_new_inmemory();
+        TEST_ASSERT_NOT_NULL(store);
+        seed_row(store, "sub-4xx", "https://amf.example.com/cb");
+
+        nssf_notification_dispatcher_t *disp =
+            nssf_notification_dispatcher_new(store, NULL);
+        TEST_ASSERT_NOT_NULL(disp);
+        nssf_notification_dispatcher_set_transport(disp, amf_mock_transport, &g_amf);
+
+        g_amf.reply[0] = terminal[i];
+        g_amf.reply[1] = 200; /* would succeed IF a retry happened — it must NOT. */
+        g_amf.reply_len = 2;
+
+        char msg[128];
+        nssf_dispatch_result_e r =
+            nssf_notification_dispatcher_dispatch_pending(disp, NULL);
+        snprintf(msg, sizeof(msg), "%ld 가 DROPPED(terminal) 로 분류되지 않음",
+                 terminal[i]);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(NSSF_DISPATCH_DROPPED, r, msg);
+        snprintf(msg, sizeof(msg), "%ld 가 retry 됨 — terminal 4xx 는 no retry",
+                 terminal[i]);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(1, g_amf.calls, msg);
+
+        /* the row is dead_letter: RETAINED but unclaimable → dequeue returns 0. */
+        nssf_retry_item_t none;
+        snprintf(msg, sizeof(msg),
+                 "%ld 후 dead_letter row 가 재배포됨 (unclaimable 위반)", terminal[i]);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(0, nssf_retry_store_dequeue(store, &none), msg);
+        nssf_retry_item_clear(&none);
+
+        /* a follow-up dispatch finds nothing due → NONE, no extra transport. */
+        snprintf(msg, sizeof(msg), "%ld dead_letter 후 dispatch 가 NONE 이 아님",
+                 terminal[i]);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(
+            NSSF_DISPATCH_NONE,
+            nssf_notification_dispatcher_dispatch_pending(disp, NULL), msg);
+        TEST_ASSERT_EQUAL_INT_MESSAGE(1, g_amf.calls,
+                                      "dead_letter row 에 추가 transport 발생");
+
+        nssf_notification_dispatcher_free(disp);
+        nssf_retry_store_free(store);
+    }
+}
+
+/* NEW (#8 429 retriable contrast) — HTTP 429 Too Many Requests is RETRIABLE
+ * back-pressure (NOT terminal like other 4xx): the first dispatch re-arms with
+ * backoff (DROPPED, one transport attempt), an immediate re-dispatch is not-due
+ * (NONE, no extra attempt), and after the backoff window the row recovers to 200 →
+ * SENT on the second call. This pins the 429-vs-other-4xx split: 429 re-arms, 404/
+ * 400 dead_letter. */
+static void test_429_retriable_rearms_then_200_on_second_call(void)
 {
     nssf_retry_store_t *store = nssf_retry_store_new_inmemory();
     TEST_ASSERT_NOT_NULL(store);
-    seed_row(store, "sub-4xx", "https://amf.example.com/cb");
+    seed_row(store, "sub-429", "https://amf.example.com/cb");
 
     nssf_notification_dispatcher_t *disp =
         nssf_notification_dispatcher_new(store, NULL);
     TEST_ASSERT_NOT_NULL(disp);
     nssf_notification_dispatcher_set_transport(disp, amf_mock_transport, &g_amf);
 
-    g_amf.reply[0] = 404;
-    g_amf.reply[1] = 200; /* would succeed IF a retry happened — it must NOT. */
+    g_amf.reply[0] = 429; /* retriable back-pressure → re-arm. */
+    g_amf.reply[1] = 200; /* recovery once we back off. */
     g_amf.reply_len = 2;
 
-    nssf_dispatch_result_e r =
+    /* FIRST dispatch — 429 re-arms with backoff → DROPPED, ONE transport attempt. */
+    nssf_dispatch_result_e r1 =
         nssf_notification_dispatcher_dispatch_pending(disp, NULL);
-    TEST_ASSERT_EQUAL_INT_MESSAGE(NSSF_DISPATCH_DROPPED, r,
-                                  "4xx 가 DROPPED (terminal) 로 분류되지 않음");
     TEST_ASSERT_EQUAL_INT_MESSAGE(
-        1, g_amf.calls, "4xx 가 retry 됨 — 4xx 는 terminal, no retry");
+        NSSF_DISPATCH_DROPPED, r1,
+        "429 가 retriable re-arm(DROPPED) 로 분류되지 않음 — terminal 처리 오류");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(1, g_amf.calls,
+                                  "429 dispatch 가 1 transport attempt 가 아님");
+
+    /* immediate re-dispatch is not-due → NONE (backoff active), no extra attempt. */
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        NSSF_DISPATCH_NONE,
+        nssf_notification_dispatcher_dispatch_pending(disp, NULL),
+        "429 re-arm 직후 즉시 dispatch 가 NONE 이 아님 (backoff 무시)");
+    TEST_ASSERT_EQUAL_INT(1, g_amf.calls);
+
+    /* SECOND (due) dispatch — 200 → SENT, the 2nd transport attempt. */
+    nssf_dispatch_result_e r2 = dispatch_when_due(disp, NULL, 50, 2000);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        NSSF_DISPATCH_SENT, r2,
+        "429 backoff 경과 후 second dispatch 가 SENT(200) 가 아님");
+    TEST_ASSERT_EQUAL_INT(2, g_amf.calls);
 
     nssf_notification_dispatcher_free(disp);
     nssf_retry_store_free(store);
 }
 
 /* ===================================================================
- * 4. oauth fail-closed: attach ABORT → FORBIDDEN, ZERO POSTs, row re-armed
+ * 4. oauth fail-closed (Phase 4 TERMINAL): attach ABORT → FORBIDDEN, ZERO POSTs,
+ *    row → dead_letter (NOT re-armed into a hot retry against the NRF token
+ *    endpoint), and therefore NOT re-claimable on a later call.
  * =================================================================== */
 
-static void test_oauth_fail_closed_no_post_row_preserved(void)
+/* RETARGETED (Phase 4 ratified design) — per the ratified design an OAuth2
+ * fail-closed ABORT is TERMINAL: the row is moved to dead_letter (NOT re-armed),
+ * so it is NEVER re-claimed — a follow-up dequeue returns 0. FORBIDDEN + ZERO POSTs
+ * are unchanged (no unauthenticated outbound). The OLD assertion ("row re-armed /
+ * still dequeuable later") is INVERTED: re-arming an OAuth2 ABORT would hammer the
+ * token endpoint in a hot loop, which the terminal dead_letter routing closes. */
+static void test_oauth_fail_closed_no_post_row_dead_lettered(void)
 {
     nssf_retry_store_t *store = nssf_retry_store_new_inmemory();
     TEST_ASSERT_NOT_NULL(store);
@@ -469,13 +708,26 @@ static void test_oauth_fail_closed_no_post_row_preserved(void)
     TEST_ASSERT_EQUAL_INT_MESSAGE(
         0, g_amf.calls, "fail-closed 인데 outbound POST 가 emit 됨");
 
-    /* the row must NOT be lost — re-armed for a later attempt once M4 recovers. */
-    nssf_retry_item_t again;
+    /* TERMINAL — the row is dead_letter, NOT re-armed: a follow-up dequeue returns
+     * 0 (the row is retained for audit but never re-claimed). This is the precise
+     * inversion of the old "row re-armed / still dequeuable" assertion. */
+    nssf_retry_item_t none;
     TEST_ASSERT_EQUAL_INT_MESSAGE(
-        1, nssf_retry_store_dequeue(store, &again),
-        "fail-closed 후 row 가 보존되지 않음 (재시도 불가)");
-    TEST_ASSERT_EQUAL_STRING("sub-failclosed", again.subscription_id);
-    nssf_retry_item_clear(&again);
+        0, nssf_retry_store_dequeue(store, &none),
+        "OAuth2 ABORT 후 row 가 재배포됨 — terminal dead_letter 가 아니라 re-arm 됨 "
+        "(token endpoint hot-retry 위험)");
+    nssf_retry_item_clear(&none);
+
+    /* a follow-up dispatch likewise finds nothing due → NONE, still ZERO POSTs:
+     * the dead-lettered row can never produce another (unauthenticated) outbound. */
+    nssf_dispatch_result_e r2 =
+        nssf_notification_dispatcher_dispatch_pending(disp, NULL);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        NSSF_DISPATCH_NONE, r2,
+        "dead_letter 후 dispatch 가 NONE 이 아님 (ABORT row 가 다시 claim 됨)");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        0, g_amf.calls,
+        "dead_letter 후에도 POST 가 emit 됨 — fail-closed 0-POST 불변 위반");
 
     nssf_notification_dispatcher_free(disp);
     nssf_oauth2_outbound_free(oauth);
@@ -1033,6 +1285,52 @@ static void test_envelope_roundtrip_nondeliverable_literals_quarantined(void)
 }
 
 /* ===================================================================
+ * no-worker / call-driven — nothing fires between caller-driven dispatches
+ * =================================================================== */
+
+/* NEW (#5 no-worker, #4 call-driven) — there is NO background worker/thread/timer.
+ * With a due row sitting in the queue and the transport installed, NO transport
+ * attempt fires UNTIL the caller invokes dispatch_pending. We seed a due row, then
+ * WAIT past the smallest backoff window WITHOUT dispatching, and assert g_amf.calls
+ * stays 0 the whole time — proving nothing happens between calls (no internal
+ * loop). Then a single explicit dispatch makes EXACTLY one attempt. */
+static void test_no_worker_no_transport_without_dispatch(void)
+{
+    nssf_retry_store_t *store = nssf_retry_store_new_inmemory();
+    TEST_ASSERT_NOT_NULL(store);
+    seed_row(store, "sub-noworker", "https://amf.example.com/cb");
+
+    nssf_notification_dispatcher_t *disp =
+        nssf_notification_dispatcher_new(store, NULL);
+    TEST_ASSERT_NOT_NULL(disp);
+    nssf_notification_dispatcher_set_transport(disp, amf_mock_transport, &g_amf);
+
+    g_amf.reply[0] = 200;
+    g_amf.reply_len = 1;
+
+    /* A due row exists and the transport is wired — but NO dispatch was called.
+     * Wait past a full backoff floor window; a background worker (if any existed)
+     * would have fired by now. The transport MUST stay untouched. */
+    sleep_ms(350);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        0, g_amf.calls,
+        "dispatch_pending 호출 없이 transport 가 호출됨 — background worker/timer 존재 "
+        "(call-driven/no-worker 위반)");
+
+    /* the row is still pending (nothing consumed it) — one explicit dispatch now
+     * makes EXACTLY one attempt and delivers. */
+    nssf_dispatch_result_e r =
+        nssf_notification_dispatcher_dispatch_pending(disp, NULL);
+    TEST_ASSERT_EQUAL_INT_MESSAGE(NSSF_DISPATCH_SENT, r,
+                                  "명시적 dispatch 후 due row 가 SENT 되지 않음");
+    TEST_ASSERT_EQUAL_INT_MESSAGE(
+        1, g_amf.calls, "명시적 dispatch 가 EXACTLY 1 transport attempt 가 아님");
+
+    nssf_notification_dispatcher_free(disp);
+    nssf_retry_store_free(store);
+}
+
+/* ===================================================================
  * empty queue → NONE (no transport call)
  * =================================================================== */
 
@@ -1059,11 +1357,13 @@ int main(void)
     UNITY_BEGIN();
     RUN_TEST(test_happy_path_200_sent_one_post);
     RUN_TEST(test_happy_path_with_oauth_attaches_bearer);
-    RUN_TEST(test_retry_once_5xx_then_200_sent);
-    RUN_TEST(test_retry_exhausted_5xx_twice_dropped);
-    RUN_TEST(test_transport_error_then_200_retried);
-    RUN_TEST(test_4xx_no_retry_dropped);
-    RUN_TEST(test_oauth_fail_closed_no_post_row_preserved);
+    RUN_TEST(test_retriable_5xx_rearms_then_200_on_second_call);
+    RUN_TEST(test_retriable_exhausts_budget_then_dead_letter);
+    RUN_TEST(test_transport_error_rearms_then_200_on_second_call);
+    RUN_TEST(test_terminal_4xx_dead_letter_no_retry);
+    RUN_TEST(test_429_retriable_rearms_then_200_on_second_call);
+    RUN_TEST(test_oauth_fail_closed_no_post_row_dead_lettered);
+    RUN_TEST(test_no_worker_no_transport_without_dispatch);
     RUN_TEST(test_http_callback_rejected_at_enqueue_no_post_no_bearer);
     RUN_TEST(test_loopback_http_dropped_by_production_https_only_gate);
     RUN_TEST(test_http_loopback_insecure_ctor_allows_post);
